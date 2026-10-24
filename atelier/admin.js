@@ -63,9 +63,20 @@
     col.doc(DOC).get().then(function (d) {
       var raw = d.exists && Array.isArray(d.data().items) ? d.data().items : [];
       items = raw.map(function (it) { return Object.assign({ thumb: "" }, it); });
-      $("importHouse").classList.toggle("hidden", items.length > 0);
+      $("importHouse").classList.add("hidden");
+      /* 🏠 لسه مفيش حاجة محفوظة هنا؟ يبقى الموقع شغال على الصور الثابتة —
+         نعرضها هنا عشان تتعدّل/تتمسح/يتضاف عليها. أول حفظ بينقلها هنا. */
+      if (!items.length) {
+        items = AC.houseCollection("collection/").map(function (h) {
+          return { id: AD.newId(), name: h.name, price: h.price, line: h.line, family: AC.LINE_TITLE[h.line] || "",
+            colorName: h.colorName || "", barcode: "", active: true, thumb: h.img,
+            fromSite: { img: h.img, gallery: h.gallery || [] }, extras: (h.gallery || []).length };
+        });
+        $("siteNote").classList.toggle("hidden", !items.length);
+      }
       renderList();
       items.forEach(function (it) {
+        if (it.fromSite) return;
         col.doc(DOC + "_t_" + it.id).get().then(function (t) {
           it.thumb = t.exists ? (t.data().img || "") : "";
           var im = document.querySelector('[data-id="' + it.id + '"] .ph img'); if (im && it.thumb) im.src = it.thumb;
@@ -89,6 +100,8 @@
         '<div class="row2"><input type="number" data-f="price" min="0" step="5" value="' + (Number(it.price) || 0) + '" placeholder="السعر">' +
         '<select data-f="line">' + lineOptions(it.line) + "</select></div>" +
         '<input type="text" data-f="family" value="' + esc(it.family || "") + '" placeholder="الموديل (نفس الموديل = ألوان لبعض)" list="families">' +
+        '<input type="text" data-f="colorName" value="' + esc(it.colorName || "") + '" placeholder="اسم اللون (اختياري) — مثلاً كاكي">' +
+        (Number(isNew ? (it.extras || []).length : it.extras) ? '<small>📷 ' + (isNew ? it.extras.length : it.extras) + ' صور زيادة لنفس اللون</small>' : '') +
         '<input type="text" data-f="barcode" value="' + esc(it.barcode || "") + '" placeholder="باركود (عشان الطلب يدخل سلة التطبيق)">' +
         '<small class="bc"></small>' +
       "</div>" +
@@ -259,27 +272,53 @@
     $("barText").textContent = n ? "هيتضاف " + n + " قطعة للمجموعة" + (dirty ? " + تعديلات" : "") : "فيه تعديلات لسه ما اتحفظتش";
     $("save").textContent = n ? "حفظ وإضافة " + n : "حفظ";
   }
+  $("siteAdopt").addEventListener("click", function () { $("save").click(); });
   $("save").addEventListener("click", function () {
     var b = this; b.disabled = true; b.textContent = "بيحفظ…";
     var batchImgs = pending.slice(), k = 0;
+    var siteItems = items.filter(function (it) { return it.fromSite; });
+    var total = batchImgs.length + siteItems.length;
+    // صور منتجات الموقع الثابتة بتتنقل هنا مرة واحدة (أول حفظ)
+    function siteImages(it) {
+      return loadImg(it.fromSite.img).then(function (img) {
+        it.thumbData = jpeg(img, 480, 0.8); it.full = jpeg(img, 1100, 0.82);
+        return Promise.all(it.fromSite.gallery.slice(0, 3).map(function (g) {
+          return loadImg(g).then(function (gi) { return jpeg(gi, 1000, 0.78); }).catch(function () { return ""; });
+        }));
+      }).then(function (gal) { it.galleryData = gal.filter(Boolean); it.extras = it.galleryData.length; });
+    }
+    function writeImgs(id, thumb, full, gallery) {
+      return col.doc(DOC + "_t_" + id).set({ img: thumb })
+        .then(function () { return col.doc(DOC + "_f_" + id).set({ img: full }); })
+        .then(function () { return gallery && gallery.length ? col.doc(DOC + "_x_" + id).set({ imgs: gallery }) : null; });
+    }
+    var queue = siteItems.map(function (it) { return { site: it }; }).concat(batchImgs.map(function (p) { return { p: p }; }));
     // الصور الأول (واحدة واحدة عشان حجم الطلب)، وبعدها القايمة مرة واحدة
     (function nextImg() {
-      if (k >= batchImgs.length) return Promise.resolve();
-      var p = batchImgs[k++];
-      b.textContent = "بيرفع " + k + " من " + batchImgs.length + "…";
-      return col.doc(DOC + "_t_" + p.id).set({ img: p.thumb })
-        .then(function () { return col.doc(DOC + "_f_" + p.id).set({ img: p.full }); })
-        .then(nextImg);
+      if (k >= queue.length) return Promise.resolve();
+      var q = queue[k++];
+      b.textContent = "بيرفع " + k + " من " + total + "…";
+      if (q.site) return siteImages(q.site).then(function () {
+        return writeImgs(q.site.id, q.site.thumbData, q.site.full, q.site.galleryData);
+      }).then(function () { q.site.thumb = q.site.thumbData; delete q.site.fromSite; delete q.site.full; delete q.site.galleryData; delete q.site.thumbData; }).then(nextImg);
+      var p = q.p;
+      // الصور المتشابهة لنفس القطعة بقت صور زيادة (لحد ٣) بدل ما تتشال
+      var gal = (p.extras || []).slice(0, 3).map(function (x) { return x.full; });
+      p.extrasCount = gal.length;
+      return writeImgs(p.id, p.thumb, p.full, gal).then(nextImg);
     })().then(function () {
-      var clean = items.concat(batchImgs).map(function (it) { return AD.cleanItem(it); });
+      var clean = items.concat(batchImgs.map(function (p) { return Object.assign({}, p, { extras: p.extrasCount || 0 }); }))
+        .map(function (it) { return AD.cleanItem(it); });
       return col.doc(DOC).set({ items: clean, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
     }).then(function () {
       // صور القطع المحذوفة بتتفضّى (المسح نفسه ممنوع في القواعد)
       return Promise.all(deleted.map(function (id) {
-        return Promise.all([col.doc(DOC + "_t_" + id).set({ img: "", deleted: true }), col.doc(DOC + "_f_" + id).set({ img: "", deleted: true })]);
+        return Promise.all([col.doc(DOC + "_t_" + id).set({ img: "", deleted: true }), col.doc(DOC + "_f_" + id).set({ img: "", deleted: true }),
+          col.doc(DOC + "_x_" + id).set({ imgs: [], deleted: true })]);
       }));
     }).then(function () {
-      items = items.concat(batchImgs.map(function (p) { return { id: p.id, name: p.name, price: p.price, line: p.line, family: p.family || "", barcode: p.barcode, active: true, thumb: p.thumb }; }));
+      items = items.concat(batchImgs.map(function (p) { return { id: p.id, name: p.name, price: p.price, line: p.line, family: p.family || "", colorName: p.colorName || "", barcode: p.barcode, active: true, thumb: p.thumb, extras: p.extrasCount || 0 }; }));
+      $("siteNote").classList.add("hidden");
       pending = []; deleted = []; dirty = false;
       renderReview(); renderList(); updateBar();
       $("importHouse").classList.add("hidden");

@@ -104,6 +104,9 @@
       barcode: String(it.barcode || "").replace(/[^\w-]/g, "").slice(0, 40),
       // 🎨 الموديل: القطع اللي ليها نفس الموديل = ألوان لبعض (التجربة بتجيبهم مع بعض)
       family: String(it.family || "").replace(/[<>"]/g, "").trim().slice(0, 40),
+      // اسم اللون (اختياري) — بيظهر بدل «لون ٣ من ٩» وبيحدّد مكانها في رف الألوان
+      colorName: String(it.colorName || "").replace(/[<>"]/g, "").trim().slice(0, 30),
+      extras: Math.max(0, Math.min(4, Math.floor(Number(it.extras) || 0))),
       active: it.active !== false
     };
   }

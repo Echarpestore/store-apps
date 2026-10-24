@@ -70,6 +70,7 @@
                name: String(it.name || "قطعة").slice(0, 60), price: Number(it.price) || 0,
                // من غير موديل = قطعة لوحدها (مش كل الكريب في كارت واحد)
                family: String(it.family || "").trim() || ("solo-" + it.id),
+               colorName: String(it.colorName || "").slice(0, 30), extras: Math.max(0, Number(it.extras) || 0),
                line: kind === "isdal" ? "isdal" : line, kind: kind, img: "", tryable: true, admin: true };
     });
   }
