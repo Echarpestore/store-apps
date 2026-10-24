@@ -2,7 +2,7 @@
   "name": "echarpe-push-functions",
   "description": "إشعارات Push لنظام echarpe / Glow",
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "index.js",
   "dependencies": {
