@@ -156,3 +156,21 @@ if (M) {
 assert(AC.ROUND_SIZE === 6, 'الجولة ٦ قطع');
 const gc = AC.gridCells(1500, 1200, 5, 0);
 assert(gc.length === 5 && gc[3].x === 0 && gc[3].y === 600 && gc[2].x === 1000, 'القص بالترتيب: شمال لليمين ومن فوق لتحت');
+
+// ١٠) صفحة الإدارة: تجميع الصور المتشابهة + أسماء من اللون + التنظيف
+const AD = require(path.join(ROOT, 'atelier', 'admin-core.js'));
+const H0 = '0'.repeat(64), H1 = '0'.repeat(60) + '1111', HX = '01'.repeat(32);
+const groups = AD.groupSimilar([
+  { hash: H0, color: [40, 48, 82] }, { hash: HX, color: [200, 30, 40] },
+  { hash: H1, color: [42, 50, 80] }, { hash: H0, color: [230, 225, 215] }
+]);
+assert(JSON.stringify(groups) === '[[0,2],[1],[3]]', 'الصور المتشابهة بتتجمّع، ونفس الشكل بلون مختلف (إسدالين على نفس المانيكان) لأ');
+assert(AD.colorName([30, 29, 30]) === 'أسود' && AD.colorName([41, 49, 80]) === 'كحلي', 'اسم اللون من القماش');
+assert(AD.defaultName('isdal', [120, 70, 140]) === 'إسدال بنفسجي' && AD.defaultName('crepe', [128, 128, 128]) === 'طرحة رمادي', 'اسم مبدئي حسب النوع');
+assert(AD.uniqueNames(['طرحة كحلي', 'طرحة كحلي'])[1] !== 'طرحة كحلي', 'الأسماء المكررة بتتميّز');
+const ci = AD.cleanItem({ id: 'a/b', name: ' x ', price: '349.6', line: 'ISDAL!', barcode: '12 34<', active: false, thumb: 'data:...' });
+assert(ci.id === 'ab' && ci.price === 350 && ci.line === 'other' && ci.barcode === '1234' && ci.active === false && !('thumb' in ci), 'العنصر بيتنضّف قبل الحفظ (ومفيش صور في القايمة)');
+const ai = AC.atelierItemsFrom({ items: [{ id: 'k1', name: 'إسدال', price: 600, line: 'isdal', barcode: '55' }, { id: 'k2', active: false }] });
+assert(ai.length === 1 && ai[0].kind === 'isdal' && ai[0].admin && ai[0].barcode === '55', 'الأتيليه بيقرا قطع صفحة الإدارة الظاهرة بس');
+const LOY = fs.readFileSync(path.join(ROOT, 'loyalty', 'index.html'), 'utf8');
+assert(/atelierBannerHTML\(\) \+ grid/.test(LOY) && /d\.type === 'atelier-order'/.test(LOY), 'غرفة القياس مربوطة بـ«اطلبي» وسلة التطبيق');

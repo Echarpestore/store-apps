@@ -323,6 +323,18 @@
 
   /* ===== المنتجات ===== */
   .prod-grid{display:grid; grid-template-columns:1fr 1fr; gap:13px;}
+  /* 🪞 بانر غرفة القياس (الأتيليه) فوق «اطلبي» */
+  .atl-banner{position:relative; display:flex; align-items:center; gap:14px; width:100%; text-align:right; margin:0 0 16px; padding:14px 14px;
+    border:0; border-radius:18px; cursor:pointer; color:#f6f2ec; font:inherit; overflow:hidden;
+    background:linear-gradient(120deg,#1c1916,#3a3430 60%,#8a6f4e);}
+  .atl-banner::after{content:''; position:absolute; inset:0; background:linear-gradient(115deg,transparent 35%,rgba(255,240,210,.22) 50%,transparent 65%);
+    background-size:250% 100%; animation:atlSheen 3.6s ease-in-out infinite;}
+  @keyframes atlSheen{from{background-position:130% 0;} to{background-position:-130% 0;}}
+  .atl-banner .arch{flex:none; width:44px; height:58px; border-radius:22px 22px 4px 4px; border:1px solid rgba(236,216,168,.7);
+    display:grid; place-items:center; font-size:20px;}
+  .atl-banner b{display:block; font-size:16px; font-weight:800;}
+  .atl-banner span{display:block; font-size:12px; opacity:.8; margin-top:2px;}
+  .atl-banner .go{margin-inline-start:auto; font-size:20px; opacity:.85;}
   .prod{background:#fff; border:1.5px solid var(--line); border-radius:18px; padding:14px 14px 15px; position:relative;}
   .prod .pname{font-weight:800; font-size:14.5px; line-height:1.4; min-height:40px;}
   .prod .pmeta{font-size:12px; color:var(--muted); font-weight:600; margin-top:4px; min-height:17px;}
@@ -2907,6 +2919,23 @@ function renderShopDetail(){
 }
 window.renderShopDetail = renderShopDetail;
 
+/* 🪞 غرفة القياس (الأتيليه) جوّه «اطلبي» — نفس overlay تجربة الطرحة
+   (tryonOverlay)، والطلب بيرجع هنا للسلة الحقيقية (atelier-order). */
+function atelierBannerHTML(){
+  return '<button class="atl-banner" type="button" onclick="atelierOpen()">'
+    + '<span class="arch">🪞</span><span><b>غرفة القياس</b><span>جرّبي المجموعة كلها عليكِ قبل ما تطلبي ✨</span></span>'
+    + '<span class="go">‹</span></button>';
+}
+function atelierOpen(){
+  var frame = document.getElementById('tryonFrame');
+  var wrap = document.getElementById('tryonOverlay');
+  if(!frame || !wrap) return;
+  frame.src = '../atelier/?embed=1';
+  wrap.style.display = 'block';
+  try{ shopFunnelTrack('tryon', null, { funnelFromAtelier:true }); }catch(e){}
+}
+window.atelierOpen = atelierOpen;
+
 function renderShop(){
   var box = $('tab-shop'); if(!box) return;
   // 🛍️ شارة السلة على تبويب "اطلبي" — كانت موجودة في الـHTML بس
@@ -3056,7 +3085,7 @@ function renderShop(){
     // 🛍️ السلة **مش** بتتعرض في شاشة التصفّح — مكانها الوحيد أيقونة
     //    السلة فوق (وضع cartOnly). أي أصناف في السلة بتبان في الشارة
     //    على الأيقونة، والعميلة بتفتحها من هناك تكمّل الطلب.
-    box.innerHTML = head + '<div class="empty"><span class="big">🛍️</span>لسه مفيش منتجات معروضة للتصفّح.</div>';
+    box.innerHTML = head + atelierBannerHTML() + '<div class="empty"><span class="big">🛍️</span>لسه مفيش منتجات معروضة للتصفّح.</div>';
     return;
   }
 
@@ -3079,7 +3108,7 @@ function renderShop(){
   }).join('') + '</div>';
 
   // 🛍️ التصفّح بس — السلة مكانها أيقونة السلة فوق (وضع cartOnly).
-  box.innerHTML = head + grid;
+  box.innerHTML = head + atelierBannerHTML() + grid;
   /* 🔗 Deep-link لمنتج واحد فقط — بعد رسم الكتالوج، مش أثناء تحميله.
      كده مفيش تحميل صور جماعي ولا shopOpenItem لكل المنتجات. */
   if(!_shopDeepOpened){
@@ -4273,6 +4302,28 @@ window.addEventListener('message', function(e){
     var d = e.data;
     if(!d || d.ns !== 'echarpeTryon') return;
     if(d.type === 'tryon-close'){ tryonOverlayClose(); return; }
+    if(d.type === 'atelier-order'){
+      // 🪞 من غرفة القياس: كل القطع اللي ليها باركود تدخل السلة، وبعدين شاشة إتمام الطلب مرة واحدة
+      var its = Array.isArray(d.items) ? d.items.slice(0, 20) : [];
+      if(d.note){
+        var nt = String(d.note).slice(0, 80);
+        if(_shopInfo.notes.indexOf(nt) === -1) _shopInfo.notes = (_shopInfo.notes ? _shopInfo.notes + ' · ' : '') + nt;
+      }
+      its.forEach(function(it){
+        var bc = String(it && it.barcode || '').trim(); if(!bc) return;
+        if(it.img && /^data:image\//.test(String(it.img))){
+          if(!_extraCartProducts[bc]) _extraCartProducts[bc] = {};
+          _extraCartProducts[bc].img = it.img;
+          if(it.name && !_extraCartProducts[bc].name) _extraCartProducts[bc].name = String(it.name).slice(0, 80);
+        }
+        try{ shopFunnelTrack('cart', shopFunnelProduct(bc), { funnelFromTryon:true }); }catch(e){}
+        shopAdd(bc, 1);
+        tryonVerifyCartItem(bc);
+      });
+      tryonOverlayClose();
+      if(its.length) openQuickCheckout();
+      return;
+    }
     if(d.type === 'tryon-addcart'){
       tryonAddToCart(d.barcode, d.img || null, d.note || '');
       tryonOverlayClose();
