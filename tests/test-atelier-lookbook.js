@@ -187,3 +187,37 @@ const LOY = fs.readFileSync(path.join(ROOT, 'loyalty', 'index.html'), 'utf8');
 assert(/atelierBannerHTML\(\) \+ grid/.test(LOY) && /d\.type === 'atelier-order'/.test(LOY), 'غرفة القياس مربوطة بـ«اطلبي» وسلة التطبيق');
 assert(AD.cleanItem({ family: ' كريب "كوري" ' }).family === 'كريب كوري', 'الموديل بيتحفظ نضيف');
 assert(AC.atelierItemsFrom({ items: [{ id: 'm', line: 'crepe', family: 'كوري' }] })[0].family === 'كوري', 'الأتيليه بيقرا الموديل');
+
+// ١١) أوردرات غرفة القياس: إشعار للمالك من غير POS
+const ORD_PATH = path.join(ROOT, 'functions', 'atelierOrders.js');
+let O = null;
+try { O = loadFn(ORD_PATH, { 'firebase-admin/messaging': { getMessaging: () => ({}) },
+  'firebase-functions/v2/https': { onCall: () => 'ONCALL', onRequest: () => 'ONREQ', HttpsError: class extends Error { constructor(c, m) { super(m); this.code = c; } } } }); }
+catch (e) { assert(false, 'atelierOrders لازم يتحمّل — ' + e.message); }
+if (O) {
+  assert(O.cleanPhone('+20 114 866 4485') === '01148664485' && O.cleanPhone('1148664485') === '01148664485' && O.cleanPhone('0123') === '', 'رقم الموبايل المصري بيتنضّف ويترفض لو غلط');
+  assert(O.validateOrder({ name: 'سارة', phone: '01148664485', fulfillment: 'delivery', governorate: 'القاهرة', address: 'التجمع شارع ٩٠' }).phone === '01148664485', 'طلب توصيل سليم');
+  assert(O.validateOrder({ name: 'سارة', phone: '01148664485', fulfillment: 'delivery' }).error === 'ADDRESS', 'التوصيل من غير عنوان بيترفض');
+  assert(O.validateOrder({ name: 'سارة', phone: '01148664485', fulfillment: 'pickup' }).error === 'BRANCH', 'الاستلام من غير فرع بيترفض');
+  const pi = O.priceItems([{ docId: 'a1', price: 1, name: 'x' }, { barcode: 'B9', price: 5 }, { img: 'collection/mono-gris.jpg', name: 'مونوجرام' }, { img: 'https://evil/x.jpg' }],
+    [{ id: 'a1', name: 'كريب', price: 350, family: 'كوري' }], [{ barcode: 'B9', name: 'شال', price: 500 }]);
+  assert(pi[0].price === 350 && pi[1].price === 500 && pi[2].price === 0, 'الأسعار من السيرفر مش من الموبايل');
+  assert(/atelierImg\?id=a1$/.test(pi[0].imgUrl) && /\/atelier\/collection\/mono-gris\.jpg$/.test(pi[2].imgUrl) && pi[3].imgUrl === '', 'صورة الإشعار: لينك المنتج بس (مفيش لينكات من برّه)');
+  assert(!('img' in pi[0]), 'مفيش صور بتتخزّن في الأوردر — لينكات بس');
+  assert(O.shippingFor({ shippingFee: 50, freeOver: 1000 }, 'delivery', 400) === 50 && O.shippingFor({ shippingFee: 50, freeOver: 1000 }, 'delivery', 1200) === 0 && O.shippingFor({}, 'pickup', 10) === 0, 'الشحن على السيرفر');
+  const g1 = O.guardDecide(null, 1000);
+  assert(g1.allow && O.guardDecide({ count: 5, windowStart: 1000 }, 2000).allow === false && O.guardDecide({ count: 5, windowStart: 1000 }, 1000 + 3600001).allow, 'سقف ٥ طلبات للرقم في الساعة');
+  assert(O.pushText({ name: 'سارة', items: [{ name: 'كريب' }, { name: 'زيبرا' }], fulfillment: 'delivery', governorate: 'الجيزة', total: 700 }).title.indexOf('700') > 0, 'نص الإشعار فيه الإجمالي');
+  assert(O.isStaff({ auth: { token: { firebase: { sign_in_provider: 'password' } } } }) && !O.isStaff({ auth: { token: { firebase: { sign_in_provider: 'anonymous' } } } }), 'الأوردرات للموظفين بس');
+}
+const OSRC = fs.readFileSync(ORD_PATH, 'utf8').replace(/\/\*[\s\S]*?\*\//g, ' ');
+assert(!/online_orders|pos_test_sales/.test(OSRC), 'أوردرات غرفة القياس مبتكتبش في الـPOS');
+assert(/require\("\.\/atelierOrders"\)/.test(fs.readFileSync(IDX_PATH, 'utf8')), 'atelierOrders مربوطة في index.js');
+assert(!/match \/atelier_orders/.test(fs.readFileSync(path.join(ROOT, 'security', 'firestore-phase2.rules'), 'utf8')), 'الأوردرات مقفولة على الموبايلات (القاعدة الافتراضية)');
+
+// ١٢) الموديلات + رف الألوان
+const models = AC.groupModels(AC.houseCollection('collection/'));
+assert(models.length === 5 && models.find((m) => m.title === 'مونوجرام').items.length === 6, 'القطع بتتجمّع في موديلات (كارت واحد + ألوان)');
+assert(AC.toneOf([40, 48, 82]) === 'navy' && AC.toneOf([28, 28, 28]) === 'black' && AC.toneOf([200, 176, 140]) === 'beige', 'عائلة اللون من لون القماش');
+assert(/d\.type === 'atelier-chat'/.test(LOY) && /chat=1/.test(LOY), '«كلّمينا في الشات» بيفتح شات التطبيق');
+assert(AC.groupModels(AC.atelierItemsFrom({ items: [{ id: 'a', line: 'crepe' }, { id: 'b', line: 'crepe' }, { id: 'c', line: 'crepe', family: 'كوري' }, { id: 'd', line: 'crepe', family: 'كوري' }] })).length === 3, 'قطع الإدارة من غير موديل كل واحدة لوحدها، واللي ليها نفس الموديل كارت واحد');

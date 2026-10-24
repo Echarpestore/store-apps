@@ -71,7 +71,8 @@
       var kind = line === "isdal" ? "isdal" : kindOf(it);
       return { id: "at-" + it.id, docId: String(it.id), galleryId: "", barcode: String(it.barcode || ""),
                name: String(it.name || "قطعة").slice(0, 60), price: Number(it.price) || 0,
-               family: String(it.family || "").trim() || (kind === "isdal" ? "isdal" : line),
+               // من غير موديل = قطعة لوحدها (مش كل الكريب في كارت واحد)
+               family: String(it.family || "").trim() || ("solo-" + it.id),
                line: kind === "isdal" ? "isdal" : line, kind: kind, img: "", tryable: true, admin: true };
     });
   }
@@ -160,6 +161,51 @@
      (خانة «الموديل»)، وإلا النوع نفسه (كريب/مونوجرام/…). */
   function familyOf(p) { return String(p && (p.family || p.line) || ""); }
 
+  /* 🗂️ الموديلات: القطع اللي بنفس الموديل بتتعرض كارت واحد ورف ألوان،
+     بدل عشرات الكروت المتشابهة. الترتيب = أول ظهور. */
+  var LINE_TITLE = { crepe: "كريب", plisse: "بليسيه", mono: "مونوجرام", zebre: "زيبرا",
+                     isdal: "إسدال", other: "قطع مختارة", shop: "جديد" };
+  function modelTitle(items) {
+    var a = items[0] || {};
+    var fam = String(a.family || "");
+    if (items.length === 1) return a.name || "قطعة";
+    if (fam && !LINE_TITLE[fam]) return fam;            // اسم موديل من صفحة الإدارة
+    return LINE_TITLE[a.line] || a.name || "قطعة";
+  }
+  function groupModels(products) {
+    var map = {}, out = [];
+    (products || []).forEach(function (p) {
+      var k = (p.kind || "hijab") + "|" + (familyOf(p) || p.id);
+      if (!map[k]) { map[k] = { key: k, items: [] }; out.push(map[k]); }
+      map[k].items.push(p);
+    });
+    out.forEach(function (m) { m.title = modelTitle(m.items); m.line = m.items[0].line; });
+    return out;
+  }
+
+  /* 🎨 رف الألوان — درجات كتير صعب تتسمّى، فبنجمّعها في عائلات لون
+     (من لون القماش في الصورة) والعميلة بتفلتر بيها بنقطة لون. */
+  var TONES = [
+    { id: "black",  ar: "أسود",         hex: "#1d1c1c", rgb: [30, 29, 30] },
+    { id: "grey",   ar: "رمادي",        hex: "#8d8b88", rgb: [135, 133, 130] },
+    { id: "white",  ar: "أبيض وأوف",    hex: "#efe8dc", rgb: [236, 230, 218] },
+    { id: "beige",  ar: "بيج ورملي",    hex: "#cdb48e", rgb: [200, 176, 140] },
+    { id: "brown",  ar: "بني وموكا",    hex: "#7a5a44", rgb: [118, 88, 66] },
+    { id: "navy",   ar: "كحلي وأزرق",   hex: "#2f3a5e", rgb: [48, 60, 100] },
+    { id: "green",  ar: "أخضر وزيتي",   hex: "#5f6b4a", rgb: [92, 108, 74] },
+    { id: "pink",   ar: "وردي وأحمر",   hex: "#c77f8e", rgb: [196, 120, 134] },
+    { id: "purple", ar: "بنفسجي",       hex: "#7b528f", rgb: [122, 80, 142] }
+  ];
+  function toneOf(rgb) {
+    if (!rgb) return "";
+    var best = TONES[0], bd = Infinity;
+    TONES.forEach(function (t) {
+      var d = Math.pow(rgb[0] - t.rgb[0], 2) + Math.pow(rgb[1] - t.rgb[1], 2) + Math.pow(rgb[2] - t.rgb[2], 2);
+      if (d < bd) { bd = d; best = t; }
+    });
+    return best.id;
+  }
+
   /* جولة واحدة = ٦ قطع: القطعة اللي اختارتها + ألوانها (نفس الموديل)
      + نفس النوع + الباقي. كلها من نفس الصنف (طرح مع طرح، إسدال مع
      إسدال)، ومن غير اللي إطلالته جاهزة أو بيتجهّز. */
@@ -220,6 +266,11 @@
     BONUS_ROUNDS: BONUS_ROUNDS,
     MAX_ROUNDS: MAX_ROUNDS,
     familyOf: familyOf,
+    LINE_TITLE: LINE_TITLE,
+    modelTitle: modelTitle,
+    groupModels: groupModels,
+    TONES: TONES,
+    toneOf: toneOf,
     buildRound: buildRound,
     roundsState: roundsState,
     gridLayout: gridLayout,

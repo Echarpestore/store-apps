@@ -14,7 +14,7 @@ on:
       only:
         description: "الدوال اللي تتنشر (مثال: functions:hijabLookbook)"
         required: true
-        default: "functions:hijabLookbook"
+        default: "functions:hijabLookbook,functions:atelierOrderPlace,functions:atelierOrdersAdmin,functions:atelierImg"
 
 permissions:
   contents: read

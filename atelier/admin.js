@@ -40,7 +40,7 @@
     var staff = u && u.providerData && u.providerData.some(function (p) { return p.providerId === "password"; });
     $("login").classList.toggle("hidden", !!staff);
     $("app").classList.toggle("hidden", !staff);
-    if (staff) loadAll();
+    if (staff) { loadAll(); loadOrders(true); loadSite(); }
   });
   $("loginForm").addEventListener("submit", function (e) {
     e.preventDefault(); $("loginErr").textContent = "";
@@ -288,5 +288,122 @@
       console.error(e); toast("الحفظ وقف — جرّبي تاني (لو الصور كتير ارفعيها على دفعات)");
     }).then(function () { b.disabled = false; updateBar(); });
   });
+  /* ============================================================
+     📑 التابات
+     ============================================================ */
+  function showTab(t) {
+    ["collection", "orders", "site"].forEach(function (k) {
+      $("tab-" + k).classList.toggle("hidden", k !== t);
+      document.querySelector('#tabs [data-tab="' + k + '"]').classList.toggle("on", k === t);
+    });
+    if (t === "orders") loadOrders();
+    try { history.replaceState(null, "", "#" + t); } catch (e) { }
+  }
+  document.querySelectorAll("#tabs button").forEach(function (b) { b.addEventListener("click", function () { showTab(b.dataset.tab); }); });
+  if (/^#(orders|site)$/.test(location.hash)) showTab(location.hash.slice(1));
+
+  /* ============================================================
+     🛍️ الأوردرات — من atelierOrdersAdmin (الأوردرات مقفولة على
+     الموبايلات في Firestore؛ القراية من السيرفر للموظفين بس)
+     ============================================================ */
+  var ST = { new: "جديد", confirmed: "اتأكد", shipped: "اتشحن", done: "اتسلّم", cancelled: "اتلغى" };
+  var orders = [], ofilter = "open";
+  function callable(n) { return firebase.app().functions("us-central1").httpsCallable(n); }
+  function loadOrders(quiet) {
+    if (!quiet) $("orders").innerHTML = '<div class="empty">بتحمّل…</div>';
+    return callable("atelierOrdersAdmin")({ action: "list" }).then(function (r) {
+      orders = (r.data && r.data.orders) || []; renderOrders();
+    }).catch(function () {
+      $("orders").innerHTML = '<div class="empty">الأوردرات مش متاحة — لسه محتاجين ننشر دالة atelierOrdersAdmin.</div>';
+    });
+  }
+  function renderOrders() {
+    var nNew = orders.filter(function (o) { return o.status === "new"; }).length;
+    $("newBadge").textContent = nNew; $("newBadge").classList.toggle("hidden", !nNew);
+    var fb = $("ofilter"); fb.innerHTML = "";
+    [["open", "المفتوحة"], ["new", "جديد"], ["confirmed", "اتأكد"], ["shipped", "اتشحن"], ["done", "اتسلّم"], ["cancelled", "اتلغى"], ["all", "الكل"]].forEach(function (f) {
+      var b = el("button", f[0] === ofilter ? "on" : "", f[1]); b.type = "button";
+      b.addEventListener("click", function () { ofilter = f[0]; renderOrders(); });
+      fb.appendChild(b);
+    });
+    var list = orders.filter(function (o) {
+      return ofilter === "all" || (ofilter === "open" ? ["new", "confirmed", "shipped"].indexOf(o.status) >= 0 : o.status === ofilter);
+    });
+    var box = $("orders"); box.innerHTML = "";
+    if (!list.length) { box.innerHTML = '<div class="empty">مفيش أوردرات هنا.</div>'; return; }
+    list.forEach(function (o) {
+      var c = el("div", "order st-" + o.status);
+      var when = o.createdMs ? new Date(o.createdMs).toLocaleString("ar-EG", { dateStyle: "medium", timeStyle: "short" }) : "";
+      var wa = "https://wa.me/2" + o.phone + "?text=" + encodeURIComponent("أهلاً " + o.name + " 🤍 معاكِ echarpe بخصوص طلبكِ رقم " + o.code + " من غرفة القياس");
+      c.innerHTML =
+        '<div class="top"><b>' + esc(o.code) + '</b><span class="pill">' + esc(ST[o.status] || o.status) + '</span>' +
+          '<span class="pill">' + (o.fulfillment === "pickup" ? "استلام " + esc(o.branch || "") : "توصيل") + '</span>' +
+          (o.source === "app" ? '<span class="pill">من التطبيق</span>' : "") +
+          '<span class="when">' + esc(when) + "</span></div>" +
+        '<div class="who">' + esc(o.name) + ' · <a href="' + wa + '" target="_blank" rel="noopener">' + esc(o.phone) + " (واتساب)</a> · " +
+          '<a href="tel:' + esc(o.phone) + '">اتصال</a>' +
+          (o.fulfillment === "delivery" ? "<br>📍 " + esc(o.governorate || "") + " — " + esc(o.address || "") : "") +
+          (o.notes ? "<br>📝 " + esc(o.notes) : "") +
+          "<br><b>" + (o.total ? "الإجمالي " + o.total + " ج.م" + (o.shipping ? " (شامل شحن " + o.shipping + ")" : "") : "السعر يتأكد بالتليفون") + "</b></div>" +
+        '<div class="its">' + (o.items || []).map(function (it) {
+          return '<div class="it">' + (it.imgUrl ? '<img src="' + esc(it.imgUrl) + '" alt="" loading="lazy">' : "") +
+            "<span>" + esc(it.model && it.model !== it.name ? it.model : it.name) + (it.color ? "<br>لون " + it.color : "") +
+            (it.price ? "<br>" + it.price + " ج.م" : "") + (it.barcode ? "<br>" + esc(it.barcode) : "") + "</span></div>";
+        }).join("") + "</div>" +
+        '<div class="sts">' + Object.keys(ST).map(function (k) {
+          return '<button type="button" data-s="' + k + '"' + (k === o.status ? ' class="on"' : "") + ">" + ST[k] + "</button>";
+        }).join("") + "</div>";
+      c.querySelectorAll("[data-s]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          var s = b.dataset.s; if (s === o.status) return;
+          if (s === "cancelled" && !confirm("إلغاء الأوردر " + o.code + "؟")) return;
+          callable("atelierOrdersAdmin")({ action: "status", id: o.id, status: s }).then(function () {
+            o.status = s; renderOrders(); toast("اتحدّث ✓");
+          }).catch(function () { toast("مقدرناش نحدّث — جرّبي تاني"); });
+        });
+      });
+      box.appendChild(c);
+    });
+  }
+  setInterval(function () { if (!$("app").classList.contains("hidden")) loadOrders(true); }, 60000);
+
+  /* ============================================================
+     ⚙️ إعدادات الموقع — pos_test_settings/atelier_site
+     ============================================================ */
+  var SITE_FIELDS = ["eyebrow", "title1", "title2", "sub", "statement", "marquee", "chatText", "whatsapp", "branches"];
+  var bannerNew = "";
+  function loadSite() {
+    col.doc("atelier_site").get().then(function (d) {
+      var v = d.exists ? d.data() : {};
+      SITE_FIELDS.forEach(function (k) {
+        var x = v[k]; if (Array.isArray(x)) x = x.join("، ");
+        $("s_" + k).value = x || "";
+      });
+      if (v.hasBanner) col.doc("atelier_site_banner").get().then(function (b) { if (b.exists) $("s_bannerImg").src = b.data().img || ""; });
+      else $("s_bannerImg").src = "collection/hero-comfort.jpg";
+    });
+  }
+  $("s_bannerBtn").addEventListener("click", function () { $("s_bannerFile").click(); });
+  $("s_bannerFile").addEventListener("change", function () {
+    var f = this.files && this.files[0]; if (!f) return;
+    var url = URL.createObjectURL(f);
+    loadImg(url).then(function (img) { bannerNew = jpeg(img, 1600, 0.82); $("s_bannerImg").src = bannerNew; URL.revokeObjectURL(url); });
+  });
+  $("s_save").addEventListener("click", function () {
+    var b = this, v = {};
+    SITE_FIELDS.forEach(function (k) { v[k] = $("s_" + k).value.trim().slice(0, 400); });
+    v.whatsapp = v.whatsapp.replace(/[^\d]/g, "");
+    if (v.whatsapp && v.whatsapp.charAt(0) === "0") v.whatsapp = "2" + v.whatsapp;
+    v.branches = v.branches ? v.branches.split(/[،,]/).map(function (x) { return x.trim(); }).filter(Boolean).slice(0, 12) : [];
+    b.disabled = true;
+    (bannerNew ? col.doc("atelier_site_banner").set({ img: bannerNew }).then(function () { v.hasBanner = true; }) : Promise.resolve())
+      .then(function () {
+        v.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+        return col.doc("atelier_site").set(v, { merge: true });
+      }).then(function () { bannerNew = ""; toast("اتحفظ ✓ — افتحي الصفحة وشوفي"); })
+      .catch(function () { toast("الحفظ وقف — جرّبي تاني"); })
+      .then(function () { b.disabled = false; });
+  });
+
   window.addEventListener("beforeunload", function (e) { if (dirty || pending.length) { e.preventDefault(); e.returnValue = ""; } });
 })();
