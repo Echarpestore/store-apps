@@ -35,13 +35,14 @@
     ["plisse-nuit",       "بليسيه ليلي",             "plisse"],
     ["mono-taupe",        "مونوجرام توب",            "mono"],
     ["zebre-fume",        "زيبرا دخاني",             "zebre"],
-    // 🧣 كتان بأهداب — موديل واحد بـ٥ ألوان. العمود الرابع اسم اللون،
-    //    والخامس صور زيادة لنفس اللون (بتظهر جوّه صفحة القطعة).
-    ["linen-noir",   "كتان بأهداب أسود",       "linen", "أسود",        ["linen-noir-2"]],
-    ["linen-violet", "كتان بأهداب بنفسجي",     "linen", "بنفسجي",      ["linen-violet-2"]],
-    ["linen-taupe",  "كتان بأهداب رمادي توب",  "linen", "رمادي توب",   ["linen-taupe-2"]],
-    ["linen-fume",   "كتان بأهداب رمادي دخاني", "linen", "رمادي دخاني", ["linen-fume-2", "linen-fume-3"]],
-    ["linen-rose",   "كتان بأهداب روز",        "linen", "روز",         []]
+    // 🧣 ميسي شيفون كويتي — موديل واحد بـ٥ ألوان بـ٤٩٠. العمود الرابع اسم
+    //    اللون، والخامس صور زيادة لنفس اللون، والسادس السعر.
+    //    ⚠️ السعر لازم يطابق HOUSE_PRICES في functions/atelierOrders.js.
+    ["linen-noir",   "ميسي شيفون كويتي أسود",       "chiffon", "أسود",        ["linen-noir-2"], 490],
+    ["linen-violet", "ميسي شيفون كويتي بنفسجي",     "chiffon", "بنفسجي",      ["linen-violet-2"], 490],
+    ["linen-taupe",  "ميسي شيفون كويتي رمادي توب",  "chiffon", "رمادي توب",   ["linen-taupe-2"], 490],
+    ["linen-fume",   "ميسي شيفون كويتي رمادي دخاني", "chiffon", "رمادي دخاني", ["linen-fume-2", "linen-fume-3"], 490],
+    ["linen-rose",   "ميسي شيفون كويتي روز",        "chiffon", "روز",         [], 490]
   ];
   var LINES = [
     { id: "all",    ar: "الكل" },
@@ -49,7 +50,7 @@
     { id: "plisse", ar: "البليسيه" },
     { id: "mono",   ar: "المونوجرام" },
     { id: "zebre",  ar: "الزيبرا" },
-    { id: "linen",  ar: "الكتان" },
+    { id: "chiffon", ar: "الشيفون" },
     { id: "isdal",  ar: "الإسدال" },
     { id: "other",  ar: "قطع أخرى" }
   ];
@@ -61,7 +62,7 @@
     var dir = base || "collection/";
     return HOUSE.map(function (h) {
       return { id: "house-" + h[0], galleryId: "", barcode: "", name: h[1],
-               line: h[2], family: h[2], kind: h[2] === "isdal" ? "isdal" : "hijab", price: 0,
+               line: h[2], family: h[2], kind: h[2] === "isdal" ? "isdal" : "hijab", price: Number(h[5]) || 0,
                img: dir + h[0] + ".jpg", tryable: true, house: true,
                colorName: h[3] || "", gallery: (h[4] || []).map(function (f) { return dir + f + ".jpg"; }) };
     });
@@ -170,7 +171,7 @@
 
   /* 🗂️ الموديلات: القطع اللي بنفس الموديل بتتعرض كارت واحد ورف ألوان،
      بدل عشرات الكروت المتشابهة. الترتيب = أول ظهور. */
-  var LINE_TITLE = { crepe: "كريب", plisse: "بليسيه", mono: "مونوجرام", zebre: "زيبرا", linen: "كتان بأهداب",
+  var LINE_TITLE = { crepe: "كريب", plisse: "بليسيه", mono: "مونوجرام", zebre: "زيبرا", chiffon: "ميسي شيفون كويتي",
                      isdal: "إسدال", other: "قطع مختارة", shop: "جديد" };
   function modelTitle(items) {
     var a = items[0] || {};

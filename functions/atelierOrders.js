@@ -41,6 +41,12 @@ const STATUSES = ["new", "confirmed", "shipped", "done", "cancelled"];
 const MAX_ITEMS = 10;
 const GUARD_MAX = 5;                 // أوردرات للرقم في الساعة
 const GUARD_WINDOW = 60 * 60 * 1000;
+/* 🏷️ أسعار صور الموقع الثابتة (atelier/collection) — بالاسم.
+   ⚠️ لازم تطابق العمود السادس في HOUSE بـatelier/atelier-core.js (فيه
+   اختبار بيقارنهم). القطع اللي من صفحة الإدارة سعرها من Firestore. */
+const HOUSE_PRICES = {
+  "linen-noir": 490, "linen-violet": 490, "linen-taupe": 490, "linen-fume": 490, "linen-rose": 490
+};
 const FRIENDLY = "مقدرناش نسجّل الطلب دلوقتي — جرّبي تاني أو كلّمينا على واتساب 🤍";
 
 /* ============================================================
@@ -76,7 +82,9 @@ function priceItems(raw, adminItems, shopItems) {
     const docId = /^[a-zA-Z0-9_-]{1,40}$/.test(String(r && r.docId || "")) ? String(r.docId) : "";
     const barcode = String(r && r.barcode || "").replace(/[^\w-]/g, "").slice(0, 40);
     const a = docId ? byDoc[docId] : null, s = barcode ? byBc[barcode] : null;
-    const price = Math.max(0, Math.round(Number((a && a.price) || (s && s.price) || 0)));
+    const hm = /^collection\/([a-z0-9-]{1,40})\.jpg$/.exec(String(r && r.img || ""));
+    const hp = hm ? HOUSE_PRICES[hm[1]] : 0;
+    const price = Math.max(0, Math.round(Number((a && a.price) || (s && s.price) || hp || 0)));
     const item = {
       name: cleanText((a && a.name) || (s && s.name) || (r && r.name) || "قطعة", 60),
       model: cleanText((a && a.family) || (r && r.model) || "", 40),
@@ -250,4 +258,5 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports.imageUrlFor = imageUrlFor;
   module.exports.isStaff = isStaff;
   module.exports.STATUSES = STATUSES;
+  module.exports.HOUSE_PRICES = HOUSE_PRICES;
 }

@@ -152,8 +152,8 @@ const house = AC.houseCollection('collection/');
 assert(house.length >= 12 && house.every((p) => p.tryable && p.line && AC.lineName(p.line)), 'مجموعة الدار كاملة وقابلة للقياس');
 assert(house.every((p) => fs.existsSync(path.join(ROOT, 'atelier', p.img))), 'كل صورة في مجموعة الدار موجودة فعلاً');
 assert(!house.some((p) => p.kind === 'isdal'), 'الإسدالات اتشالت من المجموعة');
-const linen = house.filter((p) => p.line === 'linen');
-assert(linen.length === 5 && linen.every((p) => p.colorName) && linen.find((p) => p.colorName === 'رمادي دخاني').gallery.length === 2, 'الكتان بأهداب: موديل واحد بـ٥ ألوان وصورهم الزيادة');
+const linen = house.filter((p) => p.line === 'chiffon');
+assert(linen.length === 5 && linen.every((p) => p.colorName && p.price === 490) && linen.find((p) => p.colorName === 'رمادي دخاني').gallery.length === 2, 'ميسي شيفون كويتي: موديل واحد بـ٥ ألوان بـ٤٩٠ وصورهم الزيادة');
 assert(house.every((p) => (p.gallery || []).every((g) => fs.existsSync(path.join(ROOT, 'atelier', g)))), 'كل الصور الزيادة موجودة');
 
 // ٩) ٦ قطع في النداء: نفس الشبكة على السيرفر والصفحة + 2K
@@ -220,7 +220,15 @@ assert(!/match \/atelier_orders/.test(fs.readFileSync(path.join(ROOT, 'security'
 
 // ١٢) الموديلات + رف الألوان
 const models = AC.groupModels(AC.houseCollection('collection/'));
-assert(models.length === 5 && models.find((m) => m.title === 'مونوجرام').items.length === 6 && models.find((m) => m.title === 'كتان بأهداب').items.length === 5, 'القطع بتتجمّع في موديلات (كارت واحد + ألوان)');
+assert(models.length === 5 && models.find((m) => m.title === 'مونوجرام').items.length === 6 && models.find((m) => m.title === 'ميسي شيفون كويتي').items.length === 5, 'القطع بتتجمّع في موديلات (كارت واحد + ألوان)');
 assert(AC.toneOf([40, 48, 82]) === 'navy' && AC.toneOf([28, 28, 28]) === 'black' && AC.toneOf([200, 176, 140]) === 'beige', 'عائلة اللون من لون القماش');
 assert(/d\.type === 'atelier-chat'/.test(LOY) && /chat=1/.test(LOY), '«كلّمينا في الشات» بيفتح شات التطبيق');
 assert(AC.groupModels(AC.atelierItemsFrom({ items: [{ id: 'a', line: 'crepe' }, { id: 'b', line: 'crepe' }, { id: 'c', line: 'crepe', family: 'كوري' }, { id: 'd', line: 'crepe', family: 'كوري' }] })).length === 3, 'قطع الإدارة من غير موديل كل واحدة لوحدها، واللي ليها نفس الموديل كارت واحد');
+if (O) {
+  // سعر صور الموقع على السيرفر = نفس السعر اللي العميلة شايفاه
+  house.filter((p) => p.price).forEach((p) => {
+    const k = p.img.replace(/^collection\//, '').replace(/\.jpg$/, '');
+    assert(O.HOUSE_PRICES[k] === p.price, 'سعر ' + p.name + ' متطابق بين الصفحة والسيرفر');
+  });
+  assert(O.priceItems([{ img: 'collection/linen-rose.jpg', name: 'x' }], [], [])[0].price === 490, 'طلب ميسي شيفون بيتحسب بـ٤٩٠ على السيرفر');
+}
