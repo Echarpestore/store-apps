@@ -198,6 +198,14 @@
     }).catch(function () { return house; });
   }
 
+  /* صور زيادة لنفس اللون (قطع صفحة الإدارة) — بتتحمّل لما الصفحة تتفتح */
+  function loadGallery(p) {
+    if (MOCK || !fb) return Promise.resolve();
+    return fb.firestore().collection("pos_test_settings").doc(AC.ADMIN_DOC + "_x_" + p.docId).get()
+      .then(function (d) { p.gallery = d.exists && Array.isArray(d.data().imgs) ? d.data().imgs.filter(AC.isImageDataUrl) : []; })
+      .catch(function () { p.gallery = []; });
+  }
+
   /* الصورة الكاملة لقطعة من صفحة الإدارة — مرة واحدة لكل قطعة */
   var fullCache = {};
   function fullSrc(p) {
@@ -846,6 +854,17 @@
     });
     pic.querySelector(".chip").style.display = look ? "" : "none";
     $("lbLine").textContent = colorLabel(p) || (AC.lineName(p.line) ? "من مجموعة " + AC.lineName(p.line) : "");
+    // 🎨 ألوان الموديل جوّه صفحة القطعة — تضغطي لون تشوفيه على طول
+    var lc = $("lbColors"), lm = modelOf[p.id];
+    lc.innerHTML = ""; lc.classList.toggle("hidden", !lm || lm.items.length < 2);
+    if (lm && lm.items.length > 1) lm.items.forEach(function (v) {
+      lc.appendChild(colorDot(v, v === p, function () {
+        state.lbOpen = v; setLb(v);
+        var c = document.querySelector('.card[data-model="' + CSS.escape(lm.key) + '"]'); if (c) setCardVariant(c, v);
+        if (mirrorP && modelOf[mirrorP.id] === lm) setMirror(v, true);
+      }));
+    });
+    if (p.admin && p.extras && !p.gallery) loadGallery(p).then(function () { if (state.lbOpen === p) setLb(p); });
     $("lbName").textContent = displayName(p);
     $("lbPrice").textContent = p.price ? AC.fmtPrice(p.price) : "";
     var busy = state.queued[p.id] && !look, st = roundsRec();

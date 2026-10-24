@@ -238,3 +238,6 @@ if (O) {
 }
 assert(['أسود', 'بنفسجي', 'رمادي توب', 'رمادي دخاني', 'روز'].map(AC.toneFromName).join() === 'black,purple,grey,grey,pink', 'عائلة اللون من الاسم لما يكون معروف');
 assert(['كاكي', 'بيج حجري', 'أوف وايت', 'رمادي فحمي'].map(AC.toneFromName).join() === 'beige,beige,white,grey', 'ألوان الدفعة التانية في رف الألوان الصح');
+assert(AD.cleanItem({ colorName: ' كاكي ', extras: 9 }).colorName === 'كاكي' && AD.cleanItem({ extras: 9 }).extras === 4, 'اسم اللون وعدد الصور الزيادة بيتحفظوا نضاف');
+const ac = AC.atelierItemsFrom({ items: [{ id: 'q', family: 'ميسي', colorName: 'كاكي', extras: 2 }] })[0];
+assert(ac.colorName === 'كاكي' && ac.extras === 2, 'الأتيليه بيقرا اسم اللون والصور الزيادة من الإدارة');
