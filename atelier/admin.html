@@ -75,6 +75,36 @@
   .prog i{display:block; height:100%; width:0; background:var(--bronze); transition:width .3s;}
   .empty{padding:30px; text-align:center; color:var(--soft); font-family:'Amiri',serif; font-size:19px;}
   .hidden{display:none !important;}
+  /* التابات */
+  .tabs{display:flex; gap:4px; padding:0 16px; border-bottom:1px solid var(--line); background:var(--paper); position:sticky; top:55px; z-index:4; overflow-x:auto;}
+  .tabs button{padding:12px 14px; font-size:14px; color:var(--soft); border-bottom:2px solid transparent; white-space:nowrap;}
+  .tabs button.on{color:var(--ink); border-color:var(--ink);}
+  .tabs .badge{display:inline-block; min-width:18px; padding:0 5px; margin-inline-start:4px; border-radius:9px; background:#a3443f; color:#fff; font-size:11px;}
+  /* الأوردرات */
+  .ofilter{display:flex; gap:6px; flex-wrap:wrap; margin:18px 0 12px;}
+  .ofilter button{padding:7px 12px; border:1px solid var(--line); font-size:12.5px;}
+  .ofilter button.on{background:var(--ink); color:var(--paper); border-color:var(--ink);}
+  .orders{display:grid; gap:12px;}
+  .order{background:#fff; border:1px solid var(--line); padding:14px; display:grid; gap:10px;}
+  .order.st-new{border-color:#a3443f; box-shadow:0 0 0 1px #a3443f;}
+  .order .top{display:flex; gap:10px; align-items:baseline; flex-wrap:wrap;}
+  .order .top b{font-family:'Amiri',serif; font-size:20px; font-weight:400;}
+  .order .pill{font-size:11px; padding:2px 9px; border-radius:9px; background:var(--paper-2);}
+  .order .when{font-size:12px; color:var(--soft); margin-inline-start:auto;}
+  .order .who{font-size:13.5px; line-height:1.9;}
+  .order .who a{color:var(--ok); text-decoration:underline;}
+  .order .its{display:flex; gap:10px; flex-wrap:wrap;}
+  .order .it{display:flex; gap:8px; align-items:center; background:var(--paper); padding:6px; font-size:12.5px; max-width:260px;}
+  .order .it img{width:44px; height:58px; object-fit:cover; background:var(--paper-2);}
+  .order .sts{display:flex; gap:6px; flex-wrap:wrap;}
+  .order .sts button{padding:6px 10px; font-size:12px; border:1px solid var(--line);}
+  .order .sts button.on{background:var(--ink); color:var(--paper);}
+  /* إعدادات الموقع */
+  .site{display:grid; gap:12px; max-width:720px; margin-top:18px;}
+  .site label{display:grid; gap:5px; font-size:12.5px; color:var(--soft);}
+  .site textarea{width:100%; padding:10px 12px; border:1px solid var(--line); font:inherit; min-height:70px;}
+  .site .banner{display:flex; gap:12px; align-items:center;}
+  .site .banner img{width:160px; aspect-ratio:3/2; object-fit:cover; background:var(--paper-2);}
   .toast{position:fixed; top:70px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--paper); padding:10px 18px; font-size:13px; z-index:9; opacity:0; transition:.4s; pointer-events:none;}
   .toast.on{opacity:1;}
 </style>
@@ -101,8 +131,13 @@
     <a href="./" target="_blank" rel="noopener">عرض الصفحة</a>
     <button id="logout" type="button">خروج</button>
   </header>
+  <nav class="tabs" id="tabs">
+    <button type="button" data-tab="collection" class="on">المجموعة</button>
+    <button type="button" data-tab="orders">الأوردرات <span class="badge hidden" id="newBadge"></span></button>
+    <button type="button" data-tab="site">إعدادات الموقع</button>
+  </nav>
 
-  <div class="wrap">
+  <div class="wrap" id="tab-collection">
     <div class="tools">
       <div class="drop" id="drop">
         <b>ضيفي صور القطع</b>
@@ -131,6 +166,32 @@
     <div class="grid" id="list"></div>
   </div>
 
+  <div class="wrap hidden" id="tab-orders">
+    <div class="ofilter" id="ofilter"></div>
+    <div class="orders" id="orders"><div class="empty">بتحمّل…</div></div>
+  </div>
+
+  <div class="wrap hidden" id="tab-site">
+    <div class="site">
+      <p class="muted">كل اللي هنا بيظهر في صفحة غرفة القياس على طول بعد الحفظ.</p>
+      <label>السطر الصغير فوق العنوان<input type="text" id="s_eyebrow" placeholder="مجموعة الموسم"></label>
+      <div class="row2"><label>العنوان — السطر الأول<input type="text" id="s_title1" placeholder="المجموعة كاملة،"></label>
+        <label>العنوان — السطر التاني (ملوّن)<input type="text" id="s_title2" placeholder="عليكِ أنتِ"></label></div>
+      <label>الجملة تحت العنوان<input type="text" id="s_sub" placeholder="صورةٌ واحدة، وتظهر كل قطعة عليكِ قبل أن تختاري."></label>
+      <label>جملة المنتصف الكبيرة<textarea id="s_statement" placeholder="كل طيّةٍ حكاية، وكل لونٍ مزاج…"></textarea></label>
+      <label>الكلام اللي بيتحرك (افصلي بفاصلة)<input type="text" id="s_marquee" placeholder="كريب، بليسيه، مونوجرام، زيبرا، إسدال"></label>
+      <label>رسالة «مش لاقية اللي في بالكِ؟»<textarea id="s_chatText" placeholder="عندنا آلاف الطرح في الفروع…"></textarea></label>
+      <div class="row2"><label>رقم واتساب الطلبات (بالكود الدولي)<input type="text" id="s_whatsapp" placeholder="201148664485"></label>
+        <label>الفروع للاستلام (افصلي بفاصلة)<input type="text" id="s_branches" placeholder="الرحاب، مدينتي، سيتي سنتر"></label></div>
+      <div class="banner"><img id="s_bannerImg" alt=""><div>
+        <button class="btn ghost" type="button" id="s_bannerBtn">تغيير صورة البانر العريض</button>
+        <input type="file" id="s_bannerFile" accept="image/*" hidden>
+        <p class="muted">صورة بالعرض، أحسن حاجة 1600×1000 تقريبًا.</p></div></div>
+      <button class="btn" type="button" id="s_save">حفظ إعدادات الموقع</button>
+      <p class="muted">الأسعار والصور والأسماء من تاب «المجموعة» · الشحن بيتظبط من الـPOS («منتجات البيع أونلاين» ← الإعدادات).</p>
+    </div>
+  </div>
+
   <div class="bar" id="bar">
     <span id="barText">فيه تعديلات لسه ما اتحفظتش</span><span class="sp"></span>
     <button class="btn" id="save" type="button">حفظ</button>
@@ -142,6 +203,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
 <script src="../tryon/photo-core.js"></script>
 <script src="./atelier-core.js"></script>
 <script src="./admin-core.js"></script>

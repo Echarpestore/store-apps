@@ -59,6 +59,7 @@
       <div class="m-weave"><span>نُجهّزها لكِ…</span></div>
     </div>
     <div class="m-cap"><b id="mName"></b><span id="mLine"></span>
+      <div class="m-colors hidden" id="mColors" aria-label="الألوان"></div>
       <button class="m-pick" id="mPick" type="button">اختاريها للتجربة</button></div>
     <div class="m-acts">
       <button class="ic heart" id="mHeart" type="button" aria-label="أضيفي للمفضّلة" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" stroke="currentColor" stroke-width="1.3"/></svg></button>
@@ -87,6 +88,7 @@
       <h2>المجموعة</h2>
       <p class="sec-sub">خاماتٌ ناعمة، وتفاصيلُ صُنعت لتدوم.</p>
     </div>
+    <div class="tones hidden" id="tones" aria-label="رف الألوان"></div>
     <div class="filters" id="filters" role="tablist"></div>
     <div class="grid" id="grid"></div>
   </section>
@@ -180,8 +182,36 @@
     <div class="bag-list" id="bagList"></div>
     <div class="bag-foot" id="bagFoot">
       <div class="bag-total" id="bagTotal"></div>
-      <a class="btn btn-dark wide" id="bagWa" href="#" target="_blank" rel="noopener"><span>اطلبي عبر واتساب</span></a>
-      <small class="fine">نؤكّد معكِ التفاصيل والتوصيل على واتساب في دقائق.</small>
+      <button class="btn btn-dark wide" id="bagCheckout" type="button"><span>أكملي الطلب</span></button>
+      <a class="bag-wa" id="bagWa" href="#" target="_blank" rel="noopener">أو اطلبي عبر واتساب</a>
+    </div>
+    <form class="checkout hidden" id="checkout" novalidate>
+      <label>الاسم<input type="text" id="coName" autocomplete="name" required></label>
+      <label>رقم الموبايل (واتساب)<input type="tel" id="coPhone" inputmode="tel" autocomplete="tel" placeholder="01xxxxxxxxx" required></label>
+      <div class="seg" role="radiogroup">
+        <button type="button" data-ful="delivery" class="on">توصيل للبيت</button>
+        <button type="button" data-ful="pickup">استلام من الفرع</button>
+      </div>
+      <div id="coDelivery">
+        <label>المحافظة<select id="coGov"></select></label>
+        <label>العنوان بالتفصيل<textarea id="coAddr" rows="2" placeholder="المنطقة، الشارع، رقم العمارة والشقة"></textarea></label>
+      </div>
+      <div id="coPickup" class="hidden">
+        <label>الفرع</label>
+        <div class="chips" id="coBranches"></div>
+      </div>
+      <label>ملاحظات (اختياري)<input type="text" id="coNotes" placeholder="مثلاً: ميعاد مناسب للتوصيل"></label>
+      <div class="co-sum" id="coSum"></div>
+      <div class="err" id="coErr"></div>
+      <button class="btn btn-dark wide" type="submit" id="coSubmit"><span>تأكيد الطلب</span></button>
+      <small class="fine">طلبكِ بيوصلنا فوراً، وهنكلمكِ على واتساب للتأكيد.</small>
+      <button type="button" class="bag-wa" id="coBack">رجوع للحقيبة</button>
+    </form>
+    <div class="order-done hidden" id="orderDone">
+      <div class="ok">✓</div>
+      <h3>اتسجّل طلبكِ</h3>
+      <p id="doneText"></p>
+      <button class="btn btn-dark" type="button" data-close><span>رجوع للمجموعة</span></button>
     </div>
   </div>
 </div>

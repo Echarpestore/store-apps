@@ -35,6 +35,13 @@
     forgot: "تم حذف صورتكِ وإطلالاتكِ من هاتفكِ."
   };
 
+  /* ⚙️ إعدادات الموقع — بتتعدّل من صفحة الإدارة (pos_test_settings/atelier_site) */
+  var SITE = {
+    whatsapp: "201148664485",
+    chatText: "عندنا آلاف الطرح في الفروع 🤍 كلّمينا في الشات، ونبعتلكِ صورها تجرّبيها عليكِ هنا.",
+    branches: ["الرحاب", "مدينتي", "سيتي سنتر"],
+    shippingFee: 40, freeOver: 0
+  };
   var state = {
     products: [], byId: {}, face: "", alive: false,
     looks: {}, queued: {}, requested: 0, done: 0, target: 0,
@@ -228,33 +235,75 @@
   /* بصمة المنتج في الكاش — data-URL أو مسار الملف */
   function prodSig(p) { return p.img; }
 
-  /* ---------------- الواجهة: المرآة + عيّنات القماش ----------------
-     مفيش سلايدر بيتحرك لوحده: العميلة بتختار العيّنة، والمرآة
-     بتبدّل القطعة عليها بستارة حرير. قبل الصورة = صورة المنتج،
-     وبعدها = إطلالتها هي. */
+  /* ---------------- الموديلات + رف الألوان ----------------
+     القطع اللي بنفس الموديل = كارت واحد + نقط ألوان (من غير أسماء:
+     الدرجات كتير وصعب تتسمّى). المرآة بتعرض الموديلات، وتحتها ألوان
+     الموديل اللي قدامها. */
+  var models = [], modelOf = {}, toneSel = "";
+  function buildModels() {
+    models = AC.groupModels(state.products);
+    modelOf = {};
+    models.forEach(function (m) {
+      m.active = m.items[0];
+      m.items.forEach(function (p, i) { modelOf[p.id] = m; p.colorNo = i + 1; });
+    });
+  }
+  function colorLabel(p) {
+    var m = modelOf[p.id];
+    return m && m.items.length > 1 ? "لون " + arN(p.colorNo) + " من " + arN(m.items.length) : "";
+  }
+  function displayName(p) { var m = modelOf[p.id]; return m && m.items.length > 1 ? m.title : p.name; }
+  function colorDot(v, on, onClick) {
+    var b = el("button", "cdot" + (on ? " on" : ""));
+    b.type = "button"; b.dataset.id = v.id; b.setAttribute("aria-label", displayName(v) + " — " + colorLabel(v));
+    b.innerHTML = '<img alt="" loading="lazy">'; b.querySelector("img").src = v.img;
+    b.addEventListener("click", function (e) { e.stopPropagation(); onClick(); });
+    paintDot(b, v);
+    return b;
+  }
+  function paintDot(d, p) {
+    d.classList.toggle("worn", !!state.looks[p.id]);
+    d.classList.toggle("busy", !!(state.queued[p.id] && !state.looks[p.id]));
+  }
+  function syncDots(p) {
+    document.querySelectorAll('.cdot[data-id="' + CSS.escape(p.id) + '"]').forEach(function (d) { paintDot(d, p); });
+    var m = modelOf[p.id]; if (!m) return;
+    var sw = document.querySelector('.sw[data-model="' + CSS.escape(m.key) + '"]');
+    if (sw) sw.classList.toggle("worn", m.items.some(function (x) { return state.looks[x.id]; }));
+  }
+
+  /* ---------------- الواجهة: المرآة ---------------- */
   var mirrorP = null, mirrorShown = "", userPicked = false, paintT = 0;
   function tryables() { return state.products.filter(function (p) { return p.tryable; }); }
+  function mirrorModels() { return models.filter(function (m) { return m.items.some(function (p) { return p.tryable; }); }); }
   function renderHero() {
     var box = $("swatches"); box.innerHTML = "";
-    tryables().forEach(function (p) {
-      var b = el("button", "sw"); b.type = "button"; b.dataset.id = p.id;
-      b.setAttribute("aria-label", p.name); b.setAttribute("role", "option");
-      b.innerHTML = '<span class="clip"><img alt="" loading="lazy"></span><i class="dot"></i>';
-      b.querySelector("img").src = p.img;
-      b.addEventListener("click", function () { userPicked = true; setMirror(p); });
+    mirrorModels().forEach(function (m) {
+      var b = el("button", "sw"); b.type = "button"; b.dataset.model = m.key;
+      b.setAttribute("aria-label", m.title); b.setAttribute("role", "option");
+      b.innerHTML = '<span class="clip"><img alt="" loading="lazy"></span><i class="dot"></i>' +
+        (m.items.length > 1 ? '<em class="cnt">' + arN(m.items.length) + "</em>" : "");
+      b.querySelector("img").src = m.items[0].img;
+      b.addEventListener("click", function () { userPicked = true; setMirror(m.active); });
       box.appendChild(b);
     });
-    var first = tryables()[0] || state.products[0];
-    if (first) setMirror(first, true);
+    var first = mirrorModels()[0];
+    if (first) setMirror(first.active, true);
   }
   function setMirror(p, instant) {
     mirrorP = p;
+    var m = modelOf[p.id]; if (m) m.active = p;
     document.querySelectorAll(".sw").forEach(function (sw) {
-      var on = sw.dataset.id === p.id; sw.classList.toggle("on", on); sw.setAttribute("aria-selected", on);
+      var on = !!m && sw.dataset.model === m.key; sw.classList.toggle("on", on); sw.setAttribute("aria-selected", on);
       if (on && !instant) centerSwatch(sw);
     });
-    $("mName").textContent = p.name;
-    $("mLine").textContent = AC.lineName(p.line) ? "من مجموعة " + AC.lineName(p.line) : "";
+    $("mName").textContent = displayName(p);
+    $("mLine").textContent = colorLabel(p) || (AC.lineName(p.line) ? "من مجموعة " + AC.lineName(p.line) : "");
+    var box = $("mColors"); box.innerHTML = "";
+    box.classList.toggle("hidden", !m || m.items.length < 2);
+    if (m && m.items.length > 1) m.items.forEach(function (v) {
+      box.appendChild(colorDot(v, v === p, function () { userPicked = true; setMirror(v); }));
+    });
     $("mirror").classList.toggle("busy", !!(state.queued[p.id] && !state.looks[p.id]));
     paintMirror(state.looks[p.id] || p.img, instant);
     if (p.admin && !state.looks[p.id]) fullSrc(p).then(function (u) {
@@ -289,7 +338,7 @@
     top.src = src;
     if (top.complete) go(); else top.onload = go;
   }
-  /* سحب المرآة يمين/شمال = القطعة اللي بعدها/قبلها */
+  /* سحب المرآة يمين/شمال = الموديل اللي بعده/قبله */
   var swipeX = null, swiped = false;
   $("mirror").addEventListener("pointerdown", function (e) { swipeX = e.clientX; swiped = false; });
   $("mirror").addEventListener("pointerup", function (e) {
@@ -298,9 +347,9 @@
     if (Math.abs(dx) > 45) { swiped = true; stepMirror(dx < 0 ? 1 : -1); }
   });
   function stepMirror(d) {
-    var list = tryables(); if (!list.length) return;
-    var i = Math.max(0, list.indexOf(mirrorP));
-    userPicked = true; setMirror(list[(i + d + list.length) % list.length]); buzz();
+    var list = mirrorModels(); if (!list.length) return;
+    var i = Math.max(0, list.indexOf(modelOf[mirrorP && mirrorP.id]));
+    userPicked = true; setMirror(list[(i + d + list.length) % list.length].active); buzz();
   }
   $("mirror").addEventListener("click", function () {
     if (swiped) { swiped = false; return; }
@@ -309,6 +358,7 @@
   $("mirror").addEventListener("keydown", function (e) { if (e.key === "Enter" && mirrorP) openLook(mirrorP); });
   function resetMirror() {
     document.querySelectorAll(".sw").forEach(function (sw) { sw.classList.remove("worn"); });
+    document.querySelectorAll(".cdot").forEach(function (d) { d.classList.remove("worn", "busy"); });
     userPicked = false; mirrorShown = "";
     if (mirrorP) setMirror(mirrorP, true);
   }
@@ -316,8 +366,8 @@
   /* ---------------- المجموعة ---------------- */
   var io = null;
   function renderFilters() {
-    var box = $("filters"), counts = { all: state.products.length };
-    state.products.forEach(function (p) { counts[p.line] = (counts[p.line] || 0) + 1; });
+    var box = $("filters"), counts = { all: models.length };
+    models.forEach(function (m) { counts[m.line] = (counts[m.line] || 0) + 1; });
     var lines = AC.LINES.slice();
     if (counts.shop) lines.splice(1, 0, { id: "shop", ar: "الجديد" });
     box.innerHTML = "";
@@ -329,53 +379,131 @@
       box.appendChild(b);
     });
   }
-  function setLine(id) {
-    state.line = id;
-    Array.prototype.forEach.call($("filters").children, function (b, i) { b.classList.remove("on"); });
-    renderFilters();
-    document.querySelectorAll(".card").forEach(function (c) {
-      var p = state.byId[c.dataset.id];
-      var show = id === "all" || p.line === id;
-      c.classList.toggle("hide", !show);
-      if (show) { c.classList.remove("in"); requestAnimationFrame(function () { requestAnimationFrame(function () { c.classList.add("in"); }); }); }
+  function setLine(id) { state.line = id; renderFilters(); applyFilters(); }
+
+  /* 🎨 رف الألوان: عائلة اللون بتتحسب من صورة القطعة نفسها (مرة واحدة) */
+  function toneFor(p) {
+    if (p.tone !== undefined) return Promise.resolve(p.tone);
+    return loadImg(p.img).then(function (img) {
+      var c = document.createElement("canvas"), x = c.getContext("2d"), w = img.naturalWidth, h = img.naturalHeight;
+      c.width = c.height = 32; x.drawImage(img, w * .2, h * .2, w * .6, h * .6, 0, 0, 32, 32);
+      var d = x.getImageData(0, 0, 32, 32).data, r = 0, g = 0, b = 0, n = 0;
+      for (var k = 0; k < d.length; k += 4) {
+        var mx = Math.max(d[k], d[k + 1], d[k + 2]), mn = Math.min(d[k], d[k + 1], d[k + 2]);
+        if (mn > 205 && mx - mn < 30) continue;            // خلفية فاتحة
+        r += d[k]; g += d[k + 1]; b += d[k + 2]; n++;
+      }
+      p.tone = n ? AC.toneOf([r / n, g / n, b / n]) : "white";
+      return p.tone;
+    }).catch(function () { p.tone = ""; return ""; });
+  }
+  function renderTones() {
+    Promise.all(state.products.map(toneFor)).then(function () {
+      var have = {};
+      state.products.forEach(function (p) { if (p.tone) have[p.tone] = (have[p.tone] || 0) + 1; });
+      var list = AC.TONES.filter(function (t) { return have[t.id]; });
+      var box = $("tones"); box.innerHTML = "";
+      box.classList.toggle("hidden", list.length < 3);
+      list.forEach(function (t) {
+        var b = el("button", "tone" + (toneSel === t.id ? " on" : ""), '<i style="background:' + t.hex + '"></i>' + esc(t.ar));
+        b.type = "button"; b.setAttribute("aria-pressed", toneSel === t.id);
+        b.addEventListener("click", function () { toneSel = toneSel === t.id ? "" : t.id; renderTones(); applyFilters(); });
+        box.appendChild(b);
+      });
     });
+  }
+  function applyFilters() {
+    var shown = 0;
+    document.querySelectorAll(".card[data-model]").forEach(function (c) {
+      var m = models.filter(function (x) { return x.key === c.dataset.model; })[0]; if (!m) return;
+      var okLine = state.line === "all" || m.line === state.line;
+      var match = toneSel ? m.items.filter(function (p) { return p.tone === toneSel; }) : m.items;
+      var show = okLine && match.length > 0;
+      if (show && toneSel && match.indexOf(state.byId[c.dataset.id]) < 0) setCardVariant(c, match[0]);
+      c.classList.toggle("hide", !show);
+      if (show) { shown++; c.classList.remove("in"); requestAnimationFrame(function () { requestAnimationFrame(function () { c.classList.add("in"); }); }); }
+    });
+    var more = document.querySelector(".more-card h3");
+    if (more) more.textContent = shown ? "مش لاقية اللي في بالكِ؟" : "مفيش هنا اللون ده لسه…";
   }
 
   function renderGrid() {
     var g = $("grid"); g.innerHTML = "";
-    if (!state.products.length) { g.innerHTML = '<div class="empty">تُعَدّ المجموعة الجديدة… قريباً.</div>'; return; }
+    if (!models.length) { g.innerHTML = '<div class="empty">تُعَدّ المجموعة الجديدة… قريباً.</div>'; return; }
     io = "IntersectionObserver" in window ? new IntersectionObserver(onSeen, { rootMargin: "0px 0px -8% 0px" }) : null;
-    state.products.forEach(function (p, i) {
+    models.forEach(function (m, i) {
+      var p = m.active;
       var c = el("article", "card");
-      c.dataset.id = p.id; c.dataset.i = i;
+      c.dataset.model = m.key; c.dataset.id = p.id; c.dataset.i = i;
+      var n = m.items.length;
       c.innerHTML =
         '<div class="frame" role="button" tabindex="0">' +
           '<img class="prod" alt="" loading="lazy"><img class="look" alt="">' +
           '<i class="sheen"></i><div class="weave"></div><div class="weave-txt">نُجهّزها لكِ…</div>' +
           '<div class="chip"><img alt=""></div>' +
-          '<button class="try-btn" type="button">اختاريها</button>' +
+          '<button class="try-btn" type="button">جرّبيها بألوانها</button>' +
           '<button class="card-heart heart" type="button" aria-label="أضيفي للمفضّلة"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" stroke="currentColor" stroke-width="1.3"/></svg></button>' +
         '</div>' +
-        '<div class="meta"><span class="nm">' + esc(p.name) + '</span>' +
-          (p.price ? '<span class="pr">' + esc(AC.fmtPrice(p.price)) + '</span>' :
-            (AC.lineName(p.line) ? '<span class="lt">' + esc(AC.lineName(p.line)) + '</span>' : '')) +
-        '</div>';
-      c.querySelector(".prod").src = p.img;
-      c.querySelector(".prod").alt = p.name;
-      c.querySelector(".chip img").src = p.img;
+        '<div class="meta"><span class="nm">' + esc(n > 1 ? m.title : p.name) + '</span>' +
+          '<span class="pr"></span>' + (n > 1 ? '<span class="cnt">' + arN(n) + ' ألوان</span>' : '') +
+        '</div>' + (n > 1 ? '<div class="cdots"></div>' : '');
+      if (n > 1) {
+        var dots = c.querySelector(".cdots"), MAXD = 9;
+        m.items.slice(0, MAXD).forEach(function (v) {
+          dots.appendChild(colorDot(v, v === p, function () { setCardVariant(c, v); }));
+        });
+        if (n > MAXD) {
+          var more = el("button", "more", "+" + arN(n - MAXD)); more.type = "button";
+          more.addEventListener("click", function () { openLook(state.byId[c.dataset.id]); });
+          dots.appendChild(more);
+        }
+      }
       var frame = c.querySelector(".frame");
+      var cur = function () { return state.byId[c.dataset.id]; };
       frame.addEventListener("click", function (e) {
-        if (e.target.closest(".try-btn")) { e.stopPropagation(); tryPiece(p); return; }
-        if (e.target.closest(".card-heart")) { e.stopPropagation(); toggleFav(p); return; }
-        openLook(p);
+        if (e.target.closest(".try-btn")) { e.stopPropagation(); tryPiece(cur()); return; }
+        if (e.target.closest(".card-heart")) { e.stopPropagation(); toggleFav(cur()); return; }
+        openLook(cur());
       });
-      frame.addEventListener("keydown", function (e) { if (e.key === "Enter") openLook(p); });
+      frame.addEventListener("keydown", function (e) { if (e.key === "Enter") openLook(cur()); });
       g.appendChild(c);
-      syncHearts(p);
+      setCardVariant(c, p);
       if (io) io.observe(c); else c.classList.add("in");
     });
+    g.appendChild(moreCard());
+    renderTones();
+  }
+  /* الكارت بيعرض لون واحد — تغيير اللون بيغيّر الصورة والإطلالة والحالة */
+  function setCardVariant(c, p) {
+    var m = modelOf[p.id]; if (m) m.active = p;
+    c.dataset.id = p.id;
+    var prod = c.querySelector(".prod"); prod.src = p.img; prod.alt = p.name;
+    c.querySelector(".chip img").src = p.img;
+    var look = state.looks[p.id], lk = c.querySelector(".look");
+    if (look) { lk.src = look; c.classList.add("worn"); } else { c.classList.remove("worn"); lk.removeAttribute("src"); }
+    c.classList.toggle("weaving", !!(state.queued[p.id] && !look));
+    c.querySelector(".pr").textContent = p.price ? AC.fmtPrice(p.price) : "";
+    c.querySelectorAll(".cdots .cdot").forEach(function (d) { d.classList.toggle("on", d.dataset.id === p.id); });
+    syncHearts(p);
+    if (typeof syncPickable === "function" && state.alive) syncPickable();
   }
   function card(id) { return document.querySelector('.card[data-id="' + CSS.escape(id) + '"]'); }
+
+  /* 💬 آخر كارت: مش لاقية؟ عندنا آلاف الطرح في الفروع — الشات */
+  function moreCard() {
+    var c = el("article", "card more-card in");
+    c.innerHTML = '<h3>مش لاقية اللي في بالكِ؟</h3>' +
+      '<p>' + esc(SITE.chatText) + '</p>' +
+      '<button class="btn btn-dark" type="button"><span>كلّمينا في الشات</span></button>' +
+      '<a class="bag-wa" target="_blank" rel="noopener">أو على واتساب</a>';
+    c.querySelector("button").addEventListener("click", openChatCta);
+    c.querySelector("a").href = "https://wa.me/" + SITE.whatsapp + "?text=" + encodeURIComponent("أهلاً echarpe 🤍 عاوزة أشوف طرح أكتر وأجرّبها عليّا");
+    return c;
+  }
+  function openChatCta() {
+    if (EMBED) { toParent({ type: "atelier-chat" }); return; }
+    location.href = "../loyalty/?chat=1";
+  }
 
   function onSeen(entries) {
     entries.forEach(function (en) {
@@ -490,6 +618,7 @@
       var c = card(p.id); if (c) { c.classList.remove("pickable"); c.classList.add("weaving"); }
       state.queue.push(p);
       if (mirrorP === p) $("mirror").classList.add("busy");
+      syncDots(p);
     });
     syncPickable(); updateDock(); pump();
   }
@@ -577,6 +706,7 @@
       state.queued[p.id] = false;
       var c = card(p.id); if (c) c.classList.remove("weaving");
       if (mirrorP === p) $("mirror").classList.remove("busy");
+      syncDots(p);
     });
     syncPickable();
   }
@@ -660,8 +790,7 @@
         setTimeout(function () { c.classList.remove("revealing"); }, 2100);
       });
     }
-    var sw = document.querySelector('.sw[data-id="' + CSS.escape(p.id) + '"]');
-    if (sw) sw.classList.add("worn");
+    syncDots(p);
     // أول إطلالة جاهزة تظهر في المرآة على طول — لحد ما العميلة تختار بنفسها
     if (mirrorP === p) setMirror(p);
     else if (!userPicked && (!mirrorP || !state.looks[mirrorP.id])) setMirror(p);
@@ -699,8 +828,8 @@
       $("lbProd").src = u; if (!state.looks[p.id]) $("lbLook").src = u;
     });
     pic.querySelector(".chip").style.display = look ? "" : "none";
-    $("lbLine").textContent = AC.lineName(p.line) ? "من مجموعة " + AC.lineName(p.line) : "";
-    $("lbName").textContent = p.name;
+    $("lbLine").textContent = colorLabel(p) || (AC.lineName(p.line) ? "من مجموعة " + AC.lineName(p.line) : "");
+    $("lbName").textContent = displayName(p);
     $("lbPrice").textContent = p.price ? AC.fmtPrice(p.price) : "";
     var busy = state.queued[p.id] && !look, st = roundsRec();
     var b = $("lbTry");
@@ -812,7 +941,7 @@
      للفرع بأسماء القطع، والصور اللي بتتشارك بتتعمل على الموبايل
      ومبتتنشرش غير لو هي شاركتها.
      ============================================================ */
-  var WA_NUMBER = "201148664485";
+  var WA_NUMBER = SITE.whatsapp;
   var SITE_URL = "https://www.echarpe.store/atelier/";
   var celebrated = false;
   function readIds(k) { try { var v = JSON.parse((LS && LS.getItem(k)) || "[]"); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
@@ -903,8 +1032,8 @@
     items.forEach(function (p) {
       total += p.price || 0;
       var row = el("div", "bag-item");
-      row.innerHTML = '<img alt=""><div><b>' + esc(p.name) + '</b><small>' +
-        esc(p.price ? AC.fmtPrice(p.price) : (state.looks[p.id] ? "جرّبتِها عليكِ ✓" : (AC.lineName(p.line) || ""))) +
+      row.innerHTML = '<img alt=""><div><b>' + esc(displayName(p)) + '</b><small>' +
+        esc([colorLabel(p), p.price ? AC.fmtPrice(p.price) : "", state.looks[p.id] ? "جرّبتِها ✓" : ""].filter(Boolean).join(" · ")) +
         '</small></div><button class="rm" type="button">إزالة</button>';
       row.querySelector("img").src = state.looks[p.id] || p.img;
       row.querySelector(".rm").addEventListener("click", function () { removeFromBag(p.id); });
@@ -913,18 +1042,14 @@
     $("bagTotal").textContent = items.length + (items.length === 1 ? " قطعة" : " قطع") + (total ? " · " + AC.fmtPrice(total) : "");
     var lines = ["أهلاً echarpe 🤍", "جرّبت القطع دي في غرفة القياس وعاوزة أطلبها:"];
     items.forEach(function (p) {
-      lines.push("• " + p.name + (p.price ? " — " + AC.fmtPrice(p.price) : "") + (p.barcode ? " (" + p.barcode + ")" : ""));
+      lines.push("• " + displayName(p) + (colorLabel(p) ? " (" + colorLabel(p) + ")" : "") + (p.price ? " — " + AC.fmtPrice(p.price) : "") + (p.barcode ? " [" + p.barcode + "]" : ""));
     });
     lines.push("", "شكراً!");
-    var wa = $("bagWa");
-    wa.href = "https://wa.me/" + WA_NUMBER + "?text=" + encodeURIComponent(lines.join("\n"));
-    // جوّه التطبيق: القطع اللي ليها باركود تروح سلة التطبيق (الدفع والاستلام الحقيقيين)
-    var inApp = EMBED && items.some(function (p) { return p.barcode; });
-    wa.dataset.app = inApp ? "1" : "";
-    wa.querySelector("span").textContent = inApp ? "أكملي الطلب" : "اطلبي عبر واتساب";
+    $("bagWa").href = "https://wa.me/" + SITE.whatsapp + "?text=" + encodeURIComponent(lines.join("\n"));
+    showBagStep("list");
   }
   function openSheet(id) {
-    if (id === "bag") renderBag();
+    if (id === "bag") { renderBag(); }
     $(id).classList.add("on"); document.body.style.overflow = "hidden";
   }
   function closeSheet(id) {
@@ -938,20 +1063,111 @@
   function smallJpeg(src) {
     return loadImg(src).then(function (img) { return imgToJpeg(img, 360, 0.82); }).catch(function () { return ""; });
   }
-  $("bagWa").addEventListener("click", function (e) {
-    if (this.dataset.app !== "1") return;            // واتساب عادي
-    e.preventDefault();
-    var items = bag.map(function (id) { return state.byId[id]; }).filter(function (p) { return p && p.barcode; });
-    var rest = bag.map(function (id) { return state.byId[id]; }).filter(function (p) { return p && !p.barcode; });
-    Promise.all(items.map(function (p) { return smallJpeg(state.looks[p.id] || p.img); })).then(function (imgs) {
-      toParent({ type: "atelier-order", items: items.map(function (p, i) {
-        return { barcode: p.barcode, name: p.name, img: imgs[i] };
-      }), note: "جرّبتها في غرفة القياس" });
-      bag = rest.map(function (p) { return p.id; }); writeIds("atelier_bag", bag); syncBagCount();
-      closeSheet("bag");
-      if (rest.length) toast("القطع اللي من غير كود هتتطلب من واتساب — هي لسه في حقيبتكِ");
+  /* ============================================================
+     🧾 إتمام الطلب جوّه الحقيبة
+     · توصيل (أو أي طلب من الموقع) → atelierOrderPlace: الطلب بيتسجّل
+       والمالك بيوصله إشعار بصورة القطعة. **مفيش POS.**
+     · استلام من الفرع جوّه التطبيق وكل القطع ليها باركود → سلة التطبيق
+       العادية (onlineOrderPlace → POS) — ده الطريق الوحيد للـPOS.
+     · لو الدالة مش منشورة/وقعت → واتساب بكل التفاصيل (الطلب ميضيعش).
+     ============================================================ */
+  var EG_GOVS = ["القاهرة", "الجيزة", "القليوبية", "الإسكندرية", "الدقهلية", "الشرقية", "الغربية", "المنوفية",
+    "البحيرة", "كفر الشيخ", "دمياط", "بورسعيد", "الإسماعيلية", "السويس", "الفيوم", "بني سويف", "المنيا", "أسيوط",
+    "سوهاج", "قنا", "الأقصر", "أسوان", "البحر الأحمر", "مطروح", "شمال سيناء", "جنوب سيناء", "الوادي الجديد"];
+  var co = { ful: "delivery", branch: "" };
+  function bagItems() { return bag.map(function (id) { return state.byId[id]; }).filter(Boolean); }
+  function showBagStep(step) {
+    $("bagList").classList.toggle("hidden", step !== "list");
+    $("bagFoot").style.display = step === "list" && bagItems().length ? "" : "none";
+    $("checkout").classList.toggle("hidden", step !== "form");
+    $("orderDone").classList.toggle("hidden", step !== "done");
+  }
+  function fillCheckout() {
+    var gov = $("coGov");
+    if (!gov.options.length) gov.innerHTML = '<option value="">اختاري المحافظة</option>' +
+      (SITE.governorates && SITE.governorates.length ? SITE.governorates : EG_GOVS).map(function (g) { return "<option>" + esc(g) + "</option>"; }).join("");
+    var bb = $("coBranches"); bb.innerHTML = "";
+    SITE.branches.forEach(function (b) {
+      var x = el("button", b === co.branch ? "on" : "", esc(b)); x.type = "button";
+      x.addEventListener("click", function () { co.branch = b; fillCheckout(); });
+      bb.appendChild(x);
     });
+    try {
+      if (!$("coPhone").value) $("coPhone").value = (LS && (LS.getItem("atelier_phone") || LS.getItem("echarpe_loyalty_phone"))) || "";
+      if (!$("coName").value) $("coName").value = (LS && LS.getItem("atelier_name")) || "";
+    } catch (e) { }
+    document.querySelectorAll("#checkout .seg button").forEach(function (b) { b.classList.toggle("on", b.dataset.ful === co.ful); });
+    $("coDelivery").classList.toggle("hidden", co.ful !== "delivery");
+    $("coPickup").classList.toggle("hidden", co.ful !== "pickup");
+    var items = bagItems(), sub = items.reduce(function (t, p) { return t + (p.price || 0); }, 0);
+    var ship = co.ful === "delivery" ? (SITE.freeOver && sub >= SITE.freeOver ? 0 : SITE.shippingFee) : 0;
+    $("coSum").innerHTML = arN(items.length) + (items.length === 1 ? " قطعة" : " قطع") +
+      (sub ? " · " + esc(AC.fmtPrice(sub)) : "") +
+      (co.ful === "delivery" ? "<br>الشحن: " + (ship ? esc(AC.fmtPrice(ship)) : "مجاني") : "") +
+      (sub ? "<br><b>الإجمالي: " + esc(AC.fmtPrice(sub + ship)) + "</b>" : "<br><small>السعر بنأكّده معاكِ على واتساب</small>");
+  }
+  $("bagCheckout").addEventListener("click", function () { $("coErr").textContent = ""; fillCheckout(); showBagStep("form"); });
+  $("coBack").addEventListener("click", function () { showBagStep("list"); });
+  document.querySelectorAll("#checkout .seg button").forEach(function (b) {
+    b.addEventListener("click", function () { co.ful = b.dataset.ful; fillCheckout(); });
   });
+  function cleanPhone(v) {
+    var d = String(v || "").replace(/[^\d]/g, "");
+    if (d.indexOf("0020") === 0) d = d.slice(4); else if (d.indexOf("20") === 0 && d.length === 12) d = d.slice(2);
+    if (d.length === 10 && d.charAt(0) === "1") d = "0" + d;
+    return /^01[0125]\d{8}$/.test(d) ? d : "";
+  }
+  $("checkout").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var items = bagItems(); if (!items.length) return;
+    var f = { name: $("coName").value.trim(), phone: cleanPhone($("coPhone").value), fulfillment: co.ful,
+      governorate: $("coGov").value, address: $("coAddr").value.trim(), branch: co.branch, notes: $("coNotes").value.trim() };
+    var err = f.name.length < 2 ? "اكتبي اسمكِ" : !f.phone ? "رقم الموبايل مش مظبوط (01xxxxxxxxx)" :
+      co.ful === "delivery" && (!f.governorate || f.address.length < 6) ? "اكتبي المحافظة والعنوان بالتفصيل" :
+      co.ful === "pickup" && !f.branch ? "اختاري الفرع" : "";
+    $("coErr").textContent = err; if (err) return;
+    try { LS && LS.setItem("atelier_name", f.name); LS && LS.setItem("atelier_phone", f.phone); } catch (e2) { }
+    // استلام من الفرع جوّه التطبيق + كله بباركود → سلة التطبيق (POS)
+    if (EMBED && co.ful === "pickup" && items.every(function (p) { return p.barcode; })) {
+      Promise.all(items.map(function (p) { return smallJpeg(p.img); })).then(function (imgs) {
+        toParent({ type: "atelier-order", items: items.map(function (p, i) {
+          return { barcode: p.barcode, name: displayName(p) + (colorLabel(p) ? " — " + colorLabel(p) : ""), img: imgs[i] };
+        }), note: "جرّبتها في غرفة القياس" + (f.notes ? " · " + f.notes : "") });
+        bag = []; writeIds("atelier_bag", bag); syncBagCount(); closeSheet("bag");
+      });
+      return;
+    }
+    var btn = $("coSubmit"); btn.disabled = true; btn.querySelector("span").textContent = "بنسجّل طلبكِ…";
+    var payload = Object.assign({}, f, { source: EMBED ? "app" : "web", items: items.map(function (p) {
+      return { docId: p.docId || "", barcode: p.barcode || "", name: displayName(p), model: modelOf[p.id] ? modelOf[p.id].title : "",
+               color: p.colorNo || 0, img: p.house ? p.img : "" };
+    }) });
+    var call = MOCK || !fb ? Promise.reject({ code: "mock" }) : authReady.then(function () { return callable("atelierOrderPlace")(payload); });
+    call.then(function (res) {
+      var d = (res && res.data) || {};
+      orderDone("رقم الطلب " + (d.code || "") + (d.total ? " · الإجمالي " + AC.fmtPrice(d.total) : "") +
+        "<br>هنكلمكِ على واتساب على " + esc(f.phone) + " للتأكيد 🤍");
+    }).catch(function (er) {
+      var code = String(er && er.code || "").replace(/^functions\//, "");
+      if (code === "resource-exhausted" || code === "invalid-argument") {
+        $("coErr").textContent = (er && er.message && code === "resource-exhausted") ? er.message : "راجعي البيانات وجرّبي تاني"; return;
+      }
+      // الدالة مش متاحة → واتساب بكل التفاصيل عشان الطلب ميضيعش
+      var t = ["أهلاً echarpe 🤍 عاوزة أطلب من غرفة القياس:"];
+      items.forEach(function (p) { t.push("• " + displayName(p) + (colorLabel(p) ? " (" + colorLabel(p) + ")" : "") + (p.price ? " — " + AC.fmtPrice(p.price) : "")); });
+      t.push("", "الاسم: " + f.name, "الموبايل: " + f.phone,
+        co.ful === "delivery" ? "توصيل: " + f.governorate + " — " + f.address : "استلام من فرع: " + f.branch);
+      if (f.notes) t.push("ملاحظات: " + f.notes);
+      window.open("https://wa.me/" + SITE.whatsapp + "?text=" + encodeURIComponent(t.join("\n")), "_blank");
+      orderDone("بعتنا طلبكِ على واتساب — ابعتي الرسالة وهنأكّد معاكِ في دقائق 🤍");
+    }).then(function () { btn.disabled = false; btn.querySelector("span").textContent = "تأكيد الطلب"; });
+  });
+  function orderDone(html) {
+    $("doneText").innerHTML = html;
+    bag = []; writeIds("atelier_bag", bag); syncBagCount(); syncMirrorActs();
+    showBagStep("done"); buzz();
+  }
+
   $("dockBag").addEventListener("click", function () { openSheet("bag"); });
   $("mBag").addEventListener("click", function () {
     if (mirrorP) addToBag(mirrorP, $("mirror").querySelector(".m-layer.base"));
@@ -1057,9 +1273,49 @@
   });
 
   /* ---------------- البداية ---------------- */
-  loadProducts().then(function (items) {
+  /* ⚙️ إعدادات الموقع من صفحة الإدارة — النصوص والبانر والواتساب والفروع */
+  function loadSite() {
+    if (MOCK || !fb) return Promise.resolve();
+    var col = fb.firestore().collection("pos_test_settings");
+    return authReady.then(function () {
+      return Promise.all([col.doc("atelier_site").get(), col.doc("online_shop_echarpe_cfg").get().catch(function () { return null; })]);
+    }).then(function (r) {
+      var cfg = r[1] && r[1].exists ? r[1].data() : {};
+      if (cfg.shippingFee != null) SITE.shippingFee = Number(cfg.shippingFee) || 0;
+      if (cfg.freeOver) SITE.freeOver = Number(cfg.freeOver) || 0;
+      if (Array.isArray(cfg.governorates) && cfg.governorates.length) SITE.governorates = cfg.governorates;
+      if (!r[0].exists) return;
+      var d = r[0].data() || {};
+      applySite(d);
+      if (d.hasBanner) col.doc("atelier_site_banner").get().then(function (b) {
+        var u = b.exists ? b.data().img : "";
+        if (AC.isImageDataUrl(u)) document.querySelector(".banner-img img").src = u;
+      }).catch(function () { });
+    }).catch(function () { });
+  }
+  function applySite(d) {
+    var set = function (id, v) { if (v && $(id)) $(id).textContent = v; };
+    if (/^\d{10,15}$/.test(String(d.whatsapp || ""))) SITE.whatsapp = String(d.whatsapp);
+    if (d.chatText) SITE.chatText = String(d.chatText).slice(0, 300);
+    if (Array.isArray(d.branches) && d.branches.length) SITE.branches = d.branches.map(String).slice(0, 12);
+    if (!state.alive) {
+      set("heroEyebrow", d.eyebrow); set("heroSub", d.sub);
+      if (d.title1 || d.title2) $("heroTitle").innerHTML = '<span class="ln"><span>' + esc(d.title1 || "") + '</span></span><span class="ln"><span><em>' + esc(d.title2 || "") + "</em></span></span>";
+      $("heroTitle").classList.add("in");
+    }
+    if (d.statement) { var st = document.querySelector(".statement p"); st.textContent = d.statement; st.parentNode.classList.add("in"); }
+    if (d.marquee) {
+      var words = String(d.marquee).split(/[،,]/).map(function (w) { return w.trim(); }).filter(Boolean).slice(0, 12);
+      if (words.length) { var one = words.map(function (w) { return "<span>" + esc(w) + "</span><span><b>✦</b></span>"; }).join(""); $("marquee").innerHTML = one + one; }
+    }
+    var mc = document.querySelector(".more-card p"); if (mc) mc.textContent = SITE.chatText;
+  }
+
+  Promise.all([loadProducts(), loadSite()]).then(function (r) {
+    var items = r[0];
     state.products = items;
     items.forEach(function (p) { state.byId[p.id] = p; });
+    buildModels();
     renderHero(); renderFilters(); renderGrid(); syncBagCount(); updateDock();
     var saved = LS ? PC.readFace(LS) : "";
     if (saved) { $("salonImg").src = saved; $("salonArch").classList.add("has"); }

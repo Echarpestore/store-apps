@@ -1085,6 +1085,10 @@ Object.assign(exports, require("./hijabTryOn"));
 //    firebase deploy --only functions:hijabLookbook
 Object.assign(exports, require("./hijabLookbook"));
 
+// 🛍️ أوردرات غرفة القياس — إشعار بالصورة للمالك (من غير POS). النشر:
+//    firebase deploy --only functions:atelierOrderPlace,functions:atelierOrdersAdmin,functions:atelierImg
+Object.assign(exports, require("./atelierOrders"));
+
 // 📱 إنستاباي على تابلت الفرع — دالتين بس (instaPay + instaScan).
 //    بديل الـ29 دالة اللي عدّوا حد الـCPU. النشر:
 //    firebase deploy --only functions:instaPay,functions:instaScan

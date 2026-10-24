@@ -2936,6 +2936,17 @@ function atelierOpen(){
 }
 window.atelierOpen = atelierOpen;
 
+/* 💬 ?chat=1 — جاية من «كلّمينا في الشات» في غرفة القياس على الموقع:
+   أول ما الدخول يخلص، الشات يتفتح. (من غير دخول الشات مالوش معنى.) */
+(function(){
+  try{ if(!/(?:^|[?&])chat=1(?:&|$)/.test(location.search)) return; }catch(e){ return; }
+  var tries = 0, t = setInterval(function(){
+    tries++;
+    if(typeof currentCustomer !== 'undefined' && currentCustomer && typeof openChat === 'function'){ clearInterval(t); openChat(); }
+    else if(tries > 120) clearInterval(t);
+  }, 500);
+})();
+
 function renderShop(){
   var box = $('tab-shop'); if(!box) return;
   // 🛍️ شارة السلة على تبويب "اطلبي" — كانت موجودة في الـHTML بس
@@ -4302,6 +4313,12 @@ window.addEventListener('message', function(e){
     var d = e.data;
     if(!d || d.ns !== 'echarpeTryon') return;
     if(d.type === 'tryon-close'){ tryonOverlayClose(); return; }
+    if(d.type === 'atelier-chat'){
+      // 💬 «مش لاقية اللي في بالكِ؟» من غرفة القياس → الشات على طول
+      tryonOverlayClose();
+      if(typeof openChat === 'function') openChat();
+      return;
+    }
     if(d.type === 'atelier-order'){
       // 🪞 من غرفة القياس: كل القطع اللي ليها باركود تدخل السلة، وبعدين شاشة إتمام الطلب مرة واحدة
       var its = Array.isArray(d.items) ? d.items.slice(0, 20) : [];
