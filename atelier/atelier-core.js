@@ -33,6 +33,7 @@
     ["kinar-beige-fume", "كينار لينن كويتي ليدي بيج بكنار فحمي",   "kinar", "بيج بكنار فحمي",   [], 680],
     ["linen-noir",       "ميسي شيفون كويتي أسود",        "chiffon", "أسود",        ["linen-noir-2"], 490],
     ["chiffon-charcoal", "ميسي شيفون كويتي رمادي فحمي",  "chiffon", "رمادي فحمي",  [], 490],
+    ["chiffon-gris",     "ميسي شيفون كويتي رمادي فاتح",  "chiffon", "رمادي فاتح",  ["chiffon-gris-2", "chiffon-gris-3"], 490],
     ["linen-fume",       "ميسي شيفون كويتي رمادي دخاني", "chiffon", "رمادي دخاني", ["linen-fume-2", "linen-fume-3"], 490],
     ["linen-taupe",      "ميسي شيفون كويتي رمادي توب",  "chiffon", "رمادي توب",   ["linen-taupe-2"], 490],
     ["chiffon-khaki",    "ميسي شيفون كويتي كاكي",       "chiffon", "كاكي",        ["chiffon-khaki-2", "chiffon-khaki-3", "chiffon-khaki-4"], 490],

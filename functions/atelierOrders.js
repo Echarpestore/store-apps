@@ -46,7 +46,7 @@ const GUARD_WINDOW = 60 * 60 * 1000;
    اختبار بيقارنهم). القطع اللي من صفحة الإدارة سعرها من Firestore. */
 const HOUSE_PRICES = {
   "linen-noir": 490, "linen-violet": 490, "linen-taupe": 490, "linen-fume": 490, "linen-rose": 490,
-  "chiffon-khaki": 490, "chiffon-charcoal": 490, "chiffon-ivory": 490, "chiffon-stone": 490,
+  "chiffon-khaki": 490, "chiffon-charcoal": 490, "chiffon-ivory": 490, "chiffon-stone": 490, "chiffon-gris": 490,
   "kinar-noir-blanc": 680, "kinar-noir-gris": 680, "kinar-noir-beige": 680, "kinar-noir-lilas": 680,
   "kinar-ivoire": 680, "kinar-taupe": 680, "kinar-beige-noir": 680, "kinar-beige-fume": 680
 };
