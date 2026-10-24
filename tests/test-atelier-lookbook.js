@@ -114,15 +114,26 @@ assert(items.map((p) => p.id).join(',') === '1,5', 'نفس شرط shopItems بت
 assert(items[0].tryable === true && items[1].tryable === false, 'المنتج من غير صورة data-URL بيتعرض بس مش بيتجرّب');
 assert(AC.buildBatches([1, 2, 3, 4, 5, 6], 4).map((b) => b.length).join() === '4,2', 'دفعات ٤ بالترتيب');
 const prods = AC.houseCollection('collection/');
-const r1 = AC.firstRound(prods, {});
-assert(r1.length === AC.ROUND_SIZE && r1.every((p) => p.kind === 'hijab'), 'الجولة الأولى = ٤ طرح (من غير إسدال)');
-assert(AC.firstRound(prods, { [r1[0].id]: 'x' })[0].id !== r1[0].id, 'الجولة الأولى بتتخطّى اللي إطلالته جاهزة');
-assert(AC.ROUNDS_PER_DAY === 2, 'جولتين بس في اليوم = نداءين توليد');
-assert(AC.roundsUsedToday({ day: '2026-10-14', n: 2 }, '2026-10-14') === 2 && AC.roundsUsedToday({ day: '2026-10-13', n: 2 }, '2026-10-14') === 0, 'عدّاد الجولات بيتصفّر كل يوم');
+const r1 = AC.buildRound(null, prods, {}, {});
+assert(r1.length === AC.ROUND_SIZE && r1.every((p) => p.kind === 'hijab'), 'أول تجربة = ٦ طرح (من غير إسدال)');
+const mono = prods.find((p) => p.line === 'mono');
+const rm = AC.buildRound(mono, prods, {}, {});
+assert(rm[0] === mono && rm.length === 6 && rm.every((p) => p.line === 'mono'), '«جرّبيها» على مونوجرام = القطعة + ألوانها من نفس الموديل');
+const crepe = prods.find((p) => p.line === 'crepe');
+const rc = AC.buildRound(crepe, prods, {}, {});
+assert(rc[0] === crepe && rc.filter((p) => p.line === 'crepe').length === 3 && rc.length === 6, 'لو ألوانها أقل من ٦ بنكمّل من الباقي');
+assert(AC.buildRound(mono, prods, { [mono.id]: 'x' }, {}).indexOf(mono) < 0, 'اللي إطلالته جاهزة مش بتتولّد تاني');
 const isd = prods.find((p) => p.kind === 'isdal');
-assert(AC.canSelect([r1[0]], isd, {}) === 'kind', 'الإسدال مبيتخلطش مع الطرح في نفس الجولة');
-assert(AC.canSelect(r1, prods[10], {}) === 'full', 'الجولة ٤ قطع بالكتير');
-assert(AC.canSelect([], r1[0], { [r1[0].id]: 'x' }) === 'done', 'القطعة الجاهزة مبتتختارش تاني');
+assert(AC.buildRound(isd, prods, {}, {}).every((p) => p.kind === 'isdal'), 'الإسدال مبيتخلطش مع الطرح');
+const fam = AC.buildRound({ id: 'f', kind: 'hijab', line: 'other', family: 'كوري', tryable: true },
+  [{ id: 'f', kind: 'hijab', line: 'other', family: 'كوري', tryable: true }, { id: 'z', kind: 'hijab', line: 'other', family: 'تاني', tryable: true }, { id: 'g', kind: 'hijab', line: 'crepe', family: 'كوري', tryable: true }], {}, {});
+assert(fam.map((p) => p.id).join() === 'f,g,z', 'الموديل من صفحة الإدارة بيسبق النوع');
+const t0 = AC.roundsState(null, '2026-10-24');
+assert(t0.allowed === 1 && t0.left === 1, 'تجربة واحدة ببلاش في اليوم');
+assert(AC.roundsState({ day: '2026-10-24', n: 1 }, '2026-10-24').left === 0, 'بعد التجربة الأولى مفيش غير لو حطّت حاجة في الحقيبة');
+assert(AC.roundsState({ day: '2026-10-24', n: 1, bonus: true }, '2026-10-24').left === 1, '🎁 الحقيبة بتدّي تجربة كمان');
+assert(AC.roundsState({ day: '2026-10-23', n: 2, bonus: true }, '2026-10-24').left === 1, 'العدّاد بيتصفّر كل يوم');
+assert(AC.MAX_ROUNDS === 2, 'أقصى حاجة نداءين = سقف السيرفر');
 assert(AC.shouldFallbackToSingle({ code: 'functions/internal' }) === true, 'دالة مش منشورة → ننزل لمنتج واحد');
 assert(AC.shouldFallbackToSingle({ code: 'functions/resource-exhausted' }) === false, 'خلص السقف ≠ ننزل (مش هنحرق نداءات أكتر)');
 assert(AC.cacheProductId({ id: 'x' }, true) !== AC.cacheProductId({ id: 'x' }, false), 'كاش الجودة العالية منفصل عن الشبكة');
@@ -153,7 +164,7 @@ if (M) {
   assert(/2 row\(s\) by 3 column\(s\)/.test(p6) && p6.includes('cell 6:') && p6.includes('IMAGE 7'), 'برومبت ٦ قطع');
   assert(/remaining 1 cell/.test(M.buildLookbookPrompt(5)), 'الخانة الفاضية متوصوفة لما القطع أقل من الشبكة');
 }
-assert(AC.ROUND_SIZE === 6, 'الجولة ٦ قطع');
+assert(AC.ROUND_SIZE === 6, 'التجربة ٦ قطع');
 const gc = AC.gridCells(1500, 1200, 5, 0);
 assert(gc.length === 5 && gc[3].x === 0 && gc[3].y === 600 && gc[2].x === 1000, 'القص بالترتيب: شمال لليمين ومن فوق لتحت');
 
@@ -174,3 +185,5 @@ const ai = AC.atelierItemsFrom({ items: [{ id: 'k1', name: 'إسدال', price: 
 assert(ai.length === 1 && ai[0].kind === 'isdal' && ai[0].admin && ai[0].barcode === '55', 'الأتيليه بيقرا قطع صفحة الإدارة الظاهرة بس');
 const LOY = fs.readFileSync(path.join(ROOT, 'loyalty', 'index.html'), 'utf8');
 assert(/atelierBannerHTML\(\) \+ grid/.test(LOY) && /d\.type === 'atelier-order'/.test(LOY), 'غرفة القياس مربوطة بـ«اطلبي» وسلة التطبيق');
+assert(AD.cleanItem({ family: ' كريب "كوري" ' }).family === 'كريب كوري', 'الموديل بيتحفظ نضيف');
+assert(AC.atelierItemsFrom({ items: [{ id: 'm', line: 'crepe', family: 'كوري' }] })[0].family === 'كوري', 'الأتيليه بيقرا الموديل');

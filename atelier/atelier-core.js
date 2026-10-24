@@ -11,8 +11,10 @@
   /* 💰 جولتين في اليوم بس = نداءين توليد لكل عميلة:
      الجولة الأولى لوحدها (أول ٤ طرح)، والتانية هي اللي بتختار
      قطعها الـ٤. نفس السقف على السيرفر (lookbookCapPerUser = 2). */
-  var ROUND_SIZE = 6;        // ٦ قطع في النداء = ١٢ إطلالة في اليوم بنفس التكلفة
-  var ROUNDS_PER_DAY = 2;
+  var ROUND_SIZE = 6;        // ٦ قطع في النداء الواحد
+  var BASE_ROUNDS = 1;       // تجربة واحدة ببلاش في اليوم
+  var BONUS_ROUNDS = 1;      // 🎁 + تجربة لما تحط قطعة في الحقيبة
+  var MAX_ROUNDS = BASE_ROUNDS + BONUS_ROUNDS;   // = lookbookCapPerUser على السيرفر
 
   /* 🏛️ مجموعة الدار — صور المنتجات الحقيقية (atelier/collection).
      بتظهر لما «منتجات البيع أونلاين» تكون فاضية، وبعد منتجات البيع
@@ -53,7 +55,7 @@
     var dir = base || "collection/";
     return HOUSE.map(function (h) {
       return { id: "house-" + h[0], galleryId: "", barcode: "", name: h[1],
-               line: h[2], kind: h[2] === "isdal" ? "isdal" : "hijab", price: 0,
+               line: h[2], family: h[2], kind: h[2] === "isdal" ? "isdal" : "hijab", price: 0,
                img: dir + h[0] + ".jpg", tryable: true, house: true };
     });
   }
@@ -69,6 +71,7 @@
       var kind = line === "isdal" ? "isdal" : kindOf(it);
       return { id: "at-" + it.id, docId: String(it.id), galleryId: "", barcode: String(it.barcode || ""),
                name: String(it.name || "قطعة").slice(0, 60), price: Number(it.price) || 0,
+               family: String(it.family || "").trim() || (kind === "isdal" ? "isdal" : line),
                line: kind === "isdal" ? "isdal" : line, kind: kind, img: "", tryable: true, admin: true };
     });
   }
@@ -153,26 +156,34 @@
     return out;
   }
 
-  /* الجولة الأولى: أول ROUND_SIZE طرح ممكن تتجرّب ومالهاش إطلالة جاهزة
-     (الإسدال بيتجرّب في جولة لوحده لما العميلة تختاره). */
-  function firstRound(products, looks) {
-    return (products || []).filter(function (p) {
-      return p && p.tryable && p.kind !== "isdal" && !(looks && looks[p.id]);
-    }).slice(0, ROUND_SIZE);
+  /* 🎨 الموديل = القطع اللي بنفس الشكل بألوان مختلفة. من صفحة الإدارة
+     (خانة «الموديل»)، وإلا النوع نفسه (كريب/مونوجرام/…). */
+  function familyOf(p) { return String(p && (p.family || p.line) || ""); }
+
+  /* جولة واحدة = ٦ قطع: القطعة اللي اختارتها + ألوانها (نفس الموديل)
+     + نفس النوع + الباقي. كلها من نفس الصنف (طرح مع طرح، إسدال مع
+     إسدال)، ومن غير اللي إطلالته جاهزة أو بيتجهّز. */
+  function buildRound(focus, products, looks, busy, size) {
+    var n = size || ROUND_SIZE;
+    var kind = focus ? (focus.kind || "hijab") : "hijab";
+    var free = (products || []).filter(function (p) {
+      return p && p.tryable && (p.kind || "hijab") === kind && !(looks && looks[p.id]) && !(busy && busy[p.id]);
+    });
+    if (!focus) return free.slice(0, n);
+    var fam = familyOf(focus), line = focus.line;
+    var rank = function (p) { return p === focus ? 0 : familyOf(p) === fam ? 1 : p.line === line ? 2 : 3; };
+    return free.map(function (p, i) { return { p: p, r: rank(p), i: i }; })
+      .sort(function (a, b) { return a.r - b.r || a.i - b.i; })
+      .slice(0, n).map(function (x) { return x.p; });
   }
 
-  /* عدّاد الجولات على الجهاز — بيتصفّر كل يوم. السيرفر هو الحَكَم
-     الحقيقي؛ ده عشان الصفحة تعرض المتبقّي من غير ما تسأل. */
-  function roundsUsedToday(rec, today) {
-    return rec && rec.day === today ? Math.max(0, Number(rec.n) || 0) : 0;
-  }
-
-  /* تقدر تضيف القطعة دي للاختيار؟ ok | full | kind | done */
-  function canSelect(sel, p, looks) {
-    if (!p || !p.tryable || (looks && looks[p.id])) return "done";
-    if ((sel || []).length >= ROUND_SIZE) return "full";
-    if (sel && sel.length && (sel[0].kind || "hijab") !== (p.kind || "hijab")) return "kind";
-    return "ok";
+  /* عدّاد التجارب على الجهاز — بيتصفّر كل يوم. bonus = اتكسبت من
+     الحقيبة. السيرفر هو الحَكَم الحقيقي (سقف MAX_ROUNDS). */
+  function roundsState(rec, today) {
+    var same = rec && rec.day === today;
+    var used = same ? Math.max(0, Number(rec.n) || 0) : 0, bonus = !!(same && rec.bonus);
+    var allowed = BASE_ROUNDS + (bonus ? BONUS_ROUNDS : 0);
+    return { used: used, bonus: bonus, allowed: allowed, left: Math.max(0, allowed - used) };
   }
 
   /* مفتاح الكاش — منفصل عن hijabTryOn عشان صورة الشبكة المقصوصة
@@ -205,12 +216,14 @@
     kindOf: kindOf,
     takeBatch: takeBatch,
     ROUND_SIZE: ROUND_SIZE,
-    ROUNDS_PER_DAY: ROUNDS_PER_DAY,
-    firstRound: firstRound,
+    BASE_ROUNDS: BASE_ROUNDS,
+    BONUS_ROUNDS: BONUS_ROUNDS,
+    MAX_ROUNDS: MAX_ROUNDS,
+    familyOf: familyOf,
+    buildRound: buildRound,
+    roundsState: roundsState,
     gridLayout: gridLayout,
     gridCells: gridCells,
-    roundsUsedToday: roundsUsedToday,
-    canSelect: canSelect,
     isImageDataUrl: isImageDataUrl,
     shopItemsFrom: shopItemsFrom,
     catalogItemsFrom: catalogItemsFrom,

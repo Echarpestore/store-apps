@@ -27,7 +27,8 @@
   var phone = ""; try { phone = (LS && LS.getItem("echarpe_loyalty_phone")) || ""; } catch (e) { }
 
   var MSG = {
-    limit: "جرّبتِ جولتين اليوم 🤍 نكمّل غداً بإطلالات جديدة.",
+    limit: "خلصت تجارب النهاردة 🤍 نكمّل غداً بإطلالات جديدة.",
+    earn: "🎁 أضيفي أي قطعة لحقيبتكِ واحصلي على تجربة كمان.",
     retry: "تعذّر تجهيز بعض القطع — المسي «جرّبيها» لإعادة المحاولة.",
     badImg: "تعذّرت قراءة الصورة — جرّبي صورةً أخرى.",
     isdalSoon: "تجربة الإسدال تتوفّر قريباً.",
@@ -38,7 +39,7 @@
     products: [], byId: {}, face: "", alive: false,
     looks: {}, queued: {}, requested: 0, done: 0, target: 0,
     mode: "lookbook", lookbookWorked: false, stopped: false,
-    queue: [], sel: [], busy: 0, gen: 0, lbOpen: null, line: "all"
+    queue: [], focus: null, busy: 0, gen: 0, lbOpen: null, line: "all"
   };
 
   /* ---------------- Firebase ---------------- */
@@ -364,7 +365,7 @@
       c.querySelector(".chip img").src = p.img;
       var frame = c.querySelector(".frame");
       frame.addEventListener("click", function (e) {
-        if (e.target.closest(".try-btn")) { e.stopPropagation(); toggleSel(p); return; }
+        if (e.target.closest(".try-btn")) { e.stopPropagation(); tryPiece(p); return; }
         if (e.target.closest(".card-heart")) { e.stopPropagation(); toggleFav(p); return; }
         openLook(p);
       });
@@ -438,7 +439,7 @@
 
   function startWithFace(face) {
     state.face = face; state.gen++;
-    state.looks = {}; state.queued = {}; state.queue = []; state.sel = [];
+    state.looks = {}; state.queued = {}; state.queue = [];
     state.requested = 0; state.done = 0; state.target = 0; state.stopped = false; celebrated = false;
     document.querySelectorAll(".card").forEach(function (c) { c.classList.remove("worn", "weaving", "pickable", "selected", "revealing"); });
     resetMirror();
@@ -459,82 +460,73 @@
           delay += 160;
         }
       });
-      // الجولة الأولى لوحدها — أول ٦ طرح مالهاش إطلالة جاهزة
-      var first = AC.firstRound(state.products, state.looks);
+      // التجربة الأولى لوحدها: القطعة اللي ضغطت عليها (لو فيه) + ألوانها، وإلا أول ٦ طرح
+      var first = AC.buildRound(state.focus, state.products, state.looks, state.queued);
+      state.focus = null;
       if (first.length && roundsLeft() > 0) runRound(first);
       syncPickable(); updateDock();
     });
   }
 
-  /* ---------------- الجولات: نداءين توليد بس لكل عميلة في اليوم ----------------
-     الجولة = لحد ٦ قطع من نفس النوع في نداء واحد. الأولى لوحدها،
-     والتانية العميلة بتختار قطعها. */
+  /* ---------------- التجارب: مرة ببلاش + 🎁 مرة لما تحط حاجة في الحقيبة ----------------
+     التجربة = نداء توليد واحد = ٦ قطع: اللي اختارتها + ألوانها
+     (نفس الموديل) + نفس النوع. السيرفر بيقفل على نداءين في اليوم. */
   var ROUNDS_KEY = "atelier_rounds";
   function today() { return new Date().toLocaleDateString("en-CA"); }
-  function roundsUsed() {
+  function roundsRec() {
     var rec = null; try { rec = JSON.parse((LS && LS.getItem(ROUNDS_KEY)) || "null"); } catch (e) { }
-    return AC.roundsUsedToday(rec, today());
+    return AC.roundsState(rec, today());
   }
-  function setRoundsUsed(n) { try { LS && LS.setItem(ROUNDS_KEY, JSON.stringify({ day: today(), n: n })); } catch (e) { } }
-  function roundsLeft() { return Math.max(0, AC.ROUNDS_PER_DAY - roundsUsed()); }
+  function saveRounds(st) { try { LS && LS.setItem(ROUNDS_KEY, JSON.stringify({ day: today(), n: st.used, bonus: st.bonus })); } catch (e) { } }
+  function roundsLeft() { return roundsRec().left; }
   function generating() { return state.busy > 0 || state.queue.length > 0; }
 
   function runRound(list) {
     if (!list.length) return;
     if (state.mode === "single" && list[0].kind === "isdal") { toast(MSG.isdalSoon); return; }
-    setRoundsUsed(roundsUsed() + 1);
+    var st = roundsRec(); st.used++; saveRounds(st);
     list.forEach(function (p) {
       state.queued[p.id] = true; state.target++;
-      var c = card(p.id); if (c) { c.classList.remove("pickable", "selected"); c.classList.add("weaving"); }
+      var c = card(p.id); if (c) { c.classList.remove("pickable"); c.classList.add("weaving"); }
       state.queue.push(p);
       if (mirrorP === p) $("mirror").classList.add("busy");
     });
-    state.sel = []; syncPickable();
-    updateDock(); pump();
+    syncPickable(); updateDock(); pump();
   }
 
-  /* اختيار قطع الجولة الجاية */
-  function toggleSel(p) {
-    if (!state.face) { pickPhoto(); return; }
-    var i = state.sel.indexOf(p);
-    if (i >= 0) { state.sel.splice(i, 1); }
-    else if (!roundsLeft()) { toast(MSG.limit); return; }
-    else {
-      var ok = AC.canSelect(state.sel, p, state.looks);
-      if (ok === "full") { toast("٦ قطع في كل جولة — جهّزيها أولاً 🤍"); return; }
-      if (ok === "kind") { toast("الإسدال يُجرَّب في جولة وحده — جهّزي الطُرَح أولاً"); return; }
-      if (ok !== "ok" || state.queued[p.id]) return;
-      state.sel.push(p); buzz();
-    }
-    syncPickable(); updateDock();
-    if (state.lbOpen === p) setLb(p);
+  /* «جرّبيها» على قطعة: لو مفيش صورة → نطلب الصورة ونبدأ بيها،
+     لو فيه تجربة متاحة → القطعة + ألوانها، وإلا نقولها إزاي تكسب تجربة */
+  function tryPiece(p) {
+    if (!p || !p.tryable || state.looks[p.id]) return;
+    if (!state.face) { state.focus = p; pickPhoto(); return; }
+    if (state.queued[p.id]) return;
+    if (generating()) { toast("لحظات — بنخلّص التجربة الحالية الأول 🤍"); return; }
+    if (!roundsLeft()) { toast(roundsRec().bonus ? MSG.limit : MSG.earn, 5200); return; }
+    buzz();
+    runRound(AC.buildRound(p, state.products, state.looks, state.queued));
+  }
+  /* 🎁 أول قطعة في الحقيبة النهاردة = تجربة كمان */
+  function grantBonus() {
+    var st = roundsRec(); if (st.bonus) return false;
+    st.bonus = true; saveRounds(st);
+    return true;
   }
   function syncPickable() {
     var left = roundsLeft() > 0;
     state.products.forEach(function (p) {
-      var c = card(p.id), sel = state.sel.indexOf(p) >= 0;
+      var c = card(p.id);
       var pickable = state.alive && left && p.tryable && !state.looks[p.id] && !state.queued[p.id];
-      if (c) {
-        c.classList.toggle("pickable", pickable); c.classList.toggle("selected", sel);
-        c.querySelector(".try-btn").textContent = sel ? "✓ مختارة" : "اختاريها";
-      }
-      var sw = document.querySelector('.sw[data-id="' + CSS.escape(p.id) + '"]');
-      if (sw) sw.classList.toggle("selected", sel);
+      if (c) { c.classList.toggle("pickable", pickable); c.querySelector(".try-btn").textContent = "جرّبيها بألوانها"; }
     });
     syncMirrorPick();
   }
   function syncMirrorPick() {
     var b = $("mPick"); if (!mirrorP) return;
-    var pickable = state.alive && roundsLeft() > 0 && mirrorP.tryable && !state.looks[mirrorP.id] && !state.queued[mirrorP.id];
-    var sel = state.sel.indexOf(mirrorP) >= 0;
-    b.classList.toggle("show", pickable); b.classList.toggle("on", sel);
-    b.textContent = sel ? "✓ مختارة للتجربة" : "اختاريها للتجربة";
+    var pickable = state.alive && roundsLeft() > 0 && !generating() && mirrorP.tryable && !state.looks[mirrorP.id] && !state.queued[mirrorP.id];
+    b.classList.toggle("show", pickable);
+    b.textContent = "جرّبيها هي وألوانها ✨";
   }
-  $("mPick").addEventListener("click", function () { if (mirrorP) toggleSel(mirrorP); });
-  $("dockGo").addEventListener("click", function () {
-    if (!state.sel.length || generating()) return;
-    runRound(state.sel.slice());
-  });
+  $("mPick").addEventListener("click", function () { if (mirrorP) tryPiece(mirrorP); });
 
   /* ---------------- محرك التوليد ---------------- */
   function pump() {
@@ -561,7 +553,7 @@
       if (gen !== state.gen) return;
       var code = String(err && err.code || "").replace(/^functions\//, "");
       if (code === "resource-exhausted") {
-        setRoundsUsed(AC.ROUNDS_PER_DAY);
+        var st0 = roundsRec(); st0.used = AC.MAX_ROUNDS; st0.bonus = true; saveRounds(st0);
         toast(MSG.limit);
         markManual(batch.concat(state.queue)); state.queue = [];
       } else if (useGrid && !state.lookbookWorked && AC.shouldFallbackToSingle(err)) {
@@ -592,7 +584,9 @@
   function roundFinished() {
     if (!lookCount()) return;
     setTimeout(function () {
-      if (roundsLeft() > 0) toast("إطلالاتكِ الأولى جاهزة ✨ اختاري ٦ قطع أخرى لتجرّبيها", 6000);
+      var st = roundsRec();
+      if (st.left > 0) toast("جاهزة ✨ اختاري أي قطعة وجرّبيها هي وألوانها", 6000);
+      else if (!st.bonus) toast("🎁 أضيفي قطعة لحقيبتكِ واحصلي على تجربة كمان", 6500);
       else { toast("اختاري مفضّلتكِ واسألي صديقاتكِ 🤍", 6000); $("dockPoll").classList.add("glow"); }
     }, 900);
   }
@@ -678,19 +672,16 @@
   function arN(n) { return Number(n).toLocaleString("ar-EG"); }
   function looksWord(n) { return n === 1 ? "إطلالة واحدة" : n === 2 ? "إطلالتان" : arN(n) + (n <= 10 ? " إطلالات" : " إطلالة"); }
   function updateDock() {
-    var t = Math.max(state.target, state.done), d = state.done, left = roundsLeft(), n = state.sel.length;
+    var t = Math.max(state.target, state.done), d = state.done, st = roundsRec();
     var sub;
     if (generating()) sub = "نُجهّز إطلالاتكِ…";
-    else if (n) sub = "اخترتِ " + arN(n) + " من ٦ — في جولة واحدة";
-    else if (left > 0 && lookCount()) sub = "اختاري ٦ قطع أخرى ✨";
-    else if (!left && lookCount()) sub = looksWord(lookCount()) + " اليوم — نكمّل غداً 🤍";
+    else if (st.left > 0 && lookCount()) sub = "اختاري قطعة وجرّبيها بألوانها ✨";
+    else if (!st.bonus && lookCount()) sub = "🎁 أضيفي قطعة لحقيبتكِ = تجربة كمان";
+    else if (lookCount()) sub = looksWord(lookCount()) + " اليوم — نكمّل غداً 🤍";
     else sub = "نُجهّز إطلالاتكِ…";
     $("dockSub").textContent = sub;
     $("dockProg").style.width = t ? Math.round(d / t * 100) + "%" : "0";
-    var go = $("dockGo");
-    go.classList.toggle("show", n > 0 && !generating());
-    go.textContent = "جهّزيها عليّ (" + arN(n) + ")";
-    $("dockPoll").style.display = lookCount() >= 2 && !n ? "" : "none";
+    $("dockPoll").style.display = lookCount() >= 2 ? "" : "none";
   }
 
   /* ---------------- عرض القطعة + الدقة العالية ---------------- */
@@ -711,11 +702,12 @@
     $("lbLine").textContent = AC.lineName(p.line) ? "من مجموعة " + AC.lineName(p.line) : "";
     $("lbName").textContent = p.name;
     $("lbPrice").textContent = p.price ? AC.fmtPrice(p.price) : "";
-    var busy = state.queued[p.id] && !look, sel = state.sel.indexOf(p) >= 0;
+    var busy = state.queued[p.id] && !look, st = roundsRec();
     var b = $("lbTry");
-    b.style.display = look || !p.tryable || (state.face && !roundsLeft() && !busy) ? "none" : "";
+    b.style.display = look || !p.tryable ? "none" : "";
     b.disabled = !!busy;
-    b.querySelector("span").textContent = busy ? "نُجهّزها لكِ…" : (!state.face ? "جرّبيها عليكِ" : (sel ? "✓ مختارة للتجربة" : "اختاريها للتجربة"));
+    b.querySelector("span").textContent = busy ? "نُجهّزها لكِ…" : (!state.face ? "جرّبيها عليكِ" :
+      (st.left > 0 ? "جرّبيها هي وألوانها" : (!st.bonus ? "🎁 أضيفيها للحقيبة = تجربة كمان" : "نكمّل غداً 🤍")));
     $("lbHint").style.display = look ? "" : "none";
     $("lbBag").querySelector("span").textContent = inBag(p) ? "في حقيبتكِ ✓" : "أضيفيها للحقيبة";
     $("lbShare").style.display = look ? "" : "none";
@@ -728,8 +720,12 @@
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeLb(); });
   $("lbTry").addEventListener("click", function () {
     var p = state.lbOpen; if (!p) return;
-    if (!state.face) { closeLb(); pickPhoto(); return; }
-    toggleSel(p); setLb(p);
+    if (!state.face) { closeLb(); state.focus = p; pickPhoto(); return; }
+    if (!roundsLeft()) {
+      if (!roundsRec().bonus) { addToBag(p, $("lbLook")); setLb(p); }
+      return;
+    }
+    tryPiece(p); setLb(p);
   });
   (function () {
     var pic = $("lbPic");
@@ -754,7 +750,7 @@
   $("forgetMe").addEventListener("click", function () {
     if (LS) { PC.clearFace(LS); PC.clearResults(LS); }
     try { indexedDB.deleteDatabase("echarpe_tryon_cache_v1"); } catch (e) { }
-    state.gen++; state.face = ""; state.looks = {}; state.queued = {}; state.queue = []; state.sel = [];
+    state.gen++; state.face = ""; state.looks = {}; state.queued = {}; state.queue = []; state.focus = null;
     state.done = 0; state.target = 0; state.requested = 0;
     document.body.classList.remove("alive"); state.alive = false;
     document.querySelectorAll(".card").forEach(function (c) { c.classList.remove("worn", "weaving", "pickable", "selected", "revealing"); c.querySelector(".look").removeAttribute("src"); });
@@ -885,7 +881,10 @@
     flyToBag(srcImg);
     setTimeout(syncBagCount, 700);
     syncMirrorActs(); if (state.lbOpen === p) setLb(p);
-    toast("أُضيفت «" + p.name + "» إلى حقيبتكِ 🤍");
+    if (state.face && grantBonus()) {
+      toast("🎁 أُضيفت «" + p.name + "» — وحصلتِ على تجربة كمان! اختاري أي قطعة وجرّبيها بألوانها", 6500);
+      syncPickable(); updateDock();
+    } else toast("أُضيفت «" + p.name + "» إلى حقيبتكِ 🤍");
   }
   function removeFromBag(id) {
     bag = bag.filter(function (x) { return x !== id; }); writeIds("atelier_bag", bag);

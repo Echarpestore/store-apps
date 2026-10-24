@@ -102,6 +102,8 @@
       price: price,
       line: String(it.line || "other").replace(/[^a-z]/g, "").slice(0, 12) || "other",
       barcode: String(it.barcode || "").replace(/[^\w-]/g, "").slice(0, 40),
+      // 🎨 الموديل: القطع اللي ليها نفس الموديل = ألوان لبعض (التجربة بتجيبهم مع بعض)
+      family: String(it.family || "").replace(/[<>"]/g, "").trim().slice(0, 40),
       active: it.active !== false
     };
   }

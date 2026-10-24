@@ -88,6 +88,7 @@
         '<input type="text" data-f="name" value="' + esc(it.name) + '" placeholder="اسم القطعة">' +
         '<div class="row2"><input type="number" data-f="price" min="0" step="5" value="' + (Number(it.price) || 0) + '" placeholder="السعر">' +
         '<select data-f="line">' + lineOptions(it.line) + "</select></div>" +
+        '<input type="text" data-f="family" value="' + esc(it.family || "") + '" placeholder="الموديل (نفس الموديل = ألوان لبعض)" list="families">' +
         '<input type="text" data-f="barcode" value="' + esc(it.barcode || "") + '" placeholder="باركود (عشان الطلب يدخل سلة التطبيق)">' +
         '<small class="bc"></small>' +
       "</div>" +
@@ -114,7 +115,16 @@
     });
     return c;
   }
+  /* اقتراحات الموديلات الموجودة — عشان نفس الاسم يتكتب بنفس الشكل */
+  function syncFamilies() {
+    var dl = $("families");
+    if (!dl) { dl = el("datalist"); dl.id = "families"; document.body.appendChild(dl); }
+    var seen = {};
+    items.concat(pending).forEach(function (it) { if (it.family) seen[it.family] = 1; });
+    dl.innerHTML = Object.keys(seen).map(function (f) { return '<option value="' + esc(f) + '">'; }).join("");
+  }
   function renderList() {
+    syncFamilies();
     var box = $("list"); box.innerHTML = "";
     if (!items.length) { box.innerHTML = '<div class="empty">لسه مفيش قطع — ضيفي صور فوق، أو استوردي المجموعة الحالية.</div>'; }
     items.forEach(function (it, i) { box.appendChild(itemCard(it, i, false)); });
@@ -144,7 +154,7 @@
     var x = group.extras.splice(k, 1)[0];
     pending.splice(pending.indexOf(group) + 1, 0, {
       id: AD.newId(), name: AD.defaultName($("defLine").value, x.color), price: Number($("defPrice").value) || 0,
-      line: group.line, barcode: "", thumb: x.thumb, full: x.full, color: x.color, extras: []
+      line: group.line, family: group.family || "", barcode: "", thumb: x.thumb, full: x.full, color: x.color, extras: []
     });
     renderReview();
   }
@@ -206,10 +216,10 @@
     })();
   }
   function group(shots) {
-    var line = $("defLine").value, price = Number($("defPrice").value) || 0;
+    var line = $("defLine").value, price = Number($("defPrice").value) || 0, family = $("defFamily").value.trim();
     AD.groupSimilar(shots).forEach(function (g) {
       var main = shots[g[0]];
-      pending.push({ id: AD.newId(), name: AD.defaultName(line, main.color), price: price, line: line, barcode: "",
+      pending.push({ id: AD.newId(), name: AD.defaultName(line, main.color), price: price, line: line, barcode: "", family: family,
         thumb: main.thumb, full: main.full, color: main.color,
         extras: g.slice(1).map(function (k) { return shots[k]; }) });
     });
@@ -232,7 +242,7 @@
     var price = Number($("defPrice").value) || 0;
     Promise.all(AC.houseCollection("collection/").map(function (h) {
       return loadImg(h.img).then(function (img) {
-        return { id: AD.newId(), name: h.name, price: price, line: h.line, barcode: "",
+        return { id: AD.newId(), name: h.name, price: price, line: h.line, family: AC.lineName(h.line), barcode: "",
           thumb: jpeg(img, 480, 0.8), full: jpeg(img, 1100, 0.82), extras: [] };
       }).catch(function () { return null; });
     })).then(function (list) {
@@ -269,7 +279,7 @@
         return Promise.all([col.doc(DOC + "_t_" + id).set({ img: "", deleted: true }), col.doc(DOC + "_f_" + id).set({ img: "", deleted: true })]);
       }));
     }).then(function () {
-      items = items.concat(batchImgs.map(function (p) { return { id: p.id, name: p.name, price: p.price, line: p.line, barcode: p.barcode, active: true, thumb: p.thumb }; }));
+      items = items.concat(batchImgs.map(function (p) { return { id: p.id, name: p.name, price: p.price, line: p.line, family: p.family || "", barcode: p.barcode, active: true, thumb: p.thumb }; }));
       pending = []; deleted = []; dirty = false;
       renderReview(); renderList(); updateBar();
       $("importHouse").classList.add("hidden");
