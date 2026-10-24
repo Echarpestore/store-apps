@@ -16,6 +16,13 @@
   var REDUCED = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   var MOCK = /(?:^|[?&])mock=1(?:&|$)/.test(location.search);
+  /* 📱 جوّه تطبيق العملاء (iframe من «اطلبي»): زرار قفل، والطلب بيروح
+     لسلة التطبيق الحقيقية بدل الواتساب للقطع اللي ليها باركود. */
+  var EMBED = /(?:^|[?&])embed=1(?:&|$)/.test(location.search) ||
+    (function () { try { return window.self !== window.top; } catch (e) { return true; } })();
+  function toParent(msg) {
+    try { window.parent.postMessage(Object.assign({ ns: "echarpeTryon" }, msg), location.origin); } catch (e) { }
+  }
   var LS = null; try { LS = window.localStorage; } catch (e) { LS = null; }
   var phone = ""; try { phone = (LS && LS.getItem("echarpe_loyalty_phone")) || ""; } catch (e) { }
 
@@ -162,12 +169,37 @@
   function loadProducts() {
     var house = AC.houseCollection("collection/");
     if (MOCK || !fb) return Promise.resolve(house);
-    var db = fb.firestore();
+    var db = fb.firestore(), col = db.collection("pos_test_settings");
     return authReady.then(function () {
-      return db.collection("pos_test_settings").doc("online_shop_echarpe").get();
-    }).then(function (d) {
-      return AC.shopItemsFrom(d.exists ? d.data() : null).concat(house);
+      return Promise.all([
+        col.doc("online_shop_echarpe").get().catch(function () { return null; }),
+        col.doc(AC.ADMIN_DOC).get().catch(function () { return null; })
+      ]);
+    }).then(function (r) {
+      var shop = AC.shopItemsFrom(r[0] && r[0].exists ? r[0].data() : null);
+      var admin = AC.atelierItemsFrom(r[1] && r[1].exists ? r[1].data() : null);
+      if (!admin.length) return shop.concat(house);
+      // قطع صفحة الإدارة: المصغّرة بتتحمّل دلوقتي، والكاملة وقت الحاجة
+      return Promise.all(admin.map(function (p) {
+        return col.doc(AC.ADMIN_DOC + "_t_" + p.docId).get().then(function (d) {
+          var img = d.exists ? d.data().img : "";
+          if (AC.isImageDataUrl(img)) { p.img = img; return p; }
+          return null;
+        }).catch(function () { return null; });
+      })).then(function (list) { return shop.concat(list.filter(Boolean)); });
     }).catch(function () { return house; });
+  }
+
+  /* الصورة الكاملة لقطعة من صفحة الإدارة — مرة واحدة لكل قطعة */
+  var fullCache = {};
+  function fullSrc(p) {
+    if (!p.admin || MOCK || !fb) return Promise.resolve(p.img);
+    if (!fullCache[p.id]) {
+      fullCache[p.id] = fb.firestore().collection("pos_test_settings").doc(AC.ADMIN_DOC + "_f_" + p.docId).get()
+        .then(function (d) { var v = d.exists ? d.data().img : ""; return AC.isImageDataUrl(v) ? v : p.img; })
+        .catch(function () { return p.img; });
+    }
+    return fullCache[p.id];
   }
 
   /* صورة مرجعية للموديل (data-URL):
@@ -176,7 +208,9 @@
   var refCache = {};
   function refImage(p) {
     if (refCache[p.id]) return refCache[p.id];
-    if (p.house) {
+    if (p.admin) {
+      refCache[p.id] = fullSrc(p);
+    } else if (p.house) {
       refCache[p.id] = loadImg(p.img).then(function (img) { return imgToJpeg(img, 1280, 0.9); });
     } else if (MOCK || !fb || !p.galleryId) {
       refCache[p.id] = Promise.resolve(p.img);
@@ -222,6 +256,9 @@
     $("mLine").textContent = AC.lineName(p.line) ? "من مجموعة " + AC.lineName(p.line) : "";
     $("mirror").classList.toggle("busy", !!(state.queued[p.id] && !state.looks[p.id]));
     paintMirror(state.looks[p.id] || p.img, instant);
+    if (p.admin && !state.looks[p.id]) fullSrc(p).then(function (u) {
+      if (mirrorP === p && !state.looks[p.id]) paintMirror(u, true);
+    });
     syncMirrorActs();
     syncMirrorPick();
   }
@@ -666,6 +703,10 @@
     var img = $("lbLook"); img.src = look || p.img;
     img.style.animation = "none"; void img.offsetWidth; img.style.animation = "";
     $("lbProd").src = p.img; $("lbChip").src = p.img;
+    if (p.admin) fullSrc(p).then(function (u) {
+      if (state.lbOpen !== p) return;
+      $("lbProd").src = u; if (!state.looks[p.id]) $("lbLook").src = u;
+    });
     pic.querySelector(".chip").style.display = look ? "" : "none";
     $("lbLine").textContent = AC.lineName(p.line) ? "من مجموعة " + AC.lineName(p.line) : "";
     $("lbName").textContent = p.name;
@@ -761,6 +802,12 @@
     });
   }
   if (MOCK) document.body.appendChild(el("div", "demo-flag", "معاينة للتصميم فقط"));
+  if (EMBED) {
+    document.body.classList.add("embed");
+    var x = el("button", "embed-x", "<i></i><i></i>"); x.type = "button"; x.setAttribute("aria-label", "رجوع");
+    x.addEventListener("click", function () { toParent({ type: "tryon-close" }); });
+    document.body.appendChild(x);
+  }
 
   /* ============================================================
      ♡ المفضّلة · 👜 الحقيبة · ↗ المشاركة
@@ -870,7 +917,12 @@
       lines.push("• " + p.name + (p.price ? " — " + AC.fmtPrice(p.price) : "") + (p.barcode ? " (" + p.barcode + ")" : ""));
     });
     lines.push("", "شكراً!");
-    $("bagWa").href = "https://wa.me/" + WA_NUMBER + "?text=" + encodeURIComponent(lines.join("\n"));
+    var wa = $("bagWa");
+    wa.href = "https://wa.me/" + WA_NUMBER + "?text=" + encodeURIComponent(lines.join("\n"));
+    // جوّه التطبيق: القطع اللي ليها باركود تروح سلة التطبيق (الدفع والاستلام الحقيقيين)
+    var inApp = EMBED && items.some(function (p) { return p.barcode; });
+    wa.dataset.app = inApp ? "1" : "";
+    wa.querySelector("span").textContent = inApp ? "أكملي الطلب" : "اطلبي عبر واتساب";
   }
   function openSheet(id) {
     if (id === "bag") renderBag();
@@ -884,6 +936,23 @@
     $(id).addEventListener("click", function (e) { if (e.target.closest("[data-close]")) closeSheet(id); });
   });
   $("bagBtn").addEventListener("click", function () { openSheet("bag"); });
+  function smallJpeg(src) {
+    return loadImg(src).then(function (img) { return imgToJpeg(img, 360, 0.82); }).catch(function () { return ""; });
+  }
+  $("bagWa").addEventListener("click", function (e) {
+    if (this.dataset.app !== "1") return;            // واتساب عادي
+    e.preventDefault();
+    var items = bag.map(function (id) { return state.byId[id]; }).filter(function (p) { return p && p.barcode; });
+    var rest = bag.map(function (id) { return state.byId[id]; }).filter(function (p) { return p && !p.barcode; });
+    Promise.all(items.map(function (p) { return smallJpeg(state.looks[p.id] || p.img); })).then(function (imgs) {
+      toParent({ type: "atelier-order", items: items.map(function (p, i) {
+        return { barcode: p.barcode, name: p.name, img: imgs[i] };
+      }), note: "جرّبتها في غرفة القياس" });
+      bag = rest.map(function (p) { return p.id; }); writeIds("atelier_bag", bag); syncBagCount();
+      closeSheet("bag");
+      if (rest.length) toast("القطع اللي من غير كود هتتطلب من واتساب — هي لسه في حقيبتكِ");
+    });
+  });
   $("dockBag").addEventListener("click", function () { openSheet("bag"); });
   $("mBag").addEventListener("click", function () {
     if (mirrorP) addToBag(mirrorP, $("mirror").querySelector(".m-layer.base"));

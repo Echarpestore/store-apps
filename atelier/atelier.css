@@ -405,3 +405,11 @@ body.alive .hero{padding-bottom:calc(96px + env(safe-area-inset-bottom));}
   font-size:11px; display:grid; place-items:center; z-index:2;}
 .dock-go{font-size:12.5px; padding:9px 14px; background:var(--bronze-hi); color:var(--ink); white-space:nowrap; display:none;}
 .dock-go.show{display:inline-block; animation:glow 1.6s ease-in-out 2;}
+
+/* 📱 جوّه تطبيق العملاء */
+.embed-x{position:fixed; z-index:61; top:calc(12px + env(safe-area-inset-top)); right:12px; width:40px; height:40px; border-radius:50%;
+  background:rgba(246,242,236,.92); box-shadow:0 4px 14px rgba(0,0,0,.12);}
+.embed-x i{position:absolute; left:11px; right:11px; top:50%; height:1.3px; background:var(--ink); transform:rotate(45deg);}
+.embed-x i + i{transform:rotate(-45deg);}
+body.embed header .nav-side:not(.end){visibility:hidden;}
+body.embed footer nav a[href="../loyalty/"]{display:none;}

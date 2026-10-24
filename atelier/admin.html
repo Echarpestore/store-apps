@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>echarpe — إدارة غرفة القياس</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="../loyalty/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=IBM+Plex+Sans+Arabic:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root{--paper:#f6f2ec; --paper-2:#ede6dc; --ink:#1c1916; --ink-2:#3a3430; --soft:#6f665d; --line:rgba(28,25,22,.14); --bronze:#8a6f4e; --ok:#3f7a52; --bad:#a3443f;}
+  *{margin:0; padding:0; box-sizing:border-box;}
+  body{background:var(--paper); color:var(--ink); font-family:'IBM Plex Sans Arabic',system-ui,sans-serif; font-weight:400; font-size:14px; padding-bottom:120px;}
+  button,input,select{font:inherit; color:inherit;}
+  button{cursor:pointer; background:none; border:0;}
+  h1,h2,h3{font-family:'Amiri',serif; font-weight:400;}
+  .wrap{max-width:1100px; margin:0 auto; padding:0 16px;}
+  header{display:flex; align-items:center; gap:12px; padding:14px 16px; border-bottom:1px solid var(--line); background:rgba(246,242,236,.95); position:sticky; top:0; z-index:5;}
+  header img{height:26px;}
+  header h1{font-size:20px;}
+  header .sp{flex:1;}
+  header a,header button{font-size:13px; color:var(--soft); border-bottom:1px solid var(--line);}
+  .btn{display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:11px 18px; border:1px solid var(--ink); background:var(--ink); color:var(--paper); font-size:13.5px;}
+  .btn.ghost{background:transparent; color:var(--ink);}
+  .btn[disabled]{opacity:.45; pointer-events:none;}
+  .card{background:#fff; border:1px solid var(--line); padding:18px;}
+  .muted{color:var(--soft); font-size:12.5px; line-height:1.8;}
+  /* الدخول */
+  #login{max-width:380px; margin:12vh auto 0; text-align:center;}
+  #login img{height:40px; margin-bottom:10px;}
+  #login h2{font-size:28px; margin-bottom:6px;}
+  #login form{display:grid; gap:10px; margin-top:18px; text-align:right;}
+  input[type=text],input[type=email],input[type=password],input[type=number],select{width:100%; padding:10px 12px; border:1px solid var(--line); background:#fff; border-radius:0;}
+  .err{color:var(--bad); font-size:12.5px; min-height:18px;}
+  /* الأدوات */
+  .tools{display:grid; gap:14px; margin:20px 0;}
+  @media (min-width:760px){ .tools{grid-template-columns:1.4fr 1fr;} }
+  .drop{border:1.5px dashed var(--bronze); padding:26px 16px; text-align:center; background:#fffdf9; cursor:pointer;}
+  .drop.over{background:var(--paper-2);}
+  .drop b{font-family:'Amiri',serif; font-size:22px; font-weight:400; display:block;}
+  .defaults{display:grid; grid-template-columns:1fr 1fr; gap:10px; align-content:start;}
+  .defaults label{display:grid; gap:4px; font-size:12.5px; color:var(--soft);}
+  .defaults .full{grid-column:1/-1;}
+  .sec{display:flex; align-items:baseline; gap:10px; margin:26px 0 12px;}
+  .sec h2{font-size:24px;}
+  .sec .sp{flex:1;}
+  /* القطع */
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:14px;}
+  .item{background:#fff; border:1px solid var(--line); display:flex; flex-direction:column;}
+  .item.off{opacity:.55;}
+  .item.new{border-color:var(--bronze); box-shadow:0 0 0 1px var(--bronze);}
+  .ph{position:relative; aspect-ratio:3/4; background:var(--paper-2); overflow:hidden;}
+  .ph img{width:100%; height:100%; object-fit:cover;}
+  .ph .n{position:absolute; top:8px; right:8px; background:rgba(28,25,22,.75); color:#fff; font-size:11px; padding:2px 8px;}
+  .extras{display:flex; gap:6px; padding:8px 10px 0; flex-wrap:wrap;}
+  .extras figure{position:relative; width:46px;}
+  .extras img{width:46px; height:60px; object-fit:cover; border:1px solid var(--line);}
+  .extras button{display:block; width:100%; font-size:10px; color:var(--bronze); margin-top:2px;}
+  .fields{display:grid; gap:8px; padding:10px;}
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .fields small{font-size:11px;}
+  .fields small.ok{color:var(--ok);} .fields small.bad{color:var(--bad);}
+  .acts{display:flex; gap:4px; padding:0 10px 10px; align-items:center;}
+  .acts button{font-size:12px; padding:6px 8px; border:1px solid var(--line);}
+  .acts .del{color:var(--bad); margin-inline-start:auto;}
+  .acts label{font-size:12px; display:flex; gap:4px; align-items:center;}
+  .bar{position:fixed; inset-inline:0; bottom:0; z-index:6; background:var(--ink); color:var(--paper); padding:12px 16px calc(12px + env(safe-area-inset-bottom));
+    display:flex; align-items:center; gap:12px; transform:translateY(110%); transition:transform .4s;}
+  .bar.on{transform:none;}
+  .bar .sp{flex:1;}
+  .bar .btn{background:#ecd8a8; color:var(--ink); border-color:#ecd8a8;}
+  .prog{height:3px; background:var(--paper-2); margin-top:10px; display:none;}
+  .prog i{display:block; height:100%; width:0; background:var(--bronze); transition:width .3s;}
+  .empty{padding:30px; text-align:center; color:var(--soft); font-family:'Amiri',serif; font-size:19px;}
+  .hidden{display:none !important;}
+  .toast{position:fixed; top:70px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--paper); padding:10px 18px; font-size:13px; z-index:9; opacity:0; transition:.4s; pointer-events:none;}
+  .toast.on{opacity:1;}
+</style>
+</head>
+<body>
+
+<div id="login" class="hidden">
+  <img src="../logo.png" alt="echarpe">
+  <h2>إدارة غرفة القياس</h2>
+  <p class="muted">ادخلي بحساب الفرع أو حساب المالك (نفس دخول الـ POS).</p>
+  <form id="loginForm">
+    <input type="email" id="email" placeholder="الإيميل" autocomplete="username" required>
+    <input type="password" id="pass" placeholder="كلمة السر" autocomplete="current-password" required>
+    <div class="err" id="loginErr"></div>
+    <button class="btn" type="submit">دخول</button>
+  </form>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <img src="../logo.png" alt="echarpe">
+    <h1>إدارة غرفة القياس</h1>
+    <span class="sp"></span>
+    <a href="./" target="_blank" rel="noopener">عرض الصفحة</a>
+    <button id="logout" type="button">خروج</button>
+  </header>
+
+  <div class="wrap">
+    <div class="tools">
+      <div class="drop" id="drop">
+        <b>ضيفي صور القطع</b>
+        <p class="muted">اختاري كل الصور مرة واحدة — من فولدر التليجرام أو الاستوديو.<br>
+          الصور المتشابهة لنفس القطعة بتتجمّع لوحدها، والاسم بيتحط من لون القماش.</p>
+        <input type="file" id="files" accept="image/*" multiple hidden>
+        <div class="prog" id="prog"><i id="progBar"></i></div>
+      </div>
+      <div class="card defaults">
+        <label>السعر الافتراضي (ج.م)<input type="number" id="defPrice" min="0" step="5" value="350"></label>
+        <label>النوع الافتراضي<select id="defLine"></select></label>
+        <p class="muted full">بيتحطّوا على الصور الجديدة، وتقدري تعدّلي كل قطعة لوحدها.</p>
+        <button class="btn ghost full hidden" id="importHouse" type="button">استيراد المجموعة الحالية (صور الموقع)</button>
+      </div>
+    </div>
+
+    <div id="reviewSec" class="hidden">
+      <div class="sec"><h2>قطع جديدة</h2><span class="muted" id="reviewInfo"></span><span class="sp"></span>
+        <button class="btn ghost" id="reviewCancel" type="button">إلغاء</button></div>
+      <div class="grid" id="review"></div>
+    </div>
+
+    <div class="sec"><h2>المجموعة</h2><span class="muted" id="listInfo"></span></div>
+    <div class="grid" id="list"></div>
+  </div>
+
+  <div class="bar" id="bar">
+    <span id="barText">فيه تعديلات لسه ما اتحفظتش</span><span class="sp"></span>
+    <button class="btn" id="save" type="button">حفظ</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="../tryon/photo-core.js"></script>
+<script src="./atelier-core.js"></script>
+<script src="./admin-core.js"></script>
+<script src="./admin.js"></script>
+</body>
+</html>

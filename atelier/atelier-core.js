@@ -42,7 +42,8 @@
     { id: "plisse", ar: "البليسيه" },
     { id: "mono",   ar: "المونوجرام" },
     { id: "zebre",  ar: "الزيبرا" },
-    { id: "isdal",  ar: "الإسدال" }
+    { id: "isdal",  ar: "الإسدال" },
+    { id: "other",  ar: "قطع أخرى" }
   ];
   function lineName(id) {
     for (var i = 0; i < LINES.length; i++) if (LINES[i].id === id) return LINES[i].ar;
@@ -54,6 +55,21 @@
       return { id: "house-" + h[0], galleryId: "", barcode: "", name: h[1],
                line: h[2], kind: h[2] === "isdal" ? "isdal" : "hijab", price: 0,
                img: dir + h[0] + ".jpg", tryable: true, house: true };
+    });
+  }
+
+  /* 🗂️ مجموعة صفحة الإدارة (pos_test_settings/atelier_echarpe) — لو
+     فيها قطع، بتحل محل صور الدار الثابتة. الصور في مستندات منفصلة:
+     atelier_echarpe_t_<id> (مصغّرة) و atelier_echarpe_f_<id> (كاملة). */
+  var ADMIN_DOC = "atelier_echarpe";
+  function atelierItemsFrom(doc) {
+    var items = (doc && Array.isArray(doc.items)) ? doc.items : [];
+    return items.filter(function (it) { return it && it.id && it.active !== false; }).map(function (it) {
+      var line = String(it.line || "other");
+      var kind = line === "isdal" ? "isdal" : kindOf(it);
+      return { id: "at-" + it.id, docId: String(it.id), galleryId: "", barcode: String(it.barcode || ""),
+               name: String(it.name || "قطعة").slice(0, 60), price: Number(it.price) || 0,
+               line: kind === "isdal" ? "isdal" : line, kind: kind, img: "", tryable: true, admin: true };
     });
   }
 
@@ -183,6 +199,8 @@
     HOUSE: HOUSE,
     LINES: LINES,
     houseCollection: houseCollection,
+    ADMIN_DOC: ADMIN_DOC,
+    atelierItemsFrom: atelierItemsFrom,
     lineName: lineName,
     kindOf: kindOf,
     takeBatch: takeBatch,
