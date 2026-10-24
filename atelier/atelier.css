@@ -471,3 +471,14 @@ body.embed footer nav a[href="../loyalty/"]{display:none;}
 
 .lb-colors{justify-content:center; margin:10px 0 4px;}
 @media (min-width:860px){ .lb-colors{justify-content:flex-start;} }
+
+/* ---------- 🌐 النسخة الإنجليزي (الأساسية) ---------- */
+html[lang="en"]{--ar:'Cormorant Garamond',Georgia,serif; --sans:'Jost',system-ui,sans-serif;}
+html[lang="en"] h1, html[lang="en"] .sec-head h2, html[lang="en"] .salon h2, html[lang="en"] .privacy h2{letter-spacing:-.01em; font-weight:400;}
+html[lang="en"] h1{line-height:1.05;}
+html[lang="en"] .statement p{line-height:1.45;}
+html[lang="en"] .eyebrow, html[lang="en"] .intro-tag, html[lang="en"] .foot-tag{text-transform:uppercase; letter-spacing:.22em; font-size:11px;}
+html[lang="en"] .meta .nm, html[lang="en"] .m-cap b{font-size:19px;}
+html[lang="en"] em{font-style:italic;}
+.lang-btn{font-size:12px; letter-spacing:.06em; padding:4px 10px; border:1px solid currentColor; border-radius:999px; line-height:1.4; font-family:'IBM Plex Sans Arabic',system-ui,sans-serif;}
+html[lang="ar"] .lang-btn{font-family:'Jost',system-ui,sans-serif; letter-spacing:.14em;}

@@ -255,3 +255,24 @@ assert(ac.colorName === 'كاكي' && ac.extras === 2, 'الأتيليه بيق�
   const local = (h.match(/(?:src|href)="(?:\.\.?\/)?[\w./-]+\.(?:js|css)[^"]*"/g) || []).filter((x) => !/https?:/.test(x));
   assert(local.length && local.every((x) => /\?v=\w+"/.test(x)), 'atelier/' + f + ': كل ملف js/css بنسخة (?v=) — من غيرها الموبايل بيفضل على القديم');
 });
+
+// ١٤) 🌐 النسخة الإنجليزي (الأساسية) + العربي
+{
+  const AC2 = require(path.join(ROOT, 'atelier', 'atelier-core.js'));
+  assert(AC2.colorToEn('أسود بكنار أبيض') === 'Black with White Border' && AC2.colorToEn('رمادي فحمي') === 'Charcoal Grey' && AC2.colorToEn('أوف وايت') === 'Off-White' && AC2.colorToEn('لون غريب') === '', 'أسماء الألوان بتتترجم صح (أو بتفضل عربي لو مش معروفة)');
+  const hs = AC2.houseCollection('collection/').map((p) => AC2.localizeProduct(p, 'en'));
+  assert(hs.every((p) => !/[؀-ۿ]/.test(p.name + p.colorName)), 'كل منتجات الدار ليها اسم ولون بالإنجليزي');
+  assert(AC2.groupModels(hs).map((m) => m.title).join() === 'Kuwaiti Lady Kinar Linen,Messi Kuwaiti Chiffon', 'أسماء الموديلات بالإنجليزي');
+  assert(hs[0].colorAr === 'أسود بكنار أبيض' && AC2.toneFromName(hs[0].colorAr) === 'black', 'رف الألوان لسه بيقرا اللون العربي');
+  const ad = AC2.atelierItemsFrom({ items: [{ id: 'x1', name: 'طرحة', family: 'موديل', colorName: 'كاكي', familyEn: 'Model X', colorEn: 'Sage' }] }).map((p) => AC2.localizeProduct(p, 'en'));
+  assert(ad[0].name === 'Model X — Sage' && ad[0].colorName === 'Sage', 'الإنجليزي من صفحة الإدارة بيغلب الترجمة التلقائية');
+  assert(AC2.localizeProduct({ name: 'طرحة', colorName: 'أسود' }, 'ar').name === 'طرحة', 'العربي مبيتغيرش');
+  assert(AC2.fmtPrice(680, 'en') === '680 EGP' && AC2.fmtPrice(680) === '٦٨٠ ج.م', 'السعر بالجنيه في النسختين');
+  const i18n = fs.readFileSync(path.join(ROOT, 'atelier', 'i18n.js'), 'utf8');
+  assert(/embed \? "ar" : "en"/.test(i18n), 'الإنجليزي أساسي — وجوّه تطبيق العملاء عربي');
+  const html = fs.readFileSync(path.join(ROOT, 'atelier', 'index.html'), 'utf8');
+  assert(/id="langBtn"/.test(html) && /i18n\.js\?v=/.test(html) && (html.match(/data-en/g) || []).length > 60, 'زرار اللغة + نصوص الصفحة بالإنجليزي');
+  const AD2 = require(path.join(ROOT, 'atelier', 'admin-core.js'));
+  const ci = AD2.cleanItem({ id: 'a', nameEn: 'X', colorEn: 'Y', familyEn: 'Z' });
+  assert(ci.nameEn === 'X' && ci.colorEn === 'Y' && ci.familyEn === 'Z', 'صفحة الإدارة بتحفظ الإنجليزي');
+}

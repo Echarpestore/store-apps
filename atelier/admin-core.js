@@ -106,6 +106,10 @@
       family: String(it.family || "").replace(/[<>"]/g, "").trim().slice(0, 40),
       // اسم اللون (اختياري) — بيظهر بدل «لون ٣ من ٩» وبيحدّد مكانها في رف الألوان
       colorName: String(it.colorName || "").replace(/[<>"]/g, "").trim().slice(0, 30),
+      // 🌐 الإنجليزي (اختياري)
+      nameEn: String(it.nameEn || "").replace(/[<>"]/g, "").trim().slice(0, 60),
+      colorEn: String(it.colorEn || "").replace(/[<>"]/g, "").trim().slice(0, 40),
+      familyEn: String(it.familyEn || "").replace(/[<>"]/g, "").trim().slice(0, 40),
       extras: Math.max(0, Math.min(4, Math.floor(Number(it.extras) || 0))),
       active: it.active !== false
     };
