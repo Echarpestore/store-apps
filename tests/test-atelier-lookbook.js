@@ -241,3 +241,9 @@ assert(['كاكي', 'بيج حجري', 'أوف وايت', 'رمادي فحمي']
 assert(AD.cleanItem({ colorName: ' كاكي ', extras: 9 }).colorName === 'كاكي' && AD.cleanItem({ extras: 9 }).extras === 4, 'اسم اللون وعدد الصور الزيادة بيتحفظوا نضاف');
 const ac = AC.atelierItemsFrom({ items: [{ id: 'q', family: 'ميسي', colorName: 'كاكي', extras: 2 }] })[0];
 assert(ac.colorName === 'كاكي' && ac.extras === 2, 'الأتيليه بيقرا اسم اللون والصور الزيادة من الإدارة');
+// كاش المتصفح: ملفات الصفحة بنسخة في اللينك عشان التحديث يوصل على طول
+['index.html', 'admin.html'].forEach((f) => {
+  const h = fs.readFileSync(path.join(ROOT, 'atelier', f), 'utf8');
+  const local = (h.match(/(?:src|href)="(?:\.\.?\/)?[\w./-]+\.(?:js|css)[^"]*"/g) || []).filter((x) => !/https?:/.test(x));
+  assert(local.length && local.every((x) => /\?v=\w+"/.test(x)), 'atelier/' + f + ': كل ملف js/css بنسخة (?v=) — من غيرها الموبايل بيفضل على القديم');
+});
