@@ -12,6 +12,11 @@
 (function () {
   "use strict";
   var PC = window.PhotoCore, AC = window.AtelierCore;
+  /* 🌐 اللغة (i18n.js): الإنجليزي أساسي. tr(عربي, إنجليزي) */
+  var LANG = window.AtelierLang === "ar" ? "ar" : "en", EN = LANG === "en";
+  function tr(ar, en) { return EN ? en : ar; }
+  function money(n) { return AC.fmtPrice(n, LANG); }
+  if (window.AtelierI18n) window.AtelierI18n.apply();
   function $(id) { return document.getElementById(id); }
   var REDUCED = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -27,19 +32,21 @@
   var phone = ""; try { phone = (LS && LS.getItem("echarpe_loyalty_phone")) || ""; } catch (e) { }
 
   var MSG = {
-    limit: "خلصت تجارب النهاردة 🤍 نكمّل غداً بإطلالات جديدة.",
-    earn: "🎁 أضيفي أي قطعة لحقيبتكِ واحصلي على تجربة كمان.",
-    retry: "تعذّر تجهيز بعض القطع — المسي «جرّبيها» لإعادة المحاولة.",
-    badImg: "تعذّرت قراءة الصورة — جرّبي صورةً أخرى.",
-    isdalSoon: "تجربة الإسدال تتوفّر قريباً.",
-    forgot: "تم حذف صورتكِ وإطلالاتكِ من هاتفكِ."
+    limit: tr("خلصت تجارب النهاردة 🤍 نكمّل غداً بإطلالات جديدة.", "That’s all your try-ons for today 🤍 New looks tomorrow."),
+    earn: tr("🎁 أضيفي أي قطعة لحقيبتكِ واحصلي على تجربة كمان.", "🎁 Add any piece to your bag to unlock one more try-on."),
+    retry: tr("تعذّر تجهيز بعض القطع — المسي «جرّبيها» لإعادة المحاولة.", "Some pieces couldn’t be prepared — tap “Try it on” to try again."),
+    badImg: tr("تعذّرت قراءة الصورة — جرّبي صورةً أخرى.", "We couldn’t read that photo — please try another one."),
+    isdalSoon: tr("تجربة الإسدال تتوفّر قريباً.", "Prayer-dress try-on is coming soon."),
+    forgot: tr("تم حذف صورتكِ وإطلالاتكِ من هاتفكِ.", "Your photo and looks have been deleted from your phone.")
   };
 
   /* ⚙️ إعدادات الموقع — بتتعدّل من صفحة الإدارة (pos_test_settings/atelier_site) */
   var SITE = {
     whatsapp: "201148664485",
-    chatText: "عندنا آلاف الطرح في الفروع 🤍 كلّمينا في الشات، ونبعتلكِ صورها تجرّبيها عليكِ هنا.",
+    chatText: tr("عندنا آلاف الطرح في الفروع 🤍 كلّمينا في الشات، ونبعتلكِ صورها تجرّبيها عليكِ هنا.",
+      "We have thousands of hijabs in our stores 🤍 Message us and we’ll send you photos to try on here."),
     branches: ["الرحاب", "مدينتي", "سيتي سنتر"],
+    branchesEn: ["Al Rehab", "Madinaty", "City Centre"],
     shippingFee: 40, freeOver: 0
   };
   var state = {
@@ -150,7 +157,8 @@
   }
   window.addEventListener("scroll", onScroll, { passive: true });
   (function marquee() {
-    var words = ["ميسي شيفون كويتي", "ألوان جديدة", "جرّبي قبل ما تختاري", "echarpe"];
+    var words = EN ? ["Messi Kuwaiti Chiffon", "Kinar Linen", "New Colours", "Try Before You Choose", "echarpe"]
+      : ["ميسي شيفون كويتي", "كينار لينن", "ألوان جديدة", "جرّبي قبل ما تختاري", "echarpe"];
     var one = words.map(function (w) { return "<span>" + w + "</span><span><b>✦</b></span>"; }).join("");
     $("marquee").innerHTML = one + one;
   })();
@@ -262,7 +270,7 @@
   function colorLabel(p) {
     var m = modelOf[p.id];
     if (!m || m.items.length < 2) return "";
-    return p.colorName || ("لون " + arN(p.colorNo) + " من " + arN(m.items.length));
+    return p.colorName || tr("لون " + arN(p.colorNo) + " من " + arN(m.items.length), "Colour " + p.colorNo + " of " + m.items.length);
   }
   function displayName(p) { var m = modelOf[p.id]; return m && m.items.length > 1 ? m.title : p.name; }
   function colorDot(v, on, onClick) {
@@ -310,7 +318,7 @@
       if (on && !instant) centerSwatch(sw);
     });
     $("mName").textContent = displayName(p);
-    $("mLine").textContent = colorLabel(p) || (AC.lineName(p.line) ? "من مجموعة " + AC.lineName(p.line) : "");
+    $("mLine").textContent = colorLabel(p) || (AC.lineName(p.line, LANG) ? tr("من مجموعة ", "From the ") + AC.lineName(p.line, LANG) + tr("", " collection") : "");
     var box = $("mColors"); box.innerHTML = "";
     box.classList.toggle("hidden", !m || m.items.length < 2);
     if (m && m.items.length > 1) m.items.forEach(function (v) {
@@ -381,14 +389,14 @@
     var box = $("filters"), counts = { all: models.length };
     models.forEach(function (m) { counts[m.line] = (counts[m.line] || 0) + 1; });
     var lines = AC.LINES.slice();
-    if (counts.shop) lines.splice(1, 0, { id: "shop", ar: "الجديد" });
+    if (counts.shop) lines.splice(1, 0, { id: "shop", ar: "الجديد", en: "New" });
     box.innerHTML = "";
     // نوع واحد بس؟ الفلاتر ملهاش لازمة
     var kinds = lines.filter(function (l) { return l.id !== "all" && counts[l.id]; }).length;
     box.style.display = kinds < 2 ? "none" : "";
     lines.forEach(function (l) {
       if (!counts[l.id]) return;
-      var b = el("button", l.id === state.line ? "on" : "", esc(l.ar) + "<sup>" + counts[l.id] + "</sup>");
+      var b = el("button", l.id === state.line ? "on" : "", esc(EN ? l.en : l.ar) + "<sup>" + counts[l.id] + "</sup>");
       b.type = "button"; b.setAttribute("role", "tab");
       b.addEventListener("click", function () { setLine(l.id); });
       box.appendChild(b);
@@ -399,7 +407,7 @@
   /* 🎨 رف الألوان: عائلة اللون بتتحسب من صورة القطعة نفسها (مرة واحدة) */
   function toneFor(p) {
     if (p.tone !== undefined) return Promise.resolve(p.tone);
-    var byName = AC.toneFromName(p.colorName);
+    var byName = AC.toneFromName(p.colorAr || p.colorName);
     if (byName) { p.tone = byName; return Promise.resolve(byName); }
     return loadImg(p.img).then(function (img) {
       var c = document.createElement("canvas"), x = c.getContext("2d"), w = img.naturalWidth, h = img.naturalHeight;
@@ -422,7 +430,7 @@
       var box = $("tones"); box.innerHTML = "";
       box.classList.toggle("hidden", list.length < 3);
       list.forEach(function (t) {
-        var b = el("button", "tone" + (toneSel === t.id ? " on" : ""), '<i style="background:' + t.hex + '"></i>' + esc(t.ar));
+        var b = el("button", "tone" + (toneSel === t.id ? " on" : ""), '<i style="background:' + t.hex + '"></i>' + esc(EN ? t.en : t.ar));
         b.type = "button"; b.setAttribute("aria-pressed", toneSel === t.id);
         b.addEventListener("click", function () { toneSel = toneSel === t.id ? "" : t.id; renderTones(); applyFilters(); });
         box.appendChild(b);
@@ -441,12 +449,12 @@
       if (show) { shown++; c.classList.remove("in"); requestAnimationFrame(function () { requestAnimationFrame(function () { c.classList.add("in"); }); }); }
     });
     var more = document.querySelector(".more-card h3");
-    if (more) more.textContent = shown ? "مش لاقية اللي في بالكِ؟" : "مفيش هنا اللون ده لسه…";
+    if (more) more.textContent = shown ? tr("مش لاقية اللي في بالكِ؟", "Can’t find what you have in mind?") : tr("مفيش هنا اللون ده لسه…", "This colour isn’t here yet…");
   }
 
   function renderGrid() {
     var g = $("grid"); g.innerHTML = "";
-    if (!models.length) { g.innerHTML = '<div class="empty">تُعَدّ المجموعة الجديدة… قريباً.</div>'; return; }
+    if (!models.length) { g.innerHTML = '<div class="empty">' + tr("تُعَدّ المجموعة الجديدة… قريباً.", "A new collection is on its way… soon.") + '</div>'; return; }
     io = "IntersectionObserver" in window ? new IntersectionObserver(onSeen, { rootMargin: "0px 0px -8% 0px" }) : null;
     models.forEach(function (m, i) {
       var p = m.active;
@@ -456,13 +464,13 @@
       c.innerHTML =
         '<div class="frame" role="button" tabindex="0">' +
           '<img class="prod" alt="" loading="lazy"><img class="look" alt="">' +
-          '<i class="sheen"></i><div class="weave"></div><div class="weave-txt">نُجهّزها لكِ…</div>' +
+          '<i class="sheen"></i><div class="weave"></div><div class="weave-txt">' + tr("نُجهّزها لكِ…", "Preparing it for you…") + '</div>' +
           '<div class="chip"><img alt=""></div>' +
-          '<button class="try-btn" type="button">جرّبيها بألوانها</button>' +
-          '<button class="card-heart heart" type="button" aria-label="أضيفي للمفضّلة"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" stroke="currentColor" stroke-width="1.3"/></svg></button>' +
+          '<button class="try-btn" type="button">' + tr("جرّبيها بألوانها", "Try all its colours") + '</button>' +
+          '<button class="card-heart heart" type="button" aria-label="' + tr("أضيفي للمفضّلة", "Add to favourites") + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" stroke="currentColor" stroke-width="1.3"/></svg></button>' +
         '</div>' +
         '<div class="meta"><span class="nm">' + esc(n > 1 ? m.title : p.name) + '</span>' +
-          '<span class="pr"></span>' + (n > 1 ? '<span class="cnt">' + arN(n) + ' ألوان</span>' : '') +
+          '<span class="pr"></span>' + (n > 1 ? '<span class="cnt">' + arN(n) + tr(' ألوان', ' colours') + '</span>' : '') +
         '</div>' + (n > 1 ? '<div class="cdots"></div>' : '');
       if (n > 1) {
         var dots = c.querySelector(".cdots"), MAXD = 9;
@@ -499,7 +507,7 @@
     var look = state.looks[p.id], lk = c.querySelector(".look");
     if (look) { lk.src = look; c.classList.add("worn"); } else { c.classList.remove("worn"); lk.removeAttribute("src"); }
     c.classList.toggle("weaving", !!(state.queued[p.id] && !look));
-    c.querySelector(".pr").textContent = p.price ? AC.fmtPrice(p.price) : "";
+    c.querySelector(".pr").textContent = p.price ? money(p.price) : "";
     c.querySelectorAll(".cdots .cdot").forEach(function (d) { d.classList.toggle("on", d.dataset.id === p.id); });
     syncHearts(p);
     if (typeof syncPickable === "function" && state.alive) syncPickable();
@@ -509,12 +517,12 @@
   /* 💬 آخر كارت: مش لاقية؟ عندنا آلاف الطرح في الفروع — الشات */
   function moreCard() {
     var c = el("article", "card more-card in");
-    c.innerHTML = '<h3>مش لاقية اللي في بالكِ؟</h3>' +
+    c.innerHTML = '<h3>' + tr("مش لاقية اللي في بالكِ؟", "Can’t find what you have in mind?") + '</h3>' +
       '<p>' + esc(SITE.chatText) + '</p>' +
-      '<button class="btn btn-dark" type="button"><span>كلّمينا في الشات</span></button>' +
-      '<a class="bag-wa" target="_blank" rel="noopener">أو على واتساب</a>';
+      '<button class="btn btn-dark" type="button"><span>' + tr("كلّمينا في الشات", "Chat with us") + '</span></button>' +
+      '<a class="bag-wa" target="_blank" rel="noopener">' + tr("أو على واتساب", "or on WhatsApp") + '</a>';
     c.querySelector("button").addEventListener("click", openChatCta);
-    c.querySelector("a").href = "https://wa.me/" + SITE.whatsapp + "?text=" + encodeURIComponent("أهلاً echarpe 🤍 عاوزة أشوف طرح أكتر وأجرّبها عليّا");
+    c.querySelector("a").href = "https://wa.me/" + SITE.whatsapp + "?text=" + encodeURIComponent(tr("أهلاً echarpe 🤍 عاوزة أشوف طرح أكتر وأجرّبها عليّا", "Hello echarpe 🤍 I’d love to see more hijabs and try them on"));
     return c;
   }
   function openChatCta() {
@@ -568,13 +576,13 @@
   }
   function becomeAlive(face) {
     document.body.classList.add("alive"); state.alive = true;
-    $("heroEyebrow").textContent = "إطلالاتكِ";
+    $("heroEyebrow").textContent = tr("إطلالاتكِ", "Your looks");
     var t = $("heroTitle"); t.classList.remove("in");
-    t.innerHTML = '<span class="ln"><span>المجموعة،</span></span><span class="ln"><span><em>عليكِ</em></span></span>';
+    t.innerHTML = '<span class="ln"><span>' + tr("المجموعة،", "The collection,") + '</span></span><span class="ln"><span><em>' + tr("عليكِ", "on you") + '</em></span></span>';
     requestAnimationFrame(function () { requestAnimationFrame(function () { t.classList.add("in"); }); });
-    $("heroSub").textContent = "المسي أي قطعة لتريها عن قرب.";
-    $("ctaUpload").querySelector("span").textContent = "شاهدي إطلالاتكِ";
-    $("ctaSalon").querySelector("span").textContent = "صورة أخرى";
+    $("heroSub").textContent = tr("المسي أي قطعة لتريها عن قرب.", "Tap any piece to see it up close.");
+    $("ctaUpload").querySelector("span").textContent = tr("شاهدي إطلالاتكِ", "See your looks");
+    $("ctaSalon").querySelector("span").textContent = tr("صورة أخرى", "Use another photo");
     setFace(face);
   }
   function setFace(face) {
@@ -646,7 +654,7 @@
     if (!p || !p.tryable || state.looks[p.id]) return;
     if (!state.face) { state.focus = p; pickPhoto(); return; }
     if (state.queued[p.id]) return;
-    if (generating()) { toast("لحظات — بنخلّص التجربة الحالية الأول 🤍"); return; }
+    if (generating()) { toast(tr("لحظات — بنخلّص التجربة الحالية الأول 🤍", "One moment — finishing your current try-on first 🤍")); return; }
     if (!roundsLeft()) { toast(roundsRec().bonus ? MSG.limit : MSG.earn, 5200); return; }
     buzz();
     runRound(AC.buildRound(p, state.products, state.looks, state.queued));
@@ -662,7 +670,7 @@
     state.products.forEach(function (p) {
       var c = card(p.id);
       var pickable = state.alive && left && p.tryable && !state.looks[p.id] && !state.queued[p.id];
-      if (c) { c.classList.toggle("pickable", pickable); c.querySelector(".try-btn").textContent = "جرّبيها بألوانها"; }
+      if (c) { c.classList.toggle("pickable", pickable); c.querySelector(".try-btn").textContent = tr("جرّبيها بألوانها", "Try all its colours"); }
     });
     syncMirrorPick();
   }
@@ -670,7 +678,7 @@
     var b = $("mPick"); if (!mirrorP) return;
     var pickable = state.alive && roundsLeft() > 0 && !generating() && mirrorP.tryable && !state.looks[mirrorP.id] && !state.queued[mirrorP.id];
     b.classList.toggle("show", pickable);
-    b.textContent = "جرّبيها هي وألوانها ✨";
+    b.textContent = tr("جرّبيها هي وألوانها ✨", "Try it in every colour ✨");
   }
   $("mPick").addEventListener("click", function () { if (mirrorP) tryPiece(mirrorP); });
 
@@ -732,9 +740,9 @@
     if (!lookCount()) return;
     setTimeout(function () {
       var st = roundsRec();
-      if (st.left > 0) toast("جاهزة ✨ اختاري أي قطعة وجرّبيها هي وألوانها", 6000);
-      else if (!st.bonus) toast("🎁 أضيفي قطعة لحقيبتكِ واحصلي على تجربة كمان", 6500);
-      else { toast("اختاري مفضّلتكِ واسألي صديقاتكِ 🤍", 6000); $("dockPoll").classList.add("glow"); }
+      if (st.left > 0) toast(tr("جاهزة ✨ اختاري أي قطعة وجرّبيها هي وألوانها", "Ready ✨ Choose any piece and try it in every colour"), 6000);
+      else if (!st.bonus) toast(tr("🎁 أضيفي قطعة لحقيبتكِ واحصلي على تجربة كمان", "🎁 Add a piece to your bag to unlock one more try-on"), 6500);
+      else { toast(tr("اختاري مفضّلتكِ واسألي صديقاتكِ 🤍", "Pick your favourite and ask your friends 🤍"), 6000); $("dockPoll").classList.add("glow"); }
     }, 900);
   }
 
@@ -815,16 +823,19 @@
     updateDock();
   }
 
-  function arN(n) { return Number(n).toLocaleString("ar-EG"); }
-  function looksWord(n) { return n === 1 ? "إطلالة واحدة" : n === 2 ? "إطلالتان" : arN(n) + (n <= 10 ? " إطلالات" : " إطلالة"); }
+  function arN(n) { return Number(n).toLocaleString(EN ? "en-US" : "ar-EG"); }
+  function looksWord(n) {
+    if (EN) return n === 1 ? "One look" : n + " looks";
+    return n === 1 ? "إطلالة واحدة" : n === 2 ? "إطلالتان" : arN(n) + (n <= 10 ? " إطلالات" : " إطلالة");
+  }
   function updateDock() {
     var t = Math.max(state.target, state.done), d = state.done, st = roundsRec();
     var sub;
-    if (generating()) sub = "نُجهّز إطلالاتكِ…";
-    else if (st.left > 0 && lookCount()) sub = "اختاري قطعة وجرّبيها بألوانها ✨";
-    else if (!st.bonus && lookCount()) sub = "🎁 أضيفي قطعة لحقيبتكِ = تجربة كمان";
-    else if (lookCount()) sub = looksWord(lookCount()) + " اليوم — نكمّل غداً 🤍";
-    else sub = "نُجهّز إطلالاتكِ…";
+    if (generating()) sub = tr("نُجهّز إطلالاتكِ…", "Preparing your looks…");
+    else if (st.left > 0 && lookCount()) sub = tr("اختاري قطعة وجرّبيها بألوانها ✨", "Choose a piece and try all its colours ✨");
+    else if (!st.bonus && lookCount()) sub = tr("🎁 أضيفي قطعة لحقيبتكِ = تجربة كمان", "🎁 Add a piece to your bag = one more try-on");
+    else if (lookCount()) sub = looksWord(lookCount()) + tr(" اليوم — نكمّل غداً 🤍", " today — more tomorrow 🤍");
+    else sub = tr("نُجهّز إطلالاتكِ…", "Preparing your looks…");
     $("dockSub").textContent = sub;
     $("dockProg").style.width = t ? Math.round(d / t * 100) + "%" : "0";
     $("dockPoll").style.display = lookCount() >= 2 ? "" : "none";
@@ -856,7 +867,7 @@
       $("lbProd").src = u; if (!state.looks[p.id]) $("lbLook").src = u;
     });
     pic.querySelector(".chip").style.display = look ? "" : "none";
-    $("lbLine").textContent = colorLabel(p) || (AC.lineName(p.line) ? "من مجموعة " + AC.lineName(p.line) : "");
+    $("lbLine").textContent = colorLabel(p) || (AC.lineName(p.line, LANG) ? tr("من مجموعة ", "From the ") + AC.lineName(p.line, LANG) + tr("", " collection") : "");
     // 🎨 ألوان الموديل جوّه صفحة القطعة — تضغطي لون تشوفيه على طول
     var lc = $("lbColors"), lm = modelOf[p.id];
     lc.innerHTML = ""; lc.classList.toggle("hidden", !lm || lm.items.length < 2);
@@ -869,15 +880,15 @@
     });
     if (p.admin && p.extras && !p.gallery) loadGallery(p).then(function () { if (state.lbOpen === p) setLb(p); });
     $("lbName").textContent = displayName(p);
-    $("lbPrice").textContent = p.price ? AC.fmtPrice(p.price) : "";
+    $("lbPrice").textContent = p.price ? money(p.price) : "";
     var busy = state.queued[p.id] && !look, st = roundsRec();
     var b = $("lbTry");
     b.style.display = look || !p.tryable ? "none" : "";
     b.disabled = !!busy;
-    b.querySelector("span").textContent = busy ? "نُجهّزها لكِ…" : (!state.face ? "جرّبيها عليكِ" :
-      (st.left > 0 ? "جرّبيها هي وألوانها" : (!st.bonus ? "🎁 أضيفيها للحقيبة = تجربة كمان" : "نكمّل غداً 🤍")));
+    b.querySelector("span").textContent = busy ? tr("نُجهّزها لكِ…", "Preparing it for you…") : (!state.face ? tr("جرّبيها عليكِ", "Try it on") :
+      (st.left > 0 ? tr("جرّبيها هي وألوانها", "Try it in every colour") : (!st.bonus ? tr("🎁 أضيفيها للحقيبة = تجربة كمان", "🎁 Add to bag = one more try-on") : tr("نكمّل غداً 🤍", "More tomorrow 🤍"))));
     $("lbHint").style.display = look ? "" : "none";
-    $("lbBag").querySelector("span").textContent = inBag(p) ? "في حقيبتكِ ✓" : "أضيفيها للحقيبة";
+    $("lbBag").querySelector("span").textContent = inBag(p) ? tr("في حقيبتكِ ✓", "In your bag ✓") : tr("أضيفيها للحقيبة", "Add to bag");
     $("lbShare").style.display = look ? "" : "none";
     syncHearts(p);
   }
@@ -925,12 +936,12 @@
     resetMirror();
     ["salonImg", "dockFace"].forEach(function (id) { $(id).removeAttribute("src"); });
     $("salonArch").classList.remove("has");
-    $("heroEyebrow").textContent = "مجموعة الموسم";
-    $("heroTitle").innerHTML = '<span class="ln"><span>المجموعة كاملة،</span></span><span class="ln"><span><em>عليكِ أنتِ</em></span></span>';
+    $("heroEyebrow").textContent = tr("مجموعة الموسم", "The Season’s Collection");
+    $("heroTitle").innerHTML = '<span class="ln"><span>' + tr("المجموعة كاملة،", "The whole collection,") + '</span></span><span class="ln"><span><em>' + tr("عليكِ أنتِ", "on you") + '</em></span></span>';
     $("heroTitle").classList.add("in");
-    $("heroSub").textContent = "صورةٌ واحدة، وتظهر كل قطعة عليكِ قبل أن تختاري.";
-    $("ctaUpload").querySelector("span").textContent = "جرّبي المجموعة";
-    $("ctaSalon").querySelector("span").textContent = "جرّبي المجموعة";
+    $("heroSub").textContent = tr("صورةٌ واحدة، وتظهر كل قطعة عليكِ قبل أن تختاري.", "One photo, and every piece appears on you before you choose.");
+    $("ctaUpload").querySelector("span").textContent = tr("جرّبي المجموعة", "Try the collection");
+    $("ctaSalon").querySelector("span").textContent = tr("جرّبي المجموعة", "Try the collection");
     toast(MSG.forgot);
   });
   $("file").addEventListener("change", function () {
@@ -965,10 +976,10 @@
       });
     });
   }
-  if (MOCK) document.body.appendChild(el("div", "demo-flag", "معاينة للتصميم فقط"));
+  if (MOCK) document.body.appendChild(el("div", "demo-flag", tr("معاينة للتصميم فقط", "Design preview only")));
   if (EMBED) {
     document.body.classList.add("embed");
-    var x = el("button", "embed-x", "<i></i><i></i>"); x.type = "button"; x.setAttribute("aria-label", "رجوع");
+    var x = el("button", "embed-x", "<i></i><i></i>"); x.type = "button"; x.setAttribute("aria-label", tr("رجوع", "Back"));
     x.addEventListener("click", function () { toParent({ type: "tryon-close" }); });
     document.body.appendChild(x);
   }
@@ -1012,7 +1023,7 @@
   function syncMirrorActs() {
     if (!mirrorP) return;
     syncHearts(mirrorP);
-    $("mBag").querySelector("span").textContent = inBag(mirrorP) ? "في حقيبتكِ ✓" : "أضيفيها للحقيبة";
+    $("mBag").querySelector("span").textContent = inBag(mirrorP) ? tr("في حقيبتكِ ✓", "In your bag ✓") : tr("أضيفيها للحقيبة", "Add to bag");
   }
   $("mHeart").addEventListener("click", function () { if (mirrorP) toggleFav(mirrorP); });
   $("lbHeart").addEventListener("click", function () { if (state.lbOpen) toggleFav(state.lbOpen); });
@@ -1050,9 +1061,10 @@
     setTimeout(syncBagCount, 700);
     syncMirrorActs(); if (state.lbOpen === p) setLb(p);
     if (state.face && grantBonus()) {
-      toast("🎁 أُضيفت «" + p.name + "» — وحصلتِ على تجربة كمان! اختاري أي قطعة وجرّبيها بألوانها", 6500);
+      toast(tr("🎁 أُضيفت «" + p.name + "» — وحصلتِ على تجربة كمان! اختاري أي قطعة وجرّبيها بألوانها",
+        "🎁 “" + p.name + "” is in your bag — and you’ve unlocked one more try-on! Choose any piece and try its colours"), 6500);
       syncPickable(); updateDock();
-    } else toast("أُضيفت «" + p.name + "» إلى حقيبتكِ 🤍");
+    } else toast(tr("أُضيفت «" + p.name + "» إلى حقيبتكِ 🤍", "“" + p.name + "” added to your bag 🤍"));
   }
   function removeFromBag(id) {
     bag = bag.filter(function (x) { return x !== id; }); writeIds("atelier_bag", bag);
@@ -1063,7 +1075,7 @@
     var items = bag.map(function (id) { return state.byId[id]; }).filter(Boolean);
     var list = $("bagList"); list.innerHTML = "";
     if (!items.length) {
-      list.innerHTML = '<div class="bag-empty">حقيبتكِ في انتظار قطعتها الأولى 🤍</div>';
+      list.innerHTML = '<div class="bag-empty">' + tr("حقيبتكِ في انتظار قطعتها الأولى 🤍", "Your bag is waiting for its first piece 🤍") + '</div>';
       $("bagFoot").style.display = "none"; return;
     }
     $("bagFoot").style.display = "";
@@ -1072,18 +1084,18 @@
       total += p.price || 0;
       var row = el("div", "bag-item");
       row.innerHTML = '<img alt=""><div><b>' + esc(displayName(p)) + '</b><small>' +
-        esc([colorLabel(p), p.price ? AC.fmtPrice(p.price) : "", state.looks[p.id] ? "جرّبتِها ✓" : ""].filter(Boolean).join(" · ")) +
-        '</small></div><button class="rm" type="button">إزالة</button>';
+        esc([colorLabel(p), p.price ? money(p.price) : "", state.looks[p.id] ? tr("جرّبتِها ✓", "Tried on ✓") : ""].filter(Boolean).join(" · ")) +
+        '</small></div><button class="rm" type="button">' + tr("إزالة", "Remove") + '</button>';
       row.querySelector("img").src = state.looks[p.id] || p.img;
       row.querySelector(".rm").addEventListener("click", function () { removeFromBag(p.id); });
       list.appendChild(row);
     });
-    $("bagTotal").textContent = items.length + (items.length === 1 ? " قطعة" : " قطع") + (total ? " · " + AC.fmtPrice(total) : "");
-    var lines = ["أهلاً echarpe 🤍", "جرّبت القطع دي في غرفة القياس وعاوزة أطلبها:"];
+    $("bagTotal").textContent = arN(items.length) + (EN ? (items.length === 1 ? " piece" : " pieces") : (items.length === 1 ? " قطعة" : " قطع")) + (total ? " · " + money(total) : "");
+    var lines = [tr("أهلاً echarpe 🤍", "Hello echarpe 🤍"), tr("جرّبت القطع دي في غرفة القياس وعاوزة أطلبها:", "I tried these pieces in the fitting room and I’d like to order:")];
     items.forEach(function (p) {
-      lines.push("• " + displayName(p) + (colorLabel(p) ? " (" + colorLabel(p) + ")" : "") + (p.price ? " — " + AC.fmtPrice(p.price) : "") + (p.barcode ? " [" + p.barcode + "]" : ""));
+      lines.push("• " + displayName(p) + (colorLabel(p) ? " (" + colorLabel(p) + ")" : "") + (p.price ? " — " + money(p.price) : "") + (p.barcode ? " [" + p.barcode + "]" : ""));
     });
-    lines.push("", "شكراً!");
+    lines.push("", tr("شكراً!", "Thank you!"));
     $("bagWa").href = "https://wa.me/" + SITE.whatsapp + "?text=" + encodeURIComponent(lines.join("\n"));
     showBagStep("list");
   }
@@ -1113,6 +1125,18 @@
   var EG_GOVS = ["القاهرة", "الجيزة", "القليوبية", "الإسكندرية", "الدقهلية", "الشرقية", "الغربية", "المنوفية",
     "البحيرة", "كفر الشيخ", "دمياط", "بورسعيد", "الإسماعيلية", "السويس", "الفيوم", "بني سويف", "المنيا", "أسيوط",
     "سوهاج", "قنا", "الأقصر", "أسوان", "البحر الأحمر", "مطروح", "شمال سيناء", "جنوب سيناء", "الوادي الجديد"];
+  // 🌐 الأسماء بالإنجليزي للعرض بس — القيمة اللي بتتبعت للمحل بتفضل عربي
+  var GOV_EN = { "القاهرة": "Cairo", "الجيزة": "Giza", "القليوبية": "Qalyubia", "الإسكندرية": "Alexandria", "الدقهلية": "Dakahlia",
+    "الشرقية": "Sharqia", "الغربية": "Gharbia", "المنوفية": "Monufia", "البحيرة": "Beheira", "كفر الشيخ": "Kafr El Sheikh",
+    "دمياط": "Damietta", "بورسعيد": "Port Said", "الإسماعيلية": "Ismailia", "السويس": "Suez", "الفيوم": "Fayoum",
+    "بني سويف": "Beni Suef", "المنيا": "Minya", "أسيوط": "Assiut", "سوهاج": "Sohag", "قنا": "Qena", "الأقصر": "Luxor",
+    "أسوان": "Aswan", "البحر الأحمر": "Red Sea", "مطروح": "Matrouh", "شمال سيناء": "North Sinai", "جنوب سيناء": "South Sinai",
+    "الوادي الجديد": "New Valley" };
+  var BRANCH_EN = { "الرحاب": "Al Rehab", "مدينتي": "Madinaty", "سيتي سنتر": "City Centre" };
+  function branchLabel(b, i) {
+    if (!EN) return b;
+    return (SITE.branchesEn && SITE.branchesEn[i]) || BRANCH_EN[b] || b;
+  }
   var co = { ful: "delivery", branch: "" };
   function bagItems() { return bag.map(function (id) { return state.byId[id]; }).filter(Boolean); }
   function showBagStep(step) {
@@ -1123,11 +1147,11 @@
   }
   function fillCheckout() {
     var gov = $("coGov");
-    if (!gov.options.length) gov.innerHTML = '<option value="">اختاري المحافظة</option>' +
-      (SITE.governorates && SITE.governorates.length ? SITE.governorates : EG_GOVS).map(function (g) { return "<option>" + esc(g) + "</option>"; }).join("");
+    if (!gov.options.length) gov.innerHTML = '<option value="">' + tr("اختاري المحافظة", "Choose your governorate") + '</option>' +
+      (SITE.governorates && SITE.governorates.length ? SITE.governorates : EG_GOVS).map(function (g) { return '<option value="' + esc(g) + '">' + esc(EN && GOV_EN[g] || g) + "</option>"; }).join("");
     var bb = $("coBranches"); bb.innerHTML = "";
-    SITE.branches.forEach(function (b) {
-      var x = el("button", b === co.branch ? "on" : "", esc(b)); x.type = "button";
+    SITE.branches.forEach(function (b, i) {
+      var x = el("button", b === co.branch ? "on" : "", esc(branchLabel(b, i))); x.type = "button";
       x.addEventListener("click", function () { co.branch = b; fillCheckout(); });
       bb.appendChild(x);
     });
@@ -1140,10 +1164,10 @@
     $("coPickup").classList.toggle("hidden", co.ful !== "pickup");
     var items = bagItems(), sub = items.reduce(function (t, p) { return t + (p.price || 0); }, 0);
     var ship = co.ful === "delivery" ? (SITE.freeOver && sub >= SITE.freeOver ? 0 : SITE.shippingFee) : 0;
-    $("coSum").innerHTML = arN(items.length) + (items.length === 1 ? " قطعة" : " قطع") +
-      (sub ? " · " + esc(AC.fmtPrice(sub)) : "") +
-      (co.ful === "delivery" ? "<br>الشحن: " + (ship ? esc(AC.fmtPrice(ship)) : "مجاني") : "") +
-      (sub ? "<br><b>الإجمالي: " + esc(AC.fmtPrice(sub + ship)) + "</b>" : "<br><small>السعر بنأكّده معاكِ على واتساب</small>");
+    $("coSum").innerHTML = arN(items.length) + (EN ? (items.length === 1 ? " piece" : " pieces") : (items.length === 1 ? " قطعة" : " قطع")) +
+      (sub ? " · " + esc(money(sub)) : "") +
+      (co.ful === "delivery" ? "<br>" + tr("الشحن: ", "Shipping: ") + (ship ? esc(money(ship)) : tr("مجاني", "Free")) : "") +
+      (sub ? "<br><b>" + tr("الإجمالي: ", "Total: ") + esc(money(sub + ship)) + "</b>" : "<br><small>" + tr("السعر بنأكّده معاكِ على واتساب", "We’ll confirm the price with you on WhatsApp") + "</small>");
   }
   $("bagCheckout").addEventListener("click", function () { $("coErr").textContent = ""; fillCheckout(); showBagStep("form"); });
   $("coBack").addEventListener("click", function () { showBagStep("list"); });
@@ -1161,9 +1185,9 @@
     var items = bagItems(); if (!items.length) return;
     var f = { name: $("coName").value.trim(), phone: cleanPhone($("coPhone").value), fulfillment: co.ful,
       governorate: $("coGov").value, address: $("coAddr").value.trim(), branch: co.branch, notes: $("coNotes").value.trim() };
-    var err = f.name.length < 2 ? "اكتبي اسمكِ" : !f.phone ? "رقم الموبايل مش مظبوط (01xxxxxxxxx)" :
-      co.ful === "delivery" && (!f.governorate || f.address.length < 6) ? "اكتبي المحافظة والعنوان بالتفصيل" :
-      co.ful === "pickup" && !f.branch ? "اختاري الفرع" : "";
+    var err = f.name.length < 2 ? tr("اكتبي اسمكِ", "Please enter your name") : !f.phone ? tr("رقم الموبايل مش مظبوط (01xxxxxxxxx)", "Please check your mobile number (01xxxxxxxxx)") :
+      co.ful === "delivery" && (!f.governorate || f.address.length < 6) ? tr("اكتبي المحافظة والعنوان بالتفصيل", "Please add your governorate and full address") :
+      co.ful === "pickup" && !f.branch ? tr("اختاري الفرع", "Please choose a store") : "";
     $("coErr").textContent = err; if (err) return;
     try { LS && LS.setItem("atelier_name", f.name); LS && LS.setItem("atelier_phone", f.phone); } catch (e2) { }
     // استلام من الفرع جوّه التطبيق + كله بباركود → سلة التطبيق (POS)
@@ -1176,7 +1200,7 @@
       });
       return;
     }
-    var btn = $("coSubmit"); btn.disabled = true; btn.querySelector("span").textContent = "بنسجّل طلبكِ…";
+    var btn = $("coSubmit"); btn.disabled = true; btn.querySelector("span").textContent = tr("بنسجّل طلبكِ…", "Placing your order…");
     var payload = Object.assign({}, f, { source: EMBED ? "app" : "web", items: items.map(function (p) {
       return { docId: p.docId || "", barcode: p.barcode || "", name: displayName(p), model: modelOf[p.id] ? modelOf[p.id].title : "",
                color: p.colorNo || 0, img: p.house ? p.img : "" };
@@ -1184,22 +1208,22 @@
     var call = MOCK || !fb ? Promise.reject({ code: "mock" }) : authReady.then(function () { return callable("atelierOrderPlace")(payload); });
     call.then(function (res) {
       var d = (res && res.data) || {};
-      orderDone("رقم الطلب " + (d.code || "") + (d.total ? " · الإجمالي " + AC.fmtPrice(d.total) : "") +
-        "<br>هنكلمكِ على واتساب على " + esc(f.phone) + " للتأكيد 🤍");
+      orderDone(tr("رقم الطلب ", "Order ") + (d.code || "") + (d.total ? tr(" · الإجمالي ", " · Total ") + money(d.total) : "") +
+        "<br>" + tr("هنكلمكِ على واتساب على ", "We’ll message you on WhatsApp at ") + esc(f.phone) + tr(" للتأكيد 🤍", " to confirm 🤍"));
     }).catch(function (er) {
       var code = String(er && er.code || "").replace(/^functions\//, "");
       if (code === "resource-exhausted" || code === "invalid-argument") {
-        $("coErr").textContent = (er && er.message && code === "resource-exhausted") ? er.message : "راجعي البيانات وجرّبي تاني"; return;
+        $("coErr").textContent = (er && er.message && code === "resource-exhausted") ? tr(er.message, "Several orders came from this number — we’ll be in touch soon 🤍") : tr("راجعي البيانات وجرّبي تاني", "Please check your details and try again"); return;
       }
       // الدالة مش متاحة → واتساب بكل التفاصيل عشان الطلب ميضيعش
-      var t = ["أهلاً echarpe 🤍 عاوزة أطلب من غرفة القياس:"];
-      items.forEach(function (p) { t.push("• " + displayName(p) + (colorLabel(p) ? " (" + colorLabel(p) + ")" : "") + (p.price ? " — " + AC.fmtPrice(p.price) : "")); });
-      t.push("", "الاسم: " + f.name, "الموبايل: " + f.phone,
-        co.ful === "delivery" ? "توصيل: " + f.governorate + " — " + f.address : "استلام من فرع: " + f.branch);
-      if (f.notes) t.push("ملاحظات: " + f.notes);
+      var t = [tr("أهلاً echarpe 🤍 عاوزة أطلب من غرفة القياس:", "Hello echarpe 🤍 I’d like to order from the fitting room:")];
+      items.forEach(function (p) { t.push("• " + displayName(p) + (colorLabel(p) ? " (" + colorLabel(p) + ")" : "") + (p.price ? " — " + money(p.price) : "")); });
+      t.push("", tr("الاسم: ", "Name: ") + f.name, tr("الموبايل: ", "Mobile: ") + f.phone,
+        co.ful === "delivery" ? tr("توصيل: ", "Delivery: ") + f.governorate + " — " + f.address : tr("استلام من فرع: ", "Pickup from: ") + f.branch);
+      if (f.notes) t.push(tr("ملاحظات: ", "Notes: ") + f.notes);
       window.open("https://wa.me/" + SITE.whatsapp + "?text=" + encodeURIComponent(t.join("\n")), "_blank");
-      orderDone("بعتنا طلبكِ على واتساب — ابعتي الرسالة وهنأكّد معاكِ في دقائق 🤍");
-    }).then(function () { btn.disabled = false; btn.querySelector("span").textContent = "تأكيد الطلب"; });
+      orderDone(tr("بعتنا طلبكِ على واتساب — ابعتي الرسالة وهنأكّد معاكِ في دقائق 🤍", "Your order is ready in WhatsApp — send the message and we’ll confirm within minutes 🤍"));
+    }).then(function () { btn.disabled = false; btn.querySelector("span").textContent = tr("تأكيد الطلب", "Confirm order"); });
   });
   function orderDone(html) {
     $("doneText").innerHTML = html;
@@ -1214,10 +1238,12 @@
   $("lbBag").addEventListener("click", function () { if (state.lbOpen) addToBag(state.lbOpen, $("lbLook")); });
 
   /* ---------- المشاركة: صورة ستوري بلوجو echarpe ---------- */
-  var AR_NUM = ["١", "٢", "٣", "٤"];
+  var AR_NUM = EN ? ["1", "2", "3", "4"] : ["١", "٢", "٣", "٤"];
+  var F_SERIF = EN ? '"Cormorant Garamond", serif' : '"Amiri", serif';
+  var F_SANS = EN ? '"Jost", sans-serif' : '"IBM Plex Sans Arabic", sans-serif';
   function fontsReady() {
     if (!document.fonts || !document.fonts.load) return Promise.resolve();
-    return Promise.all([document.fonts.load('400 72px "Amiri"'), document.fonts.load('400 36px "IBM Plex Sans Arabic"')])
+    return Promise.all([document.fonts.load("400 72px " + F_SERIF), document.fonts.load("400 36px " + F_SANS)])
       .catch(function () { });
   }
   function archPath(x, y, w, h, ctx) {
@@ -1238,7 +1264,7 @@
     ctx.strokeStyle = "rgba(255,252,246,.7)"; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
   }
   function txt(ctx, t, x, y, font, color) {
-    ctx.font = font; ctx.fillStyle = color; ctx.textAlign = "center"; ctx.direction = "rtl"; ctx.fillText(t, x, y);
+    ctx.font = font; ctx.fillStyle = color; ctx.textAlign = "center"; ctx.direction = EN ? "ltr" : "rtl"; ctx.fillText(t, x, y);
   }
   function makeStory(items, poll) {
     var W = 1080, H = 1920;
@@ -1252,27 +1278,28 @@
       if (logo) { var lw = 280, lh = lw * logo.naturalHeight / logo.naturalWidth; x.drawImage(logo, (W - lw) / 2, 96, lw, lh); }
       if (!poll) {
         drawArch(x, imgs[0], 150, 300, 780, 1060);
-        txt(x, items[0].name, W / 2, 1490, '400 76px "Amiri", serif', "#1c1916");
-        var ln = AC.lineName(items[0].line);
-        if (ln) txt(x, "من مجموعة " + ln, W / 2, 1556, '400 34px "IBM Plex Sans Arabic", sans-serif', "#8a6f4e");
+        txt(x, displayName(items[0]), W / 2, 1490, "400 76px " + F_SERIF, "#1c1916");
+        var ln = colorLabel(items[0]) || AC.lineName(items[0].line, LANG);
+        if (ln) txt(x, ln, W / 2, 1556, "400 34px " + F_SANS, "#8a6f4e");
       } else {
-        txt(x, "أي واحدة أختار؟", W / 2, 330, '400 92px "Amiri", serif', "#1c1916");
-        txt(x, "ساعدوني 🤍", W / 2, 400, '400 38px "IBM Plex Sans Arabic", sans-serif', "#8a6f4e");
+        txt(x, tr("أي واحدة أختار؟", "Which one should I choose?"), W / 2, 330, (EN ? "400 80px " : "400 92px ") + F_SERIF, "#1c1916");
+        txt(x, tr("ساعدوني 🤍", "Help me 🤍"), W / 2, 400, "400 38px " + F_SANS, "#8a6f4e");
         // الترتيب من اليمين (١ يمين فوق) — زي القراية بالعربي
         var cw = 390, ch = 520, n = imgs.length;
         var pos = n === 2 ? [[630, 640], [120, 640]] :
           n === 3 ? [[630, 470], [120, 470], [345, 1060]] : [[630, 470], [120, 470], [630, 1060], [120, 1060]];
+        if (EN) pos = pos.map(function (q) { return [W - cw - q[0], q[1]]; });   // الإنجليزي من الشمال
         imgs.forEach(function (im, i) {
           var px = pos[i][0], py = pos[i][1];
           drawArch(x, im, px, py, cw, ch);
           x.beginPath(); x.arc(px + cw / 2, py + ch, 40, 0, Math.PI * 2); x.fillStyle = "#1c1916"; x.fill();
-          txt(x, AR_NUM[i], px + cw / 2, py + ch + 16, '400 46px "Amiri", serif', "#f6f2ec");
+          txt(x, AR_NUM[i], px + cw / 2, py + ch + 16, "400 46px " + F_SERIF, "#f6f2ec");
         });
       }
       x.fillStyle = "rgba(138,111,78,.5)"; x.fillRect(W / 2 - 60, 1672, 120, 2);
-      txt(x, "جرّبي المجموعة عليكِ", W / 2, 1760, '400 54px "Amiri", serif', "#1c1916");
+      txt(x, tr("جرّبي المجموعة عليكِ", "Try the collection on you"), W / 2, 1760, "400 54px " + F_SERIF, "#1c1916");
       x.direction = "ltr";
-      x.font = '400 32px "IBM Plex Sans Arabic", sans-serif'; x.fillStyle = "#8a6f4e"; x.textAlign = "center";
+      x.font = "400 32px " + F_SANS; x.fillStyle = "#8a6f4e"; x.textAlign = "center";
       x.fillText("echarpe.store/atelier", W / 2, 1828);
       return c;
     });
@@ -1280,18 +1307,18 @@
   var shareFile = null, shareText = "";
   function openShare(items, poll) {
     shareFile = null;
-    $("shareTitle").textContent = poll ? "اسألي صديقاتكِ" : "شاركي إطلالتكِ";
+    $("shareTitle").textContent = poll ? tr("اسألي صديقاتكِ", "Ask your friends") : tr("شاركي إطلالتكِ", "Share your look");
     $("shareImg").removeAttribute("src");
     openSheet("shareSheet");
     shareText = poll
-      ? "ساعدوني أختار 🤍 أي واحدة أحلى؟ جرّبتهم كلهم عليّا في echarpe — جرّبي إنتِ كمان: " + SITE_URL
-      : "جرّبت «" + items[0].name + "» عليّا في غرفة القياس من echarpe 🤍 جرّبي إنتِ كمان: " + SITE_URL;
+      ? tr("ساعدوني أختار 🤍 أي واحدة أحلى؟ جرّبتهم كلهم عليّا في echarpe — جرّبي إنتِ كمان: ", "Help me choose 🤍 Which one is prettier? I tried them all on at echarpe — try yours too: ") + SITE_URL
+      : tr("جرّبت «" + items[0].name + "» عليّا في غرفة القياس من echarpe 🤍 جرّبي إنتِ كمان: ", "I tried on “" + items[0].name + "” in the echarpe fitting room 🤍 Try yours too: ") + SITE_URL;
     makeStory(items, poll).then(function (c) {
       var url = c.toDataURL("image/jpeg", 0.9);
       $("shareImg").src = url; $("shareSave").href = url;
-      $("shareSave").download = poll ? "echarpe-ساعديني-أختار.jpg" : "echarpe-إطلالتي.jpg";
+      $("shareSave").download = poll ? tr("echarpe-ساعديني-أختار.jpg", "echarpe-help-me-choose.jpg") : tr("echarpe-إطلالتي.jpg", "echarpe-my-look.jpg");
       c.toBlob(function (b) { if (b) shareFile = new File([b], "echarpe.jpg", { type: "image/jpeg" }); }, "image/jpeg", 0.9);
-    }).catch(function () { closeSheet("shareSheet"); toast(MSG.generic || "تعذّر تجهيز الصورة."); });
+    }).catch(function () { closeSheet("shareSheet"); toast(MSG.generic || tr("تعذّر تجهيز الصورة.", "We couldn’t prepare the image.")); });
   }
   $("shareGo").addEventListener("click", function () {
     var data = { title: "echarpe", text: shareText };
@@ -1307,7 +1334,7 @@
     $("dockPoll").classList.remove("glow");
     var withLook = state.products.filter(function (p) { return state.looks[p.id]; });
     var pick = withLook.filter(isFav).concat(withLook.filter(function (p) { return !isFav(p); })).slice(0, 4);
-    if (pick.length < 2) { toast("جرّبي قطعتين على الأقل لتسألي صديقاتكِ 🤍"); return; }
+    if (pick.length < 2) { toast(tr("جرّبي قطعتين على الأقل لتسألي صديقاتكِ 🤍", "Try on at least two pieces to ask your friends 🤍")); return; }
     openShare(pick, true);
   });
 
@@ -1332,11 +1359,17 @@
       }).catch(function () { });
     }).catch(function () { });
   }
-  function applySite(d) {
+  function applySite(raw) {
     var set = function (id, v) { if (v && $(id)) $(id).textContent = v; };
-    if (/^\d{10,15}$/.test(String(d.whatsapp || ""))) SITE.whatsapp = String(d.whatsapp);
+    // 🌐 النصوص: العربي في eyebrow… والإنجليزي في eyebrowEn… — كل نسخة بنصوصها بس
+    var d = {}, K = ["eyebrow", "title1", "title2", "sub", "statement", "marquee", "chatText"];
+    K.forEach(function (k) { d[k] = EN ? raw[k + "En"] : raw[k]; });
+    if (/^\d{10,15}$/.test(String(raw.whatsapp || ""))) SITE.whatsapp = String(raw.whatsapp);
     if (d.chatText) SITE.chatText = String(d.chatText).slice(0, 300);
-    if (Array.isArray(d.branches) && d.branches.length) SITE.branches = d.branches.map(String).slice(0, 12);
+    if (Array.isArray(raw.branches) && raw.branches.length) {
+      SITE.branches = raw.branches.map(String).slice(0, 12);
+      SITE.branchesEn = Array.isArray(raw.branchesEn) ? raw.branchesEn.map(String).slice(0, 12) : [];
+    }
     if (!state.alive) {
       set("heroEyebrow", d.eyebrow); set("heroSub", d.sub);
       if (d.title1 || d.title2) $("heroTitle").innerHTML = '<span class="ln"><span>' + esc(d.title1 || "") + '</span></span><span class="ln"><span><em>' + esc(d.title2 || "") + "</em></span></span>";
@@ -1353,7 +1386,7 @@
   Promise.all([loadProducts(), loadSite()]).then(function (r) {
     var items = r[0];
     state.products = items;
-    items.forEach(function (p) { state.byId[p.id] = p; });
+    items.forEach(function (p) { AC.localizeProduct(p, LANG); state.byId[p.id] = p; });
     buildModels();
     renderHero(); renderFilters(); renderGrid(); syncBagCount(); updateDock();
     var saved = LS ? PC.readFace(LS) : "";

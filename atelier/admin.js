@@ -103,6 +103,12 @@
         '<select data-f="line">' + lineOptions(it.line) + "</select></div>" +
         '<input type="text" data-f="family" value="' + esc(it.family || "") + '" placeholder="الموديل (نفس الموديل = ألوان لبعض)" list="families">' +
         '<input type="text" data-f="colorName" value="' + esc(it.colorName || "") + '" placeholder="اسم اللون (اختياري) — مثلاً كاكي">' +
+        // 🌐 الإنجليزي (اختياري) — لو فاضي بيتترجم لوحده من العربي لو الكلمات معروفة
+        '<details class="en"' + (it.nameEn || it.colorEn || it.familyEn ? " open" : "") + '><summary>English (اختياري)</summary>' +
+          '<input type="text" dir="ltr" data-f="familyEn" value="' + esc(it.familyEn || "") + '" placeholder="Model name — e.g. ' + esc(AC.LINE_TITLE_EN[it.line] || "Messi Kuwaiti Chiffon") + '">' +
+          '<input type="text" dir="ltr" data-f="colorEn" value="' + esc(it.colorEn || "") + '" placeholder="Colour — ' + esc(AC.colorToEn(it.colorName) || "e.g. Khaki") + '">' +
+          '<input type="text" dir="ltr" data-f="nameEn" value="' + esc(it.nameEn || "") + '" placeholder="Full name (optional)">' +
+        '</details>' +
         (Number(isNew ? (it.extras || []).length : it.extras) ? '<small>📷 ' + (isNew ? it.extras.length : it.extras) + ' صور زيادة لنفس اللون</small>' : '') +
         '<input type="text" data-f="barcode" value="' + esc(it.barcode || "") + '" placeholder="باركود (عشان الطلب يدخل سلة التطبيق)">' +
         '<small class="bc"></small>' +
@@ -311,6 +317,10 @@
     })().then(function () {
       var clean = items.concat(batchImgs.map(function (p) { return Object.assign({}, p, { extras: p.extrasCount || 0 }); }))
         .map(function (it) { return AD.cleanItem(it); });
+      // 🌐 اسم الموديل بالإنجليزي اتكتب في لون واحد؟ يتطبّق على كل ألوان نفس الموديل
+      var famEn = {};
+      clean.forEach(function (it) { if (it.family && it.familyEn && !famEn[it.family]) famEn[it.family] = it.familyEn; });
+      clean.forEach(function (it) { if (it.family && !it.familyEn && famEn[it.family]) it.familyEn = famEn[it.family]; });
       // houseSeen: منتجات الموقع الثابتة دي كلها اتنقلت (أو اتمسحت) — متظهرش تاني
       return col.doc(DOC).set({ items: clean, houseSeen: AC.HOUSE.map(function (h) { return h[0]; }),
         updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
@@ -321,7 +331,7 @@
           col.doc(DOC + "_x_" + id).set({ imgs: [], deleted: true })]);
       }));
     }).then(function () {
-      items = items.concat(batchImgs.map(function (p) { return { id: p.id, name: p.name, price: p.price, line: p.line, family: p.family || "", colorName: p.colorName || "", barcode: p.barcode, active: true, thumb: p.thumb, extras: p.extrasCount || 0 }; }));
+      items = items.concat(batchImgs.map(function (p) { return { id: p.id, name: p.name, price: p.price, line: p.line, family: p.family || "", colorName: p.colorName || "", nameEn: p.nameEn || "", colorEn: p.colorEn || "", familyEn: p.familyEn || "", barcode: p.barcode, active: true, thumb: p.thumb, extras: p.extrasCount || 0 }; }));
       $("siteNote").classList.add("hidden");
       pending = []; deleted = []; dirty = false;
       renderReview(); renderList(); updateBar();
@@ -413,13 +423,14 @@
   /* ============================================================
      ⚙️ إعدادات الموقع — pos_test_settings/atelier_site
      ============================================================ */
-  var SITE_FIELDS = ["eyebrow", "title1", "title2", "sub", "statement", "marquee", "chatText", "whatsapp", "branches"];
+  var SITE_FIELDS = ["eyebrow", "title1", "title2", "sub", "statement", "marquee", "chatText", "whatsapp", "branches",
+    "eyebrowEn", "title1En", "title2En", "subEn", "statementEn", "marqueeEn", "chatTextEn", "branchesEn"];
   var bannerNew = "";
   function loadSite() {
     col.doc("atelier_site").get().then(function (d) {
       var v = d.exists ? d.data() : {};
       SITE_FIELDS.forEach(function (k) {
-        var x = v[k]; if (Array.isArray(x)) x = x.join("، ");
+        var x = v[k]; if (Array.isArray(x)) x = x.join(/En$/.test(k) ? ", " : "، ");
         $("s_" + k).value = x || "";
       });
       if (v.hasBanner) col.doc("atelier_site_banner").get().then(function (b) { if (b.exists) $("s_bannerImg").src = b.data().img || ""; });
@@ -437,7 +448,9 @@
     SITE_FIELDS.forEach(function (k) { v[k] = $("s_" + k).value.trim().slice(0, 400); });
     v.whatsapp = v.whatsapp.replace(/[^\d]/g, "");
     if (v.whatsapp && v.whatsapp.charAt(0) === "0") v.whatsapp = "2" + v.whatsapp;
-    v.branches = v.branches ? v.branches.split(/[،,]/).map(function (x) { return x.trim(); }).filter(Boolean).slice(0, 12) : [];
+    ["branches", "branchesEn"].forEach(function (k) {
+      v[k] = v[k] ? v[k].split(/[،,]/).map(function (x) { return x.trim(); }).filter(Boolean).slice(0, 12) : [];
+    });
     b.disabled = true;
     (bannerNew ? col.doc("atelier_site_banner").set({ img: bannerNew }).then(function () { v.hasBanner = true; }) : Promise.resolve())
       .then(function () {

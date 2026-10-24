@@ -60,6 +60,9 @@
   .extras button{display:block; width:100%; font-size:10px; color:var(--bronze); margin-top:2px;}
   .fields{display:grid; gap:8px; padding:10px;}
   .row2{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .fields details.en{display:grid; gap:6px;} .fields details.en[open]{display:grid;}
+  .fields details.en summary{font-size:12px; color:var(--bronze); cursor:pointer;}
+  .fields details.en input{margin-top:6px; width:100%;}
   .fields small{font-size:11px;}
   .fields small.ok{color:var(--ok);} .fields small.bad{color:var(--bad);}
   .acts{display:flex; gap:4px; padding:0 10px 10px; align-items:center;}
@@ -179,6 +182,7 @@
   <div class="wrap hidden" id="tab-site">
     <div class="site">
       <p class="muted">كل اللي هنا بيظهر في صفحة غرفة القياس على طول بعد الحفظ.</p>
+      <h3 style="margin:10px 0 4px;">النسخة العربي</h3>
       <label>السطر الصغير فوق العنوان<input type="text" id="s_eyebrow" placeholder="مجموعة الموسم"></label>
       <div class="row2"><label>العنوان — السطر الأول<input type="text" id="s_title1" placeholder="المجموعة كاملة،"></label>
         <label>العنوان — السطر التاني (ملوّن)<input type="text" id="s_title2" placeholder="عليكِ أنتِ"></label></div>
@@ -188,6 +192,16 @@
       <label>رسالة «مش لاقية اللي في بالكِ؟»<textarea id="s_chatText" placeholder="عندنا آلاف الطرح في الفروع…"></textarea></label>
       <div class="row2"><label>رقم واتساب الطلبات (بالكود الدولي)<input type="text" id="s_whatsapp" placeholder="201148664485"></label>
         <label>الفروع للاستلام (افصلي بفاصلة)<input type="text" id="s_branches" placeholder="الرحاب، مدينتي، سيتي سنتر"></label></div>
+      <h3 style="margin:18px 0 4px;">النسخة الإنجليزي (اللي بتفتح الأول)</h3>
+      <p class="muted">سيبي أي خانة فاضية = النص الإنجليزي الجاهز.</p>
+      <label>Eyebrow (small line above the title)<input type="text" id="s_eyebrowEn" dir="ltr" placeholder="The Season’s Collection"></label>
+      <div class="row2"><label>Title — line 1<input type="text" id="s_title1En" dir="ltr" placeholder="The whole collection,"></label>
+        <label>Title — line 2 (accent)<input type="text" id="s_title2En" dir="ltr" placeholder="on you"></label></div>
+      <label>Line under the title<input type="text" id="s_subEn" dir="ltr" placeholder="One photo, and every piece appears on you before you choose."></label>
+      <label>Big statement<textarea id="s_statementEn" dir="ltr" placeholder="Every fold tells a story, every colour a mood…"></textarea></label>
+      <label>Moving words (comma separated)<input type="text" id="s_marqueeEn" dir="ltr" placeholder="Messi Kuwaiti Chiffon, Kinar Linen, New Colours"></label>
+      <label>“Can’t find it?” message<textarea id="s_chatTextEn" dir="ltr" placeholder="We have thousands of hijabs in our stores…"></textarea></label>
+      <label>Store names in English (same order, comma separated)<input type="text" id="s_branchesEn" dir="ltr" placeholder="Al Rehab, Madinaty, City Centre"></label>
       <div class="banner"><img id="s_bannerImg" alt=""><div>
         <button class="btn ghost" type="button" id="s_bannerBtn">تغيير صورة البانر العريض</button>
         <input type="file" id="s_bannerFile" accept="image/*" hidden>
@@ -209,9 +223,9 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
-<script src="../tryon/photo-core.js?v=2610242130"></script>
-<script src="./atelier-core.js?v=2610242130"></script>
-<script src="./admin-core.js?v=2610242130"></script>
-<script src="./admin.js?v=2610242130"></script>
+<script src="../tryon/photo-core.js?v=2610242300"></script>
+<script src="./atelier-core.js?v=2610242300"></script>
+<script src="./admin-core.js?v=2610242300"></script>
+<script src="./admin.js?v=2610242300"></script>
 </body>
 </html>

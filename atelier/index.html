@@ -3,17 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>echarpe — جرّبي المجموعة عليكِ</title>
-<meta name="description" content="echarpe — صورةٌ واحدة، وتظهر كل قطعة من المجموعة عليكِ قبل أن تختاري.">
+<title data-en="echarpe — Try the Collection On You">echarpe — جرّبي المجموعة عليكِ</title>
+<meta name="description" content="echarpe — صورةٌ واحدة، وتظهر كل قطعة من المجموعة عليكِ قبل أن تختاري." data-en="echarpe — One photo, and every piece of the collection appears on you before you choose.">
 <meta name="theme-color" content="#f6f2ec">
-<meta property="og:title" content="echarpe — جرّبي المجموعة عليكِ">
-<meta property="og:description" content="صورةٌ واحدة، وتظهر كل قطعة من المجموعة عليكِ قبل أن تختاري.">
+<meta property="og:title" content="echarpe — Try the Collection On You">
+<meta property="og:description" content="One photo, and every piece of the collection appears on you before you choose.">
 <meta property="og:image" content="https://www.echarpe.store/atelier/collection/hero-comfort.jpg">
 <link rel="icon" href="../loyalty/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Sans+Arabic:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="atelier.css?v=2610242130">
+<link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Sans+Arabic:wght@300;400;500&family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="./i18n.js?v=2610242300"></script>
+<link rel="stylesheet" href="atelier.css?v=2610242300">
 </head>
 <body class="intro-on">
 
@@ -21,62 +22,63 @@
 <div class="intro" id="intro" aria-hidden="true">
   <img class="intro-logo" src="../logo.png" alt="">
   <div class="intro-rule"></div>
-  <div class="intro-tag">طُرَح · إسدالات</div>
+  <div class="intro-tag" data-en="Hijabs · Scarves">طُرَح · إسدالات</div>
 </div>
 
 <div class="grain" aria-hidden="true"></div>
 
 <header id="hdr">
   <nav class="nav-side">
-    <a href="#collection">المجموعة</a>
-    <a href="#privacy" class="hide-sm">الخصوصية</a>
+    <a href="#collection" data-en="Collection">المجموعة</a>
+    <a href="#privacy" class="hide-sm" data-en="Privacy">الخصوصية</a>
   </nav>
   <a class="logo" href="#top" aria-label="echarpe"><img src="../logo.png" alt="echarpe"></a>
   <nav class="nav-side end">
-    <button class="me-dot" id="meDot" type="button" aria-label="تغيير الصورة"><img alt=""></button>
-    <button class="bag-btn" id="bagBtn" type="button" aria-label="حقيبتكِ"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12l-1 12H7L6 8z" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M9 8V6a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.3"/></svg><b class="bagCount">0</b></button>
+    <button class="lang-btn" id="langBtn" type="button" lang="ar">عربي</button>
+    <button class="me-dot" id="meDot" type="button" aria-label="تغيير الصورة" data-en-aria="Change photo"><img alt=""></button>
+    <button class="bag-btn" id="bagBtn" type="button" aria-label="حقيبتكِ" data-en-aria="Your bag"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12l-1 12H7L6 8z" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M9 8V6a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.3"/></svg><b class="bagCount">0</b></button>
   </nav>
 </header>
 
 <!-- ✦ الواجهة: المرآة -->
-<section class="hero" id="top" aria-label="المجموعة">
+<section class="hero" id="top" aria-label="المجموعة" data-en-aria="Collection">
   <div class="hero-copy">
-    <div class="eyebrow" id="heroEyebrow">مجموعة الموسم</div>
-    <h1 class="split" id="heroTitle"><span class="ln"><span>المجموعة كاملة،</span></span><span class="ln"><span><em>عليكِ أنتِ</em></span></span></h1>
-    <p class="hero-sub" id="heroSub">صورةٌ واحدة، وتظهر كل قطعة عليكِ قبل أن تختاري.</p>
+    <div class="eyebrow" id="heroEyebrow" data-en="The Season’s Collection">مجموعة الموسم</div>
+    <h1 class="split" id="heroTitle" data-en-html="&lt;span class=&quot;ln&quot;&gt;&lt;span&gt;The whole collection,&lt;/span&gt;&lt;/span&gt;&lt;span class=&quot;ln&quot;&gt;&lt;span&gt;&lt;em&gt;on you&lt;/em&gt;&lt;/span&gt;&lt;/span&gt;"><span class="ln"><span>المجموعة كاملة،</span></span><span class="ln"><span><em>عليكِ أنتِ</em></span></span></h1>
+    <p class="hero-sub" id="heroSub" data-en="One photo, and every piece appears on you before you choose.">صورةٌ واحدة، وتظهر كل قطعة عليكِ قبل أن تختاري.</p>
   </div>
   <div class="hero-cta">
     <div class="hero-acts">
-      <button class="btn btn-dark" id="ctaUpload" type="button"><span>جرّبي المجموعة</span></button>
-      <a class="btn-link" href="#collection">تصفّحي المجموعة</a>
+      <button class="btn btn-dark" id="ctaUpload" type="button"><span data-en="Try the collection">جرّبي المجموعة</span></button>
+      <a class="btn-link" href="#collection" data-en="Browse the collection">تصفّحي المجموعة</a>
     </div>
-    <a class="hero-privacy" href="#privacy">🔒 صورتكِ تبقى على هاتفكِ — لا نحتفظ بها</a>
+    <a class="hero-privacy" href="#privacy" data-en="🔒 Your photo stays on your phone — we never keep it">🔒 صورتكِ تبقى على هاتفكِ — لا نحتفظ بها</a>
   </div>
   <div class="mirror-wrap">
-    <div class="mirror" id="mirror" role="button" tabindex="0" aria-label="عرض القطعة">
+    <div class="mirror" id="mirror" role="button" tabindex="0" aria-label="عرض القطعة" data-en-aria="View piece">
       <img class="m-layer" alt=""><img class="m-layer" alt="">
       <i class="m-sheen"></i>
-      <div class="m-weave"><span>نُجهّزها لكِ…</span></div>
+      <div class="m-weave"><span data-en="Preparing it for you…">نُجهّزها لكِ…</span></div>
     </div>
     <div class="m-cap"><b id="mName"></b><span id="mLine"></span>
-      <div class="m-colors hidden" id="mColors" aria-label="الألوان"></div>
-      <button class="m-pick" id="mPick" type="button">اختاريها للتجربة</button></div>
+      <div class="m-colors hidden" id="mColors" aria-label="الألوان" data-en-aria="Colours"></div>
+      <button class="m-pick" id="mPick" type="button" data-en="Choose it to try">اختاريها للتجربة</button></div>
     <div class="m-acts">
-      <button class="ic heart" id="mHeart" type="button" aria-label="أضيفي للمفضّلة" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" stroke="currentColor" stroke-width="1.3"/></svg></button>
-      <button class="btn btn-dark sm" id="mBag" type="button"><span>أضيفيها للحقيبة</span></button>
-      <button class="ic" id="mShare" type="button" aria-label="شاركي"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M8 8l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6 12v8h12v-8" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></button>
+      <button class="ic heart" id="mHeart" type="button" aria-label="أضيفي للمفضّلة" data-en-aria="Add to favourites" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" stroke="currentColor" stroke-width="1.3"/></svg></button>
+      <button class="btn btn-dark sm" id="mBag" type="button"><span data-en="Add to bag">أضيفيها للحقيبة</span></button>
+      <button class="ic" id="mShare" type="button" aria-label="شاركي" data-en-aria="Share"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M8 8l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6 12v8h12v-8" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></button>
     </div>
   </div>
   <div class="swatches-wrap">
-    <div class="swatches" id="swatches" role="listbox" aria-label="اختاري قطعة"></div>
+    <div class="swatches" id="swatches" role="listbox" aria-label="اختاري قطعة" data-en-aria="Choose a piece"></div>
   </div>
 </section>
 
 <div class="marquee" aria-hidden="true"><div class="track" id="marquee"></div></div>
 
 <main>
-  <section class="statement reveal-words" aria-label="عن echarpe">
-    <p>كل طيّةٍ حكاية، وكل لونٍ مزاج.<br>اختاري ما يشبهكِ… <em>وشاهديه عليكِ أولاً.</em></p>
+  <section class="statement reveal-words" aria-label="عن echarpe" data-en-aria="About echarpe">
+    <p data-en-html="Every fold tells a story, every colour a mood.&lt;br&gt;Choose what feels like you… &lt;em&gt;and see it on you first.&lt;/em&gt;">كل طيّةٍ حكاية، وكل لونٍ مزاج.<br>اختاري ما يشبهكِ… <em>وشاهديه عليكِ أولاً.</em></p>
   </section>
 
   <section class="banner" aria-hidden="true">
@@ -85,10 +87,10 @@
 
   <section class="collection" id="collection">
     <div class="sec-head">
-      <h2>المجموعة</h2>
-      <p class="sec-sub">خاماتٌ ناعمة، وتفاصيلُ صُنعت لتدوم.</p>
+      <h2 data-en="The Collection">المجموعة</h2>
+      <p class="sec-sub" data-en="Soft fabrics, details made to last.">خاماتٌ ناعمة، وتفاصيلُ صُنعت لتدوم.</p>
     </div>
-    <div class="tones hidden" id="tones" aria-label="رف الألوان"></div>
+    <div class="tones hidden" id="tones" aria-label="رف الألوان" data-en-aria="Colour shelf"></div>
     <div class="filters" id="filters" role="tablist"></div>
     <div class="grid" id="grid"></div>
   </section>
@@ -101,34 +103,34 @@
       </div>
     </div>
     <div class="salon-copy">
-      <h2>جرّبي قبل أن تختاري</h2>
-      <p>صورةٌ واحدة منكِ، وفي لحظات تظهر كل قطعة من المجموعة عليكِ.</p>
+      <h2 data-en="Try before you choose">جرّبي قبل أن تختاري</h2>
+      <p data-en="One photo of you, and in moments every piece of the collection appears on you.">صورةٌ واحدة منكِ، وفي لحظات تظهر كل قطعة من المجموعة عليكِ.</p>
       <ol class="steps">
-        <li><b>١</b><span>صورةٌ واحدة</span></li>
-        <li><b>٢</b><span>لحظات</span></li>
-        <li><b>٣</b><span>المجموعة عليكِ</span></li>
+        <li><b data-en="1">١</b><span data-en="One photo">صورةٌ واحدة</span></li>
+        <li><b data-en="2">٢</b><span data-en="A few moments">لحظات</span></li>
+        <li><b data-en="3">٣</b><span data-en="The collection, on you">المجموعة عليكِ</span></li>
       </ol>
-      <button class="btn btn-dark" id="ctaSalon" type="button"><span>جرّبي المجموعة</span></button>
+      <button class="btn btn-dark" id="ctaSalon" type="button"><span data-en="Try the collection">جرّبي المجموعة</span></button>
     </div>
   </section>
 
   <section class="privacy" id="privacy">
     <div class="lock" aria-hidden="true"><svg viewBox="0 0 48 48"><rect x="10" y="21" width="28" height="20" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M16 21v-5a8 8 0 0 1 16 0v5" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="24" cy="31" r="2" fill="currentColor"/></svg></div>
-    <h2>خصوصيتكِ أولاً</h2>
+    <h2 data-en="Your privacy comes first">خصوصيتكِ أولاً</h2>
     <ul>
-      <li><b>على هاتفكِ أنتِ فقط</b><span>صورتكِ وإطلالاتكِ تُحفظ على هاتفكِ، ولا يراها أحدٌ غيركِ.</span></li>
-      <li><b>لا نحتفظ بها</b><span>تُرسَل الصورة لحظة تجهيز الإطلالات فقط، ولا نخزّنها في أي مكانٍ لدينا.</span></li>
-      <li><b>القرار لكِ</b><span>احذفي صورتكِ وإطلالاتكِ من هاتفكِ في أي وقت، بلمسة واحدة.</span></li>
+      <li><b data-en="On your phone only">على هاتفكِ أنتِ فقط</b><span data-en="Your photo and looks are saved on your phone, and no one else sees them.">صورتكِ وإطلالاتكِ تُحفظ على هاتفكِ، ولا يراها أحدٌ غيركِ.</span></li>
+      <li><b data-en="We never keep it">لا نحتفظ بها</b><span data-en="Your photo is sent only while your looks are being prepared, and we never store it anywhere.">تُرسَل الصورة لحظة تجهيز الإطلالات فقط، ولا نخزّنها في أي مكانٍ لدينا.</span></li>
+      <li><b data-en="Your choice">القرار لكِ</b><span data-en="Delete your photo and looks from your phone at any time, with one tap.">احذفي صورتكِ وإطلالاتكِ من هاتفكِ في أي وقت، بلمسة واحدة.</span></li>
     </ul>
-    <button class="btn btn-ghost" id="forgetMe" type="button"><span>احذفي صورتي من هاتفي</span></button>
+    <button class="btn btn-ghost" id="forgetMe" type="button"><span data-en="Delete my photo from my phone">احذفي صورتي من هاتفي</span></button>
   </section>
 </main>
 
 <footer>
   <img class="foot-logo" src="../logo.png" alt="echarpe">
-  <div class="foot-tag">طُرَح · إسدالات</div>
-  <nav><a href="#collection">المجموعة</a><a href="#privacy">الخصوصية</a><a href="../loyalty/">المتجر</a></nav>
-  <p class="fine">الإطلالات مُنشأة بالذكاء الاصطناعي للتقريب، وقد تختلف تفاصيل الخامة قليلاً.</p>
+  <div class="foot-tag" data-en="Hijabs · Scarves">طُرَح · إسدالات</div>
+  <nav><a href="#collection" data-en="Collection">المجموعة</a><a href="#privacy" data-en="Privacy">الخصوصية</a><a href="../loyalty/" data-en="Shop">المتجر</a></nav>
+  <p class="fine" data-en="Looks are AI-generated as a preview; fabric details may vary slightly.">الإطلالات مُنشأة بالذكاء الاصطناعي للتقريب، وقد تختلف تفاصيل الخامة قليلاً.</p>
 </footer>
 
 <input type="file" id="file" accept="image/*" hidden>
@@ -138,23 +140,23 @@
   <div class="dust" id="dust"></div>
   <div class="aw-arch"><img id="awakenFace" alt=""><i class="scan"></i></div>
   <div class="aw-words">
-    <p id="w1" class="letters">أهلاً بكِ</p>
-    <p id="w2" class="letters">نُجهّز المجموعة لكِ</p>
-    <small id="w3">لحظات، وتظهر كل قطعة عليكِ</small>
+    <p id="w1" class="letters" data-en="Welcome">أهلاً بكِ</p>
+    <p id="w2" class="letters" data-en="Preparing the collection for you">نُجهّز المجموعة لكِ</p>
+    <small id="w3" data-en="In moments, every piece appears on you">لحظات، وتظهر كل قطعة عليكِ</small>
   </div>
 </div>
 
 <div class="dock" id="dock">
   <div class="me"><img id="dockFace" alt=""></div>
-  <div class="txt"><b>إطلالاتكِ</b><small id="dockSub">نُجهّزها لكِ…</small></div>
-  <button type="button" class="dock-poll" id="dockPoll">ساعديني أختار</button>
-  <button type="button" class="bag-btn light" id="dockBag" aria-label="حقيبتكِ"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12l-1 12H7L6 8z" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M9 8V6a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.3"/></svg><b class="bagCount">0</b></button>
+  <div class="txt"><b data-en="Your looks">إطلالاتكِ</b><small id="dockSub" data-en="Preparing them for you…">نُجهّزها لكِ…</small></div>
+  <button type="button" class="dock-poll" id="dockPoll" data-en="Help me choose">ساعديني أختار</button>
+  <button type="button" class="bag-btn light" id="dockBag" aria-label="حقيبتكِ" data-en-aria="Your bag"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12l-1 12H7L6 8z" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M9 8V6a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.3"/></svg><b class="bagCount">0</b></button>
   <div class="prog"><i id="dockProg"></i></div>
 </div>
 
 <!-- ✦ عرض القطعة -->
-<div class="lb" id="lb" role="dialog" aria-modal="true" aria-label="القطعة">
-  <button class="lb-x" id="lbClose" aria-label="إغلاق"><i></i><i></i></button>
+<div class="lb" id="lb" role="dialog" aria-modal="true" aria-label="القطعة" data-en-aria="Piece">
+  <button class="lb-x" id="lbClose" aria-label="إغلاق" data-en-aria="Close"><i></i><i></i></button>
   <div class="lb-pic" id="lbPic">
     <img class="look" id="lbLook" alt="">
     <img class="prod" id="lbProd" alt="">
@@ -163,72 +165,72 @@
   <div class="lb-thumbs hidden" id="lbThumbs"></div>
   <div class="lb-info">
     <div class="eyebrow" id="lbLine"></div>
-    <div class="m-colors lb-colors hidden" id="lbColors" aria-label="الألوان"></div>
+    <div class="m-colors lb-colors hidden" id="lbColors" aria-label="الألوان" data-en-aria="Colours"></div>
     <h3 id="lbName"></h3>
     <div class="lb-price" id="lbPrice"></div>
     <div class="lb-acts">
-      <button class="btn btn-dark" id="lbTry" type="button"><span>جرّبيها عليكِ</span></button>
-      <button class="btn btn-dark" id="lbBag" type="button"><span>أضيفيها للحقيبة</span></button>
-      <button class="btn btn-ghost" id="lbShare" type="button"><span>شاركي إطلالتكِ</span></button>
-      <button class="ic heart" id="lbHeart" type="button" aria-label="أضيفي للمفضّلة" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" stroke="currentColor" stroke-width="1.3"/></svg></button>
+      <button class="btn btn-dark" id="lbTry" type="button"><span data-en="Try it on">جرّبيها عليكِ</span></button>
+      <button class="btn btn-dark" id="lbBag" type="button"><span data-en="Add to bag">أضيفيها للحقيبة</span></button>
+      <button class="btn btn-ghost" id="lbShare" type="button"><span data-en="Share your look">شاركي إطلالتكِ</span></button>
+      <button class="ic heart" id="lbHeart" type="button" aria-label="أضيفي للمفضّلة" data-en-aria="Add to favourites" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" stroke="currentColor" stroke-width="1.3"/></svg></button>
     </div>
-    <small class="fine" id="lbHint">اضغطي مطوّلاً على الصورة لرؤية القطعة وحدها.</small>
+    <small class="fine" id="lbHint" data-en="Press and hold the photo to see the piece on its own.">اضغطي مطوّلاً على الصورة لرؤية القطعة وحدها.</small>
   </div>
 </div>
 
 <!-- ✦ الحقيبة -->
-<div class="sheet" id="bag" role="dialog" aria-modal="true" aria-label="حقيبتكِ">
+<div class="sheet" id="bag" role="dialog" aria-modal="true" aria-label="حقيبتكِ" data-en-aria="Your bag">
   <div class="sheet-bg" data-close></div>
   <div class="sheet-panel">
-    <div class="sheet-head"><h3>حقيبتكِ</h3><button class="lb-x small" data-close aria-label="إغلاق"><i></i><i></i></button></div>
+    <div class="sheet-head"><h3 data-en="Your bag">حقيبتكِ</h3><button class="lb-x small" data-close aria-label="إغلاق" data-en-aria="Close"><i></i><i></i></button></div>
     <div class="bag-list" id="bagList"></div>
     <div class="bag-foot" id="bagFoot">
       <div class="bag-total" id="bagTotal"></div>
-      <button class="btn btn-dark wide" id="bagCheckout" type="button"><span>أكملي الطلب</span></button>
-      <a class="bag-wa" id="bagWa" href="#" target="_blank" rel="noopener">أو اطلبي عبر واتساب</a>
+      <button class="btn btn-dark wide" id="bagCheckout" type="button"><span data-en="Complete your order">أكملي الطلب</span></button>
+      <a class="bag-wa" id="bagWa" href="#" target="_blank" rel="noopener" data-en="or order on WhatsApp">أو اطلبي عبر واتساب</a>
     </div>
     <form class="checkout hidden" id="checkout" novalidate>
-      <label>الاسم<input type="text" id="coName" autocomplete="name" required></label>
-      <label>رقم الموبايل (واتساب)<input type="tel" id="coPhone" inputmode="tel" autocomplete="tel" placeholder="01xxxxxxxxx" required></label>
+      <label><span data-en="Name">الاسم</span><input type="text" id="coName" autocomplete="name" required></label>
+      <label><span data-en="Mobile number (WhatsApp)">رقم الموبايل (واتساب)</span><input type="tel" id="coPhone" inputmode="tel" autocomplete="tel" placeholder="01xxxxxxxxx" required></label>
       <div class="seg" role="radiogroup">
-        <button type="button" data-ful="delivery" class="on">توصيل للبيت</button>
-        <button type="button" data-ful="pickup">استلام من الفرع</button>
+        <button type="button" data-ful="delivery" class="on" data-en="Home delivery">توصيل للبيت</button>
+        <button type="button" data-ful="pickup" data-en="Pick up in store">استلام من الفرع</button>
       </div>
       <div id="coDelivery">
-        <label>المحافظة<select id="coGov"></select></label>
-        <label>العنوان بالتفصيل<textarea id="coAddr" rows="2" placeholder="المنطقة، الشارع، رقم العمارة والشقة"></textarea></label>
+        <label><span data-en="Governorate">المحافظة</span><select id="coGov"></select></label>
+        <label><span data-en="Full address">العنوان بالتفصيل</span><textarea id="coAddr" rows="2" placeholder="المنطقة، الشارع، رقم العمارة والشقة" data-en-ph="Area, street, building and flat number"></textarea></label>
       </div>
       <div id="coPickup" class="hidden">
-        <label>الفرع</label>
+        <label data-en="Store">الفرع</label>
         <div class="chips" id="coBranches"></div>
       </div>
-      <label>ملاحظات (اختياري)<input type="text" id="coNotes" placeholder="مثلاً: ميعاد مناسب للتوصيل"></label>
+      <label><span data-en="Notes (optional)">ملاحظات (اختياري)</span><input type="text" id="coNotes" placeholder="مثلاً: ميعاد مناسب للتوصيل" data-en-ph="e.g. a good time for delivery"></label>
       <div class="co-sum" id="coSum"></div>
       <div class="err" id="coErr"></div>
-      <button class="btn btn-dark wide" type="submit" id="coSubmit"><span>تأكيد الطلب</span></button>
-      <small class="fine">طلبكِ بيوصلنا فوراً، وهنكلمكِ على واتساب للتأكيد.</small>
-      <button type="button" class="bag-wa" id="coBack">رجوع للحقيبة</button>
+      <button class="btn btn-dark wide" type="submit" id="coSubmit"><span data-en="Confirm order">تأكيد الطلب</span></button>
+      <small class="fine" data-en="Your order reaches us instantly, and we’ll confirm it with you on WhatsApp.">طلبكِ بيوصلنا فوراً، وهنكلمكِ على واتساب للتأكيد.</small>
+      <button type="button" class="bag-wa" id="coBack" data-en="Back to bag">رجوع للحقيبة</button>
     </form>
     <div class="order-done hidden" id="orderDone">
       <div class="ok">✓</div>
-      <h3>اتسجّل طلبكِ</h3>
+      <h3 data-en="Your order is placed">اتسجّل طلبكِ</h3>
       <p id="doneText"></p>
-      <button class="btn btn-dark" type="button" data-close><span>رجوع للمجموعة</span></button>
+      <button class="btn btn-dark" type="button" data-close><span data-en="Back to the collection">رجوع للمجموعة</span></button>
     </div>
   </div>
 </div>
 
 <!-- ✦ المشاركة -->
-<div class="sheet" id="shareSheet" role="dialog" aria-modal="true" aria-label="المشاركة">
+<div class="sheet" id="shareSheet" role="dialog" aria-modal="true" aria-label="المشاركة" data-en-aria="Share">
   <div class="sheet-bg" data-close></div>
   <div class="sheet-panel share-panel">
-    <div class="sheet-head"><h3 id="shareTitle">شاركي إطلالتكِ</h3><button class="lb-x small" data-close aria-label="إغلاق"><i></i><i></i></button></div>
+    <div class="sheet-head"><h3 id="shareTitle">شاركي إطلالتكِ</h3><button class="lb-x small" data-close aria-label="إغلاق" data-en-aria="Close"><i></i><i></i></button></div>
     <div class="share-preview"><img id="shareImg" alt=""></div>
     <div class="share-acts">
-      <button class="btn btn-dark" id="shareGo" type="button"><span>شاركي الآن</span></button>
-      <a class="btn btn-ghost" id="shareSave" download="echarpe.jpg" href="#"><span>احفظي الصورة</span></a>
+      <button class="btn btn-dark" id="shareGo" type="button"><span data-en="Share now">شاركي الآن</span></button>
+      <a class="btn btn-ghost" id="shareSave" download="echarpe.jpg" href="#"><span data-en="Save image">احفظي الصورة</span></a>
     </div>
-    <small class="fine">الصورة تُصنع على هاتفكِ، ولا تُنشر إلا إذا شاركتِها أنتِ.</small>
+    <small class="fine" data-en="The image is made on your phone and is only posted if you choose to share it.">الصورة تُصنع على هاتفكِ، ولا تُنشر إلا إذا شاركتِها أنتِ.</small>
   </div>
 </div>
 
@@ -238,8 +240,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
-<script src="../tryon/photo-core.js?v=2610242130"></script>
-<script src="./atelier-core.js?v=2610242130"></script>
-<script src="./atelier.js?v=2610242130"></script>
+<script src="../tryon/photo-core.js?v=2610242300"></script>
+<script src="./atelier-core.js?v=2610242300"></script>
+<script src="./atelier.js?v=2610242300"></script>
 </body>
 </html>

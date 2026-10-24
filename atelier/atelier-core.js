@@ -43,18 +43,18 @@
     ["linen-violet",     "ميسي شيفون كويتي بنفسجي",     "chiffon", "بنفسجي",      ["linen-violet-2"], 490]
   ];
   var LINES = [
-    { id: "all",    ar: "الكل" },
-    { id: "crepe",  ar: "الكريب" },
-    { id: "plisse", ar: "البليسيه" },
-    { id: "mono",   ar: "المونوجرام" },
-    { id: "zebre",  ar: "الزيبرا" },
-    { id: "kinar",  ar: "الكينار لينن" },
-    { id: "chiffon", ar: "الشيفون" },
-    { id: "isdal",  ar: "الإسدال" },
-    { id: "other",  ar: "قطع أخرى" }
+    { id: "all",    ar: "الكل",          en: "All" },
+    { id: "crepe",  ar: "الكريب",        en: "Crepe" },
+    { id: "plisse", ar: "البليسيه",      en: "Plissé" },
+    { id: "mono",   ar: "المونوجرام",    en: "Monogram" },
+    { id: "zebre",  ar: "الزيبرا",       en: "Zebra" },
+    { id: "kinar",  ar: "الكينار لينن",  en: "Kinar Linen" },
+    { id: "chiffon", ar: "الشيفون",      en: "Chiffon" },
+    { id: "isdal",  ar: "الإسدال",       en: "Prayer Dresses" },
+    { id: "other",  ar: "قطع أخرى",      en: "More Pieces" }
   ];
-  function lineName(id) {
-    for (var i = 0; i < LINES.length; i++) if (LINES[i].id === id) return LINES[i].ar;
+  function lineName(id, lang) {
+    for (var i = 0; i < LINES.length; i++) if (LINES[i].id === id) return lang === "en" ? LINES[i].en : LINES[i].ar;
     return "";
   }
   function houseCollection(base) {
@@ -95,7 +95,9 @@
                name: String(it.name || "قطعة").slice(0, 60), price: Number(it.price) || 0,
                // من غير موديل = قطعة لوحدها (مش كل الكريب في كارت واحد)
                family: String(it.family || "").trim() || ("solo-" + it.id),
-               colorName: String(it.colorName || "").slice(0, 30), extras: Math.max(0, Number(it.extras) || 0),
+               colorName: String(it.colorName || "").slice(0, 30),
+               nameEn: String(it.nameEn || "").slice(0, 60), colorEn: String(it.colorEn || "").slice(0, 40),
+               familyEn: String(it.familyEn || "").slice(0, 40), extras: Math.max(0, Number(it.extras) || 0),
                line: kind === "isdal" ? "isdal" : line, kind: kind, img: "", tryable: true, admin: true };
     });
   }
@@ -188,10 +190,13 @@
      بدل عشرات الكروت المتشابهة. الترتيب = أول ظهور. */
   var LINE_TITLE = { crepe: "كريب", plisse: "بليسيه", mono: "مونوجرام", zebre: "زيبرا", chiffon: "ميسي شيفون كويتي", kinar: "كينار لينن كويتي ليدي",
                      isdal: "إسدال", other: "قطع مختارة", shop: "جديد" };
+  var LINE_TITLE_EN = { crepe: "Crepe", plisse: "Plissé", mono: "Monogram", zebre: "Zebra", chiffon: "Messi Kuwaiti Chiffon",
+                        kinar: "Kuwaiti Lady Kinar Linen", isdal: "Prayer Dress", other: "Selected Pieces", shop: "New" };
   function modelTitle(items) {
     var a = items[0] || {};
     var fam = String(a.family || "");
     if (items.length === 1) return a.name || "قطعة";
+    if (a.modelTitle) return a.modelTitle;              // اسم الموديل بالإنجليزي (localize)
     if (fam && !LINE_TITLE[fam]) return fam;            // اسم موديل من صفحة الإدارة
     return LINE_TITLE[a.line] || a.name || "قطعة";
   }
@@ -209,15 +214,15 @@
   /* 🎨 رف الألوان — درجات كتير صعب تتسمّى، فبنجمّعها في عائلات لون
      (من لون القماش في الصورة) والعميلة بتفلتر بيها بنقطة لون. */
   var TONES = [
-    { id: "black",  ar: "أسود",         hex: "#1d1c1c", rgb: [30, 29, 30] },
-    { id: "grey",   ar: "رمادي",        hex: "#8d8b88", rgb: [135, 133, 130] },
-    { id: "white",  ar: "أبيض وأوف",    hex: "#efe8dc", rgb: [236, 230, 218] },
-    { id: "beige",  ar: "بيج ورملي",    hex: "#cdb48e", rgb: [200, 176, 140] },
-    { id: "brown",  ar: "بني وموكا",    hex: "#7a5a44", rgb: [118, 88, 66] },
-    { id: "navy",   ar: "كحلي وأزرق",   hex: "#2f3a5e", rgb: [48, 60, 100] },
-    { id: "green",  ar: "أخضر وزيتي",   hex: "#5f6b4a", rgb: [92, 108, 74] },
-    { id: "pink",   ar: "وردي وأحمر",   hex: "#c77f8e", rgb: [196, 120, 134] },
-    { id: "purple", ar: "بنفسجي",       hex: "#7b528f", rgb: [122, 80, 142] }
+    { id: "black",  ar: "أسود", en: "Black",         hex: "#1d1c1c", rgb: [30, 29, 30] },
+    { id: "grey",   ar: "رمادي", en: "Grey",        hex: "#8d8b88", rgb: [135, 133, 130] },
+    { id: "white",  ar: "أبيض وأوف", en: "White & Ivory",    hex: "#efe8dc", rgb: [236, 230, 218] },
+    { id: "beige",  ar: "بيج ورملي", en: "Beige & Sand",    hex: "#cdb48e", rgb: [200, 176, 140] },
+    { id: "brown",  ar: "بني وموكا", en: "Brown & Mocha",    hex: "#7a5a44", rgb: [118, 88, 66] },
+    { id: "navy",   ar: "كحلي وأزرق", en: "Navy & Blue",   hex: "#2f3a5e", rgb: [48, 60, 100] },
+    { id: "green",  ar: "أخضر وزيتي", en: "Green & Olive",   hex: "#5f6b4a", rgb: [92, 108, 74] },
+    { id: "pink",   ar: "وردي وأحمر", en: "Pink & Red",   hex: "#c77f8e", rgb: [196, 120, 134] },
+    { id: "purple", ar: "بنفسجي", en: "Purple",       hex: "#7b528f", rgb: [122, 80, 142] }
   ];
   /* لو اسم اللون معروف (مكتوب في المجموعة) بناخد العائلة منه — أدق من
      الصورة (الإضاءة بتخلّي البنفسجي يبان كحلي والروز يبان بيج). */
@@ -282,9 +287,61 @@
       code === "unauthenticated" || code === "";
   }
 
-  function fmtPrice(n) {
+  function fmtPrice(n, lang) {
     var v = Math.round(Number(n) || 0);
-    return v ? v.toLocaleString("ar-EG") + " ج.م" : "";
+    if (!v) return "";
+    return lang === "en" ? v.toLocaleString("en-US") + " EGP" : v.toLocaleString("ar-EG") + " ج.م";
+  }
+
+  /* 🌐 النسخة الإنجليزي — أسماء الألوان بتتترجم كلمة كلمة («أسود بكنار
+     أبيض» → «Black with White Border»)، واسم الموديل من LINE_TITLE_EN أو
+     اللي اتكتب في صفحة الإدارة. القيم العربي بتفضل في nameAr/colorAr. */
+  var COLOR_WORDS = {
+    "أسود": "Black", "اسود": "Black", "أبيض": "White", "ابيض": "White", "رمادي": "Grey", "فحمي": "Charcoal",
+    "دخاني": "Smoke", "توب": "Taupe", "كاكي": "Khaki", "بيج": "Beige", "حجري": "Stone", "روز": "Rose",
+    "بنفسجي": "Violet", "ليلكي": "Lilac", "كحلي": "Navy", "أزرق": "Blue", "ازرق": "Blue", "لبني": "Baby Blue",
+    "زيتي": "Olive", "أخضر": "Green", "اخضر": "Green", "منت": "Mint", "بينك": "Pink", "وردي": "Pink",
+    "بورجندي": "Burgundy", "نبيتي": "Wine", "أحمر": "Red", "احمر": "Red", "مستردة": "Mustard", "برتقالي": "Orange",
+    "موكا": "Mocha", "بني": "Brown", "كاميل": "Camel", "رملي": "Sand", "فضّي": "Silver", "فضي": "Silver",
+    "سكري": "Sugar", "كريمي": "Cream", "نود": "Nude", "موف": "Mauve", "زيتوني": "Olive", "قهوة": "Coffee"
+  };
+  var COLOR_MOD = { "فاتح": "Light", "غامق": "Dark", "داكن": "Dark" };
+  function colorPhraseEn(ar) {
+    var w = String(ar || "").trim().replace(/^أوف وايت|^اوف وايت/, "OFFWHITE").split(/\s+/).filter(Boolean);
+    if (!w.length) return "";
+    var out = [], mod = "";
+    for (var i = 0; i < w.length; i++) {
+      var x = w[i];
+      if (x === "OFFWHITE") { out.push("Off-White"); continue; }
+      if (COLOR_MOD[x]) { mod = COLOR_MOD[x]; continue; }
+      if (COLOR_WORDS[x]) { out.push(COLOR_WORDS[x]); continue; }
+      return "";                                         // كلمة مش معروفة → منترجمش نص
+    }
+    // العربي: الاسم قبل الصفة («رمادي فحمي») — الإنجليزي بالعكس (Charcoal Grey)
+    return (mod ? mod + " " : "") + out.reverse().join(" ");
+  }
+  function colorToEn(ar) {
+    var s = String(ar || "").trim();
+    if (!s) return "";
+    var m = /^(.+?)\s+بكنار\s+(.+)$/.exec(s);          // «X بكنار Y»
+    if (m) { var a = colorPhraseEn(m[1]), b = colorPhraseEn(m[2]); return a && b ? a + " with " + b + " Border" : ""; }
+    return colorPhraseEn(s);
+  }
+  function titleEnFor(p) {
+    if (p.familyEn) return String(p.familyEn);
+    var fam = String(p.family || "");
+    if (LINE_TITLE_EN[fam]) return LINE_TITLE_EN[fam];
+    for (var k in LINE_TITLE) if (LINE_TITLE[k] === fam && LINE_TITLE_EN[k]) return LINE_TITLE_EN[k];
+    return "";
+  }
+  function localizeProduct(p, lang) {
+    if (lang !== "en" || !p || p.nameAr !== undefined) return p;
+    p.nameAr = p.name; p.colorAr = p.colorName || "";
+    var title = titleEnFor(p), color = p.colorEn || colorToEn(p.colorName);
+    p.colorName = color || p.colorName || "";
+    if (title) p.modelTitle = title;
+    p.name = p.nameEn || (title && color ? title + " — " + color : title || p.name);
+    return p;
   }
 
   var API = {
@@ -292,6 +349,9 @@
     HOUSE: HOUSE,
     LINES: LINES,
     houseCollection: houseCollection,
+    LINE_TITLE_EN: LINE_TITLE_EN,
+    colorToEn: colorToEn,
+    localizeProduct: localizeProduct,
     houseSeenFrom: houseSeenFrom,
     houseUnseen: houseUnseen,
     ADMIN_DOC: ADMIN_DOC,
