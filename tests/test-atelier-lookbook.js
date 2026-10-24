@@ -113,13 +113,16 @@ const items = AC.shopItemsFrom({ items: [
 assert(items.map((p) => p.id).join(',') === '1,5', 'نفس شرط shopItems بتاع loyalty');
 assert(items[0].tryable === true && items[1].tryable === false, 'المنتج من غير صورة data-URL بيتعرض بس مش بيتجرّب');
 assert(AC.buildBatches([1, 2, 3, 4, 5, 6], 4).map((b) => b.length).join() === '4,2', 'دفعات ٤ بالترتيب');
-const prods = AC.houseCollection('collection/');
+// منتجات وهمية للاختبار: موديل بـ٦ ألوان، وموديل بـ٣، وقطع تانية
+const mk = (id, line, fam) => ({ id, line, family: fam || line, kind: 'hijab', tryable: true });
+const prods = ['m1', 'm2', 'm3', 'm4', 'm5', 'm6'].map((i) => mk(i, 'mono'))
+  .concat(['c1', 'c2', 'c3'].map((i) => mk(i, 'crepe')), ['z1', 'z2', 'z3', 'z4'].map((i) => mk(i, 'zebre')));
 const r1 = AC.buildRound(null, prods, {}, {});
 assert(r1.length === AC.ROUND_SIZE && r1.every((p) => p.kind === 'hijab'), 'أول تجربة = ٦ طرح (من غير إسدال)');
-const mono = prods.find((p) => p.line === 'mono');
+const mono = prods[3];
 const rm = AC.buildRound(mono, prods, {}, {});
-assert(rm[0] === mono && rm.length === 6 && rm.every((p) => p.line === 'mono'), '«جرّبيها» على مونوجرام = القطعة + ألوانها من نفس الموديل');
-const crepe = prods.find((p) => p.line === 'crepe');
+assert(rm[0] === mono && rm.length === 6 && rm.every((p) => p.line === 'mono'), '«جرّبيها» على موديل = القطعة + ألوانها من نفس الموديل');
+const crepe = prods[7];
 const rc = AC.buildRound(crepe, prods, {}, {});
 assert(rc[0] === crepe && rc.filter((p) => p.line === 'crepe').length === 3 && rc.length === 6, 'لو ألوانها أقل من ٦ بنكمّل من الباقي');
 assert(AC.buildRound(mono, prods, { [mono.id]: 'x' }, {}).indexOf(mono) < 0, 'اللي إطلالته جاهزة مش بتتولّد تاني');
@@ -149,7 +152,7 @@ assert(AC.kindOf({ name: 'إسدال صلاة كحلي' }) === 'isdal' && AC.kin
 const tb = AC.takeBatch([{ id: 1, kind: 'hijab' }, { id: 2, kind: 'isdal' }, { id: 3, kind: 'hijab' }], 4);
 assert(tb.batch.map((p) => p.id).join() === '1,3' && tb.rest.map((p) => p.id).join() === '2', 'الطرح والإسدال مبيتخلطوش في شبكة واحدة');
 const house = AC.houseCollection('collection/');
-assert(house.length >= 12 && house.every((p) => p.tryable && p.line && AC.lineName(p.line)), 'مجموعة الدار كاملة وقابلة للقياس');
+assert(house.length === 5 && house.every((p) => p.tryable && p.line === 'chiffon' && AC.lineName(p.line)), 'المجموعة = ميسي شيفون كويتي بس (القديم اتمسح)');
 assert(house.every((p) => fs.existsSync(path.join(ROOT, 'atelier', p.img))), 'كل صورة في مجموعة الدار موجودة فعلاً');
 assert(!house.some((p) => p.kind === 'isdal'), 'الإسدالات اتشالت من المجموعة');
 const linen = house.filter((p) => p.line === 'chiffon');
@@ -202,10 +205,10 @@ if (O) {
   assert(O.validateOrder({ name: 'سارة', phone: '01148664485', fulfillment: 'delivery', governorate: 'القاهرة', address: 'التجمع شارع ٩٠' }).phone === '01148664485', 'طلب توصيل سليم');
   assert(O.validateOrder({ name: 'سارة', phone: '01148664485', fulfillment: 'delivery' }).error === 'ADDRESS', 'التوصيل من غير عنوان بيترفض');
   assert(O.validateOrder({ name: 'سارة', phone: '01148664485', fulfillment: 'pickup' }).error === 'BRANCH', 'الاستلام من غير فرع بيترفض');
-  const pi = O.priceItems([{ docId: 'a1', price: 1, name: 'x' }, { barcode: 'B9', price: 5 }, { img: 'collection/mono-gris.jpg', name: 'مونوجرام' }, { img: 'https://evil/x.jpg' }],
+  const pi = O.priceItems([{ docId: 'a1', price: 1, name: 'x' }, { barcode: 'B9', price: 5 }, { img: 'collection/linen-rose.jpg', name: 'ميسي' }, { img: 'https://evil/x.jpg' }],
     [{ id: 'a1', name: 'كريب', price: 350, family: 'كوري' }], [{ barcode: 'B9', name: 'شال', price: 500 }]);
-  assert(pi[0].price === 350 && pi[1].price === 500 && pi[2].price === 0, 'الأسعار من السيرفر مش من الموبايل');
-  assert(/atelierImg\?id=a1$/.test(pi[0].imgUrl) && /\/atelier\/collection\/mono-gris\.jpg$/.test(pi[2].imgUrl) && pi[3].imgUrl === '', 'صورة الإشعار: لينك المنتج بس (مفيش لينكات من برّه)');
+  assert(pi[0].price === 350 && pi[1].price === 500 && pi[2].price === 490 && pi[3].price === 0, 'الأسعار من السيرفر مش من الموبايل');
+  assert(/atelierImg\?id=a1$/.test(pi[0].imgUrl) && /\/atelier\/collection\/linen-rose\.jpg$/.test(pi[2].imgUrl) && pi[3].imgUrl === '', 'صورة الإشعار: لينك المنتج بس (مفيش لينكات من برّه)');
   assert(!('img' in pi[0]), 'مفيش صور بتتخزّن في الأوردر — لينكات بس');
   assert(O.shippingFor({ shippingFee: 50, freeOver: 1000 }, 'delivery', 400) === 50 && O.shippingFor({ shippingFee: 50, freeOver: 1000 }, 'delivery', 1200) === 0 && O.shippingFor({}, 'pickup', 10) === 0, 'الشحن على السيرفر');
   const g1 = O.guardDecide(null, 1000);
@@ -220,7 +223,8 @@ assert(!/match \/atelier_orders/.test(fs.readFileSync(path.join(ROOT, 'security'
 
 // ١٢) الموديلات + رف الألوان
 const models = AC.groupModels(AC.houseCollection('collection/'));
-assert(models.length === 5 && models.find((m) => m.title === 'مونوجرام').items.length === 6 && models.find((m) => m.title === 'ميسي شيفون كويتي').items.length === 5, 'القطع بتتجمّع في موديلات (كارت واحد + ألوان)');
+assert(models.length === 1 && models[0].title === 'ميسي شيفون كويتي' && models[0].items.length === 5, 'القطع بتتجمّع في موديلات (كارت واحد + ألوان)');
+assert(AC.groupModels(prods).length === 3, 'كل موديل كارت واحد');
 assert(AC.toneOf([40, 48, 82]) === 'navy' && AC.toneOf([28, 28, 28]) === 'black' && AC.toneOf([200, 176, 140]) === 'beige', 'عائلة اللون من لون القماش');
 assert(/d\.type === 'atelier-chat'/.test(LOY) && /chat=1/.test(LOY), '«كلّمينا في الشات» بيفتح شات التطبيق');
 assert(AC.groupModels(AC.atelierItemsFrom({ items: [{ id: 'a', line: 'crepe' }, { id: 'b', line: 'crepe' }, { id: 'c', line: 'crepe', family: 'كوري' }, { id: 'd', line: 'crepe', family: 'كوري' }] })).length === 3, 'قطع الإدارة من غير موديل كل واحدة لوحدها، واللي ليها نفس الموديل كارت واحد');
@@ -232,3 +236,4 @@ if (O) {
   });
   assert(O.priceItems([{ img: 'collection/linen-rose.jpg', name: 'x' }], [], [])[0].price === 490, 'طلب ميسي شيفون بيتحسب بـ٤٩٠ على السيرفر');
 }
+assert(['أسود', 'بنفسجي', 'رمادي توب', 'رمادي دخاني', 'روز'].map(AC.toneFromName).join() === 'black,purple,grey,grey,pink', 'عائلة اللون من الاسم لما يكون معروف');

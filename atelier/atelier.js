@@ -150,7 +150,7 @@
   }
   window.addEventListener("scroll", onScroll, { passive: true });
   (function marquee() {
-    var words = ["كريب", "بليسيه", "مونوجرام", "زيبرا", "إسدال", "echarpe"];
+    var words = ["ميسي شيفون كويتي", "ألوان جديدة", "جرّبي قبل ما تختاري", "echarpe"];
     var one = words.map(function (w) { return "<span>" + w + "</span><span><b>✦</b></span>"; }).join("");
     $("marquee").innerHTML = one + one;
   })();
@@ -372,6 +372,9 @@
     var lines = AC.LINES.slice();
     if (counts.shop) lines.splice(1, 0, { id: "shop", ar: "الجديد" });
     box.innerHTML = "";
+    // نوع واحد بس؟ الفلاتر ملهاش لازمة
+    var kinds = lines.filter(function (l) { return l.id !== "all" && counts[l.id]; }).length;
+    box.style.display = kinds < 2 ? "none" : "";
     lines.forEach(function (l) {
       if (!counts[l.id]) return;
       var b = el("button", l.id === state.line ? "on" : "", esc(l.ar) + "<sup>" + counts[l.id] + "</sup>");
@@ -385,6 +388,8 @@
   /* 🎨 رف الألوان: عائلة اللون بتتحسب من صورة القطعة نفسها (مرة واحدة) */
   function toneFor(p) {
     if (p.tone !== undefined) return Promise.resolve(p.tone);
+    var byName = AC.toneFromName(p.colorName);
+    if (byName) { p.tone = byName; return Promise.resolve(byName); }
     return loadImg(p.img).then(function (img) {
       var c = document.createElement("canvas"), x = c.getContext("2d"), w = img.naturalWidth, h = img.naturalHeight;
       c.width = c.height = 32; x.drawImage(img, w * .2, h * .2, w * .6, h * .6, 0, 0, 32, 32);
