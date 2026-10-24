@@ -250,7 +250,8 @@
   }
   function colorLabel(p) {
     var m = modelOf[p.id];
-    return m && m.items.length > 1 ? "لون " + arN(p.colorNo) + " من " + arN(m.items.length) : "";
+    if (!m || m.items.length < 2) return "";
+    return p.colorName || ("لون " + arN(p.colorNo) + " من " + arN(m.items.length));
   }
   function displayName(p) { var m = modelOf[p.id]; return m && m.items.length > 1 ? m.title : p.name; }
   function colorDot(v, on, onClick) {
@@ -823,6 +824,17 @@
     var img = $("lbLook"); img.src = look || p.img;
     img.style.animation = "none"; void img.offsetWidth; img.style.animation = "";
     $("lbProd").src = p.img; $("lbChip").src = p.img;
+    // 🖼️ صور زيادة لنفس اللون — اللمس بيعرضها مكان الصورة الكبيرة
+    var th = $("lbThumbs"), pics = [p.img].concat(p.gallery || []);
+    th.innerHTML = ""; th.classList.toggle("hidden", pics.length < 2 && !look);
+    if (look) pics = [look].concat(pics);
+    if (pics.length > 1) pics.forEach(function (u, i) {
+      var b = el("button", i === 0 ? "on" : "", '<img alt="">'); b.type = "button"; b.querySelector("img").src = u;
+      b.addEventListener("click", function () {
+        $("lbLook").src = u; th.querySelectorAll("button").forEach(function (x) { x.classList.toggle("on", x === b); });
+      });
+      th.appendChild(b);
+    });
     if (p.admin) fullSrc(p).then(function (u) {
       if (state.lbOpen !== p) return;
       $("lbProd").src = u; if (!state.looks[p.id]) $("lbLook").src = u;

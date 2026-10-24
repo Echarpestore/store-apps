@@ -123,8 +123,8 @@ const crepe = prods.find((p) => p.line === 'crepe');
 const rc = AC.buildRound(crepe, prods, {}, {});
 assert(rc[0] === crepe && rc.filter((p) => p.line === 'crepe').length === 3 && rc.length === 6, 'لو ألوانها أقل من ٦ بنكمّل من الباقي');
 assert(AC.buildRound(mono, prods, { [mono.id]: 'x' }, {}).indexOf(mono) < 0, 'اللي إطلالته جاهزة مش بتتولّد تاني');
-const isd = prods.find((p) => p.kind === 'isdal');
-assert(AC.buildRound(isd, prods, {}, {}).every((p) => p.kind === 'isdal'), 'الإسدال مبيتخلطش مع الطرح');
+const isd = { id: 'is1', kind: 'isdal', line: 'isdal', tryable: true };
+assert(AC.buildRound(isd, prods.concat([isd, { id: 'is2', kind: 'isdal', line: 'isdal', tryable: true }]), {}, {}).every((p) => p.kind === 'isdal'), 'الإسدال مبيتخلطش مع الطرح');
 const fam = AC.buildRound({ id: 'f', kind: 'hijab', line: 'other', family: 'كوري', tryable: true },
   [{ id: 'f', kind: 'hijab', line: 'other', family: 'كوري', tryable: true }, { id: 'z', kind: 'hijab', line: 'other', family: 'تاني', tryable: true }, { id: 'g', kind: 'hijab', line: 'crepe', family: 'كوري', tryable: true }], {}, {});
 assert(fam.map((p) => p.id).join() === 'f,g,z', 'الموديل من صفحة الإدارة بيسبق النوع');
@@ -151,7 +151,10 @@ assert(tb.batch.map((p) => p.id).join() === '1,3' && tb.rest.map((p) => p.id).jo
 const house = AC.houseCollection('collection/');
 assert(house.length >= 12 && house.every((p) => p.tryable && p.line && AC.lineName(p.line)), 'مجموعة الدار كاملة وقابلة للقياس');
 assert(house.every((p) => fs.existsSync(path.join(ROOT, 'atelier', p.img))), 'كل صورة في مجموعة الدار موجودة فعلاً');
-assert(house.some((p) => p.kind === 'isdal') && house.filter((p) => p.kind === 'isdal').every((p) => p.line === 'isdal'), 'الإسدال في المجموعة بنوعه الصح');
+assert(!house.some((p) => p.kind === 'isdal'), 'الإسدالات اتشالت من المجموعة');
+const linen = house.filter((p) => p.line === 'linen');
+assert(linen.length === 5 && linen.every((p) => p.colorName) && linen.find((p) => p.colorName === 'رمادي دخاني').gallery.length === 2, 'الكتان بأهداب: موديل واحد بـ٥ ألوان وصورهم الزيادة');
+assert(house.every((p) => (p.gallery || []).every((g) => fs.existsSync(path.join(ROOT, 'atelier', g)))), 'كل الصور الزيادة موجودة');
 
 // ٩) ٦ قطع في النداء: نفس الشبكة على السيرفر والصفحة + 2K
 if (M) {
@@ -217,7 +220,7 @@ assert(!/match \/atelier_orders/.test(fs.readFileSync(path.join(ROOT, 'security'
 
 // ١٢) الموديلات + رف الألوان
 const models = AC.groupModels(AC.houseCollection('collection/'));
-assert(models.length === 5 && models.find((m) => m.title === 'مونوجرام').items.length === 6, 'القطع بتتجمّع في موديلات (كارت واحد + ألوان)');
+assert(models.length === 5 && models.find((m) => m.title === 'مونوجرام').items.length === 6 && models.find((m) => m.title === 'كتان بأهداب').items.length === 5, 'القطع بتتجمّع في موديلات (كارت واحد + ألوان)');
 assert(AC.toneOf([40, 48, 82]) === 'navy' && AC.toneOf([28, 28, 28]) === 'black' && AC.toneOf([200, 176, 140]) === 'beige', 'عائلة اللون من لون القماش');
 assert(/d\.type === 'atelier-chat'/.test(LOY) && /chat=1/.test(LOY), '«كلّمينا في الشات» بيفتح شات التطبيق');
 assert(AC.groupModels(AC.atelierItemsFrom({ items: [{ id: 'a', line: 'crepe' }, { id: 'b', line: 'crepe' }, { id: 'c', line: 'crepe', family: 'كوري' }, { id: 'd', line: 'crepe', family: 'كوري' }] })).length === 3, 'قطع الإدارة من غير موديل كل واحدة لوحدها، واللي ليها نفس الموديل كارت واحد');
