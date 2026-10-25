@@ -256,12 +256,19 @@
     var free = (products || []).filter(function (p) {
       return p && p.tryable && (p.kind || "hijab") === kind && !(looks && looks[p.id]) && !(busy && busy[p.id]);
     });
-    if (!focus) return free.slice(0, n);
-    var fam = familyOf(focus), line = focus.line;
-    var rank = function (p) { return p === focus ? 0 : familyOf(p) === fam ? 1 : p.line === line ? 2 : 3; };
-    return free.map(function (p, i) { return { p: p, r: rank(p), i: i }; })
-      .sort(function (a, b) { return a.r - b.r || a.i - b.i; })
-      .slice(0, n).map(function (x) { return x.p; });
+    /* 👗 الموديلات الأول: لون واحد من كل موديل (القطعة اللي اختارتها
+       أولهم)، وبعدين نكمّل بألوان موديلها هي، وبعدين الباقي. */
+    var out = [], seenFam = {};
+    var take = function (p) { if (out.indexOf(p) < 0 && out.length < n) out.push(p); };
+    if (focus && free.indexOf(focus) >= 0) { take(focus); seenFam[familyOf(focus)] = 1; }
+    free.forEach(function (p) { var f = familyOf(p) || p.id; if (!seenFam[f]) { seenFam[f] = 1; take(p); } });
+    if (focus) {
+      var fam = familyOf(focus), line = focus.line;
+      free.forEach(function (p) { if (familyOf(p) === fam) take(p); });
+      free.forEach(function (p) { if (p.line === line) take(p); });
+    }
+    free.forEach(take);
+    return out;
   }
 
   /* عدّاد التجارب على الجهاز — بيتصفّر كل يوم. bonus = اتكسبت من

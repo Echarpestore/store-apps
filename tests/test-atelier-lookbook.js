@@ -121,7 +121,8 @@ const r1 = AC.buildRound(null, prods, {}, {});
 assert(r1.length === AC.ROUND_SIZE && r1.every((p) => p.kind === 'hijab'), 'أول تجربة = ٦ طرح (من غير إسدال)');
 const mono = prods[3];
 const rm = AC.buildRound(mono, prods, {}, {});
-assert(rm[0] === mono && rm.length === 6 && rm.every((p) => p.line === 'mono'), '«جرّبيها» على موديل = القطعة + ألوانها من نفس الموديل');
+assert(rm.map((p) => p.id).join() === 'm4,c1,z1,m1,m2,m3', '«جرّبيها» = القطعة، ولون من كل موديل تاني، وبعدين ألوانها');
+assert(r1.map((p) => p.id).slice(0, 3).join() === 'm1,c1,z1', 'أول تجربة = الموديلات الأول (لون من كل موديل)');
 const crepe = prods[7];
 const rc = AC.buildRound(crepe, prods, {}, {});
 assert(rc[0] === crepe && rc.filter((p) => p.line === 'crepe').length === 3 && rc.length === 6, 'لو ألوانها أقل من ٦ بنكمّل من الباقي');
@@ -130,7 +131,7 @@ const isd = { id: 'is1', kind: 'isdal', line: 'isdal', tryable: true };
 assert(AC.buildRound(isd, prods.concat([isd, { id: 'is2', kind: 'isdal', line: 'isdal', tryable: true }]), {}, {}).every((p) => p.kind === 'isdal'), 'الإسدال مبيتخلطش مع الطرح');
 const fam = AC.buildRound({ id: 'f', kind: 'hijab', line: 'other', family: 'كوري', tryable: true },
   [{ id: 'f', kind: 'hijab', line: 'other', family: 'كوري', tryable: true }, { id: 'z', kind: 'hijab', line: 'other', family: 'تاني', tryable: true }, { id: 'g', kind: 'hijab', line: 'crepe', family: 'كوري', tryable: true }], {}, {});
-assert(fam.map((p) => p.id).join() === 'f,g,z', 'الموديل من صفحة الإدارة بيسبق النوع');
+assert(fam.map((p) => p.id).join() === 'f,z,g', 'لون من كل موديل الأول، وبعدها ألوان موديلها');
 const t0 = AC.roundsState(null, '2026-10-24');
 assert(t0.allowed === 1 && t0.left === 1, 'تجربة واحدة ببلاش في اليوم');
 assert(AC.roundsState({ day: '2026-10-24', n: 1 }, '2026-10-24').left === 0, 'بعد التجربة الأولى مفيش غير لو حطّت حاجة في الحقيبة');
@@ -275,4 +276,15 @@ assert(ac.colorName === 'كاكي' && ac.extras === 2, 'الأتيليه بيق�
   const AD2 = require(path.join(ROOT, 'atelier', 'admin-core.js'));
   const ci = AD2.cleanItem({ id: 'a', nameEn: 'X', colorEn: 'Y', familyEn: 'Z' });
   assert(ci.nameEn === 'X' && ci.colorEn === 'Y' && ci.familyEn === 'Z', 'صفحة الإدارة بتحفظ الإنجليزي');
+}
+
+// ١٥) ✨ التوضيح + تغطية الشعر
+{
+  const LB = M;
+  const pr = LB.buildLookbookPrompt(6, 'hijab');
+  assert(/HAIR COVERAGE IS MANDATORY/.test(pr) && /Never wear the product as a neck scarf/.test(pr), 'البرومبت بيمنع الشعر يبان والطرحة حوالين الرقبة بس');
+  assert(LB.hqDayKey('u1', Date.UTC(2026, 9, 25, 10)).indexOf('lbhq_u1_') === 0 && LB.userDayKey('u1', Date.UTC(2026, 9, 25, 10)).indexOf('lb_u1_') === 0, 'التوضيح بعدّاد لوحده');
+  assert(LB.resolveLookbookConfig(null).hqCapPerUser === 4, '٤ توضيحات في اليوم');
+  const js = fs.readFileSync(path.join(ROOT, 'atelier', 'atelier.js'), 'utf8');
+  assert(/hq: !!hq/.test(js) && /maybeSharpen\(p\)/.test(js) && /HQ_CAP = 4/.test(js), 'الصفحة بتطلب التوضيح لما القطعة تتفتح');
 }

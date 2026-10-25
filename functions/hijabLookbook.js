@@ -42,7 +42,9 @@ const COL_GUARD = "tryon_ai_guard";
 const LOOKBOOK_DEFAULTS = {
   lookbookEnabled: true,
   lookbookCapPerUser: 2,     // تجربة ببلاش + 🎁 تجربة لما تحط قطعة في الحقيبة = نداءين (١٢ إطلالة) بالكتير
-  lookbookCapGlobal: 400     // سقف المتجر كله في اليوم
+  lookbookCapGlobal: 400,    // سقف المتجر كله في اليوم
+  // ✨ توضيح قطعة واحدة بجودة كاملة لما العميلة تفتحها — عدّاد لوحده
+  lookbookHqCapPerUser: 4
 };
 const MAX_PRODUCTS = 9;
 
@@ -76,7 +78,8 @@ function resolveLookbookConfig(doc) {
     model: base.model,
     quality: base.quality,
     capPerUser: posInt(d.lookbookCapPerUser, LOOKBOOK_DEFAULTS.lookbookCapPerUser),
-    capGlobal: posInt(d.lookbookCapGlobal, LOOKBOOK_DEFAULTS.lookbookCapGlobal)
+    capGlobal: posInt(d.lookbookCapGlobal, LOOKBOOK_DEFAULTS.lookbookCapGlobal),
+    hqCapPerUser: posInt(d.lookbookHqCapPerUser, LOOKBOOK_DEFAULTS.lookbookHqCapPerUser)
   };
 }
 
@@ -89,6 +92,9 @@ function cairoDay(nowMs) {
 function userDayKey(uid, nowMs) {
   const u = String(uid || "").replace(/[^a-zA-Z0-9]/g, "").slice(0, 40) || "anon";
   return "lb_" + u + "_" + cairoDay(nowMs);
+}
+function hqDayKey(uid, nowMs) {
+  return userDayKey(uid, nowMs).replace(/^lb_/, "lbhq_");
 }
 function globalDayKey(nowMs) {
   return "lb_all_" + cairoDay(nowMs);
@@ -125,6 +131,8 @@ function buildLookbookPrompt(n, garment) {
     "Preserve the customer's identity exactly in every cell: face, facial proportions, skin texture and tone, expression, body, clothes, background, pose, camera perspective and lighting.",
     "Do not beautify, reshape, retouch, zoom, or change the customer.",
     "Replace only the hair/head-covering area and add the hijab naturally around the head, neck and shoulders.",
+    "HAIR COVERAGE IS MANDATORY: the hijab fully covers the top, back and sides of the head, the hairline, all of the hair and the ears. Not a single strand of hair is visible. Never wear the product as a neck scarf, bandana, shawl or wrap only around the neck or shoulders.",
+    "The product photos may show the scarf folded or crumpled on a table: it is a large rectangular hijab. Unfold it mentally and keep its exact fabric, color, border pattern and fringe.",
     "WRAP GEOMETRY: style each rectangular scarf like a contemporary two-long-ends hijab. Frame the face with a smooth, close-fitting single layer, bring the fabric under the chin, wrap it loosely ONCE around the neck, and let both long ends hang down the left and right front of the torso.",
     "No cape, poncho, khimar, sculpted turban, stacked neck coils or broad bib across the chest.",
     "The hijab must look physically worn with realistic folds, shadows, depth and occlusion.",
@@ -211,15 +219,17 @@ exports.hijabLookbook = onCall(
       throw new HttpsError("invalid-argument", FRIENDLY);
     }
 
+    // ✨ قطعة واحدة «توضيح» (hq) = عدّاد لوحده، مبياكلش من تجارب الشبكة
+    const hq = data.hq === true && products.length === 1;
     const now = Date.now();
-    const uref = db.collection(COL_GUARD).doc(userDayKey(uid, now));
+    const uref = db.collection(COL_GUARD).doc(hq ? hqDayKey(uid, now) : userDayKey(uid, now));
     const gref = db.collection(COL_GUARD).doc(globalDayKey(now));
     try {
       await db.runTransaction(async (tx) => {
         const [us, gs] = await Promise.all([tx.get(uref), tx.get(gref)]);
         const dec = lookbookGuardDecide(
           us.exists ? (us.data().count || 0) : 0,
-          gs.exists ? (gs.data().count || 0) : 0, cfg);
+          gs.exists ? (gs.data().count || 0) : 0, hq ? Object.assign({}, cfg, { capPerUser: cfg.hqCapPerUser }) : cfg);
         if (!dec.allow) throw new HttpsError("resource-exhausted",
           "اكتفينا بهذا القدر اليوم 🤍 يسعدنا أن تكملي غداً.");
         // 🔒 عدّادات بس — لا صورة ولا وش
@@ -256,7 +266,8 @@ exports.hijabLookbook = onCall(
         mime: out.mime,
         // ترتيب الخانات = ترتيب المنتجات اللي اتبعتت بالظبط
         cells: products.map((p) => p.id),
-        layout: lookbookLayout(products.length)
+        layout: lookbookLayout(products.length),
+        hqSupported: true          // الصفحة بتطلب «التوضيح» بس من نسخة بتعرفه
       };
     } catch (e) {
       console.error("lookbook generate", e && e.message);
@@ -273,6 +284,7 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports.lookbookGuardDecide = lookbookGuardDecide;
   module.exports.userDayKey = userDayKey;
   module.exports.globalDayKey = globalDayKey;
+  module.exports.hqDayKey = hqDayKey;
   module.exports.cairoDay = cairoDay;
   module.exports.LOOKBOOK_DEFAULTS = LOOKBOOK_DEFAULTS;
   module.exports.MAX_PRODUCTS = MAX_PRODUCTS;
