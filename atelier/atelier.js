@@ -53,7 +53,8 @@
     products: [], byId: {}, face: "", alive: false,
     looks: {}, queued: {}, requested: 0, done: 0, target: 0,
     mode: "lookbook", lookbookWorked: false, stopped: false,
-    queue: [], focus: null, busy: 0, gen: 0, lbOpen: null, line: "all"
+    queue: [], focus: null, busy: 0, gen: 0, lbOpen: null, line: "all",
+    hq: {}, hqBusy: {}
   };
 
   /* ---------------- Firebase ---------------- */
@@ -592,7 +593,7 @@
 
   function startWithFace(face) {
     state.face = face; state.gen++;
-    state.looks = {}; state.queued = {}; state.queue = [];
+    state.looks = {}; state.queued = {}; state.queue = []; state.hq = {}; state.hqBusy = {};
     state.requested = 0; state.done = 0; state.target = 0; state.stopped = false; celebrated = false;
     document.querySelectorAll(".card").forEach(function (c) { c.classList.remove("worn", "weaving", "pickable", "selected", "revealing"); });
     resetMirror();
@@ -600,8 +601,12 @@
     var ready = state.alive ? Promise.resolve(setFace(face)) : awaken(face);
     var gen = state.gen;
     Promise.all(state.products.map(function (p) {
-      return PC.readResultAsync(LS, AC.cacheProductId(p, false), face, null, prodSig(p)).then(function (v) {
-        if (gen === state.gen && v) state.looks[p.id] = v;
+      // ✨ النسخة الموضّحة الأول، وإلا نسخة الشبكة
+      return PC.readResultAsync(LS, AC.cacheProductId(p, true), face, null, prodSig(p)).then(function (hv) {
+        if (gen === state.gen && hv) { state.looks[p.id] = hv; state.hq[p.id] = true; return; }
+        return PC.readResultAsync(LS, AC.cacheProductId(p, false), face, null, prodSig(p)).then(function (v) {
+          if (gen === state.gen && v) state.looks[p.id] = v;
+        });
       });
     })).then(function () { return ready; }).then(function () {
       if (gen !== state.gen) return;
@@ -700,6 +705,7 @@
     work.then(function (results) {
       if (gen !== state.gen) return;
       results.forEach(function (r) {
+        if (!useGrid || batch.length === 1) state.hq[r.p.id] = true;   // صورة كاملة مش مقصوصة
         showLook(r.p, r.img, true);
         PC.saveResultAsync(LS, AC.cacheProductId(r.p, false), face, r.img, null, prodSig(r.p));
       });
@@ -746,15 +752,16 @@
     }, 900);
   }
 
-  function lookbookCall(products, kind, face) {
+  function lookbookCall(products, kind, face, hq) {
     return Promise.all(products.map(refImage)).then(function (refs) {
       if (MOCK) return mockGrid(face, refs);
       return callable("hijabLookbook")({
-        customerImage: face, garment: kind,
+        customerImage: face, garment: kind, hq: !!hq,
         products: products.map(function (p, i) { return { id: p.id, image: refs[i] }; })
       }).then(function (res) {
         var d = res && res.data;
         if (!d || !d.image) throw { code: "internal" };
+        if (d.hqSupported) state.hqOk = true;
         return d.image;
       });
     });
@@ -841,6 +848,39 @@
     $("dockPoll").style.display = lookCount() >= 2 ? "" : "none";
   }
 
+  /* ---------------- ✨ التوضيح: لما العميلة تفتح قطعة جرّبتها ----------------
+     صورة الشبكة مقصوصة (أصغر). أول ما تفتحها بنطلب نسخة كاملة لوحدها
+     (hijabLookbook بـhq — عدّاد لوحده: HQ_CAP في اليوم) وبنبدّلها لوحدها. */
+  var HQ_CAP = 4;
+  function hqRec() {
+    var t = today(), r = null;
+    try { r = JSON.parse((LS && LS.getItem("atelier_hq")) || "null"); } catch (e) { r = null; }
+    return r && r.day === t ? r : { day: t, n: 0 };
+  }
+  function hqUse(n) { var r = hqRec(); r.n = n == null ? r.n + 1 : n; try { LS && LS.setItem("atelier_hq", JSON.stringify(r)); } catch (e) { } }
+  function syncSharpen() {
+    var p = state.lbOpen;
+    $("lbPic").classList.toggle("sharpening", !!(p && state.hqBusy[p.id]));
+  }
+  function maybeSharpen(p) {
+    if (!p || !state.face || !state.looks[p.id] || state.hq[p.id] || state.hqBusy[p.id]) return;
+    // النسخة القديمة من الدالة بتحسب التوضيح من تجارب العميلة — منطلبهوش غير لما السيرفر يقول إنه بيعرفه
+    if (state.mode !== "lookbook" || !(state.hqOk || MOCK) || hqRec().n >= HQ_CAP) return;
+    var face = state.face, gen = state.gen;
+    state.hqBusy[p.id] = true; hqUse(); syncSharpen();
+    lookbookCall([p], p.kind === "isdal" ? "isdal" : "hijab", face, true).then(function (url) {
+      if (gen !== state.gen) return;
+      state.hq[p.id] = true; state.looks[p.id] = url;
+      PC.saveResultAsync(LS, AC.cacheProductId(p, true), face, url, null, prodSig(p));
+      var c = card(p.id); if (c) c.querySelector(".look").src = url;
+      if (mirrorP === p) paintMirror(url, true);
+      if (state.lbOpen === p) $("lbLook").src = url;
+    }).catch(function (err) {
+      var code = String(err && err.code || "").replace(/^functions\//, "");
+      if (code === "resource-exhausted") hqUse(HQ_CAP);
+    }).then(function () { state.hqBusy[p.id] = false; syncSharpen(); });
+  }
+
   /* ---------------- عرض القطعة + الدقة العالية ---------------- */
   function openLook(p) {
     state.lbOpen = p; setLb(p);
@@ -891,6 +931,8 @@
     $("lbBag").querySelector("span").textContent = inBag(p) ? tr("في حقيبتكِ ✓", "In your bag ✓") : tr("أضيفيها للحقيبة", "Add to bag");
     $("lbShare").style.display = look ? "" : "none";
     syncHearts(p);
+    syncSharpen();
+    if (state.lbOpen === p) maybeSharpen(p);
   }
   function closeLb() {
     state.lbOpen = null; $("lb").classList.remove("on"); document.body.style.overflow = "";
