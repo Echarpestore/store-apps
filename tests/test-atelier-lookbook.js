@@ -285,6 +285,7 @@ assert(ac.colorName === 'كاكي' && ac.extras === 2, 'الأتيليه بيق�
   assert(/HAIR COVERAGE IS MANDATORY/.test(pr) && /Never wear the product as a neck scarf/.test(pr), 'البرومبت بيمنع الشعر يبان والطرحة حوالين الرقبة بس');
   assert(LB.hqDayKey('u1', Date.UTC(2026, 9, 25, 10)).indexOf('lbhq_u1_') === 0 && LB.userDayKey('u1', Date.UTC(2026, 9, 25, 10)).indexOf('lb_u1_') === 0, 'التوضيح بعدّاد لوحده');
   assert(LB.resolveLookbookConfig(null).hqCapPerUser === 4, '٤ توضيحات في اليوم');
+  assert(/LIGHTWEIGHT summer hijabs/.test(pr) && /winter shawl/.test(pr), 'الطرحة خفيفة مش شال تقيل');
   const js = fs.readFileSync(path.join(ROOT, 'atelier', 'atelier.js'), 'utf8');
   assert(/hq: !!hq/.test(js) && /maybeSharpen\(p\)/.test(js) && /HQ_CAP = 4/.test(js), 'الصفحة بتطلب التوضيح لما القطعة تتفتح');
 }

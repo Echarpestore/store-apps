@@ -135,6 +135,7 @@ function buildLookbookPrompt(n, garment) {
     "The product photos may show the scarf folded or crumpled on a table: it is a large rectangular hijab. Unfold it mentally and keep its exact fabric, color, border pattern and fringe.",
     "WRAP GEOMETRY: style each rectangular scarf like a contemporary two-long-ends hijab. Frame the face with a smooth, close-fitting single layer, bring the fabric under the chin, wrap it loosely ONCE around the neck, and let both long ends hang down the left and right front of the torso.",
     "No cape, poncho, khimar, sculpted turban, stacked neck coils or broad bib across the chest.",
+    "FABRIC WEIGHT: these are LIGHTWEIGHT summer hijabs (thin linen, voile and chiffon), not shawls. Render thin, airy, slightly translucent fabric that drapes softly and clings lightly to the head and shoulders, with many fine, small, soft folds and a gentle natural fall. Never make it look thick, heavy, knitted, woolly, padded, stiff or bulky like a winter shawl or blanket, and never add extra volume around the neck.",
     "The hijab must look physically worn with realistic folds, shadows, depth and occlusion.",
     "OUTPUT FORMAT IS STRICT:",
     "Return ONE image arranged as a grid of " + layout.rows + " row(s) by " + layout.cols +
