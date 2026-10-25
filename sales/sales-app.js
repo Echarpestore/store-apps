@@ -5352,14 +5352,9 @@ function bankCardHtml(emp){
       : (sum.balanceMin > 0 ? `<b>+${sum.balanceMin} د</b> وقت زيادة بتتحسب لك أوفرتايم 👏` : 'رصيدك صفر — ملتزم بالمواعيد ✅')}</div></div>`;
   const _dayN = Math.min(7, Math.max(1, Math.floor((now - w.start) / 86400000) + 1));
   // 🎁 قرار المالك 10-10: مفيش مبلغ للموظف أثناء الأسبوع — بيشوف تقدمه بس، والمبلغ بيظهر لما يستحق **ويعتمده المالك**
-  const part = (k, lbl) => `<div class="raceItem"><span>${lbl}</span><span style="font-weight:800;color:${b.parts[k]>=b.max[k]?'var(--good)':(b.parts[k]>0?'#e0a020':'var(--bad)')}">${b.parts[k]} / ${b.max[k]}</span></div>`;
-  const next = b.score < 100 ? `<div style="font-size:11px;color:var(--sub);margin-top:4px">${b.parts.commit<b.max.commit?'التزام كامل (تأخير ≤ '+tc.bonusLateMinWeek+' د في الأسبوع) · ':''}${b.parts.rating<b.max.rating?'تقييم ≥ '+tc.bonusRatingMin+'/4 · ':''}${b.parts.sales<b.max.sales?'نقاط ≥ '+st.target+' · ':''}= الحافز الكامل</div>` : '';
-  // 🎁 v656 قرار المالك 24-10: الحافز المعتمد مبيتكتبش هنا كسطر — بيظهر **بوكس هدية** على الشاشة الرئيسية لما المالك يعتمده (showUnseenRewardsIfAny)
-  const approvedHtml = '';
   const bonus = `<div class="raceBlock"><div class="raceBlockTitle"><span>🎁 حافز الأسبوع ده</span><small style="color:var(--sub);font-weight:600">يوم ${_dayN} من 7</small></div>
-    <div style="font-size:22px;font-weight:900;color:${b.score>=tc.bonusMinScore?'var(--good)':'#e0a020'};direction:ltr;text-align:right">${b.score} / 100</div>
-    ${part('commit','🎯 الالتزام (تأخير '+st.lateMinTotal+' د)')}${part('rating','⭐ تقييم العملاء'+(st.avgRating!=null?' ('+st.avgRating.toFixed(1)+'/4)':''))}${part('sales','🛍️ المبيعات ('+fmtPts(st.points)+(st.target>0?' من '+st.target:'')+' ن)')}${next}
-    <div style="font-size:11px;color:var(--sub);margin-top:6px">الحافز بيتحدد يوم الجمعة (من ${tc.bonusMinScore} نقطة)${tc.bonusApproval==='manual'?' وبيعتمده المالك':''} — وبعدها هيوصلك 🎁 هدية على الشاشة</div>${approvedHtml}</div>`;
+    <div style="font-size:22px;font-weight:900;color:${b.score>=tc.bonusMinScore?'var(--good)':'#e0a020'};direction:ltr;text-align:right">${b.score} / 100</div></div>`;
+  // 🙈 v657 قرار المالك 25-10: الموظف بيشوف نتيجته بس — من غير تفاصيل الحساب (الالتزام/التقييم/المبيعات/الشروط/الاعتماد). التفاصيل للمالك في المرتبات.
   // 🙈 v650 قرار المالك 11-10: رصيد الوقت مبيظهرش للموظف — الحافز الأسبوعي بس (الرصيد لسه بيتحسب في المرتب وبيظهر للمالك)
   void bal;
   return bonus;

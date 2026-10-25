@@ -8,7 +8,7 @@ const src = fs.readFileSync(path.join(ROOT,'sales','sales-app.js'),'utf8');
 const html = fs.readFileSync(path.join(ROOT,'sales','index.html'),'utf8');
 ok(/sales-app\.js\?v=(65[6-9]|6[6-9]\d|[7-9]\d\d)/.test(html), 'sales بيحمّل النسخة الجديدة');
 ok(!src.includes('✅ حافز أسبوع ${x.key'), 'سلبي: سطر «✅ حافز أسبوع … ج» اتشال من كارت الموظف');
-ok(/const approvedHtml = '';/.test(src), 'الكارت مبيعرضش الحوافز المعتمدة كقائمة');
+ok(!/approvedHtml/.test(src), 'الكارت مبيعرضش الحوافز المعتمدة كقائمة');
 const fn = src.match(/function unseenApprovedBonus\([\s\S]*?\n\}/)[0];
 const ctx = {}; vm.runInNewContext(fn + '; this.f = unseenApprovedBonus;', ctx); const f = ctx.f;
 const NOW = Date.parse('2026-10-24T12:00:00Z'), D = 86400000;
