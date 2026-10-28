@@ -642,13 +642,37 @@
     var c = conv(); if(!c) return;
     document.getElementById('ccTitle').textContent =
       (c.name || c.phone || c.id) + (c.brand === 'glow' ? ' · Glow' : '');
-    var _fs={tryon:'🧕 جرّبت منتج',cart:'🛒 أضافت للسلة',checkout:'🔥 وصلت لإتمام الطلب',order:'✅ عملت أوردر'};
+    var _fs={tryon:(c.funnelProductName?'🧕 جرّبت منتج':(c.funnelFromAtelier?'🧕 جرّبت في البروفة':'🧕 جرّبت منتج')),cart:'🛒 أضافت للسلة',checkout:'🔥 وصلت لإتمام الطلب',order:'✅ عملت أوردر'};
     document.getElementById('ccSub').textContent=(c.phone||'')+(c.branch?' · 📍'+c.branch:'')
       +(_fs[c.funnelStage]?' · '+_fs[c.funnelStage]:'')+(c.funnelProductName?' · '+c.funnelProductName:'');
     var bb = document.getElementById('ccBlock');
     bb.style.display = 'inline-block';
     bb.textContent = c.blocked === true ? '✅ فك الحظر' : '⛔ حظر';
   }
+
+  /* 🧕 v772 — محادثة من غير رسايل: العميلة **مبعتتش حاجة** — السيستم فتح المحادثة لوحده لأنها
+     عملت حاجة في التطبيق (جرّبت منتج في البروفة / حطّت في السلة / وصلت للدفع). نقول ده صراحة
+     بدل «لسه مفيش رسايل» اللي بتلخبط، ونقول للموظفة تبدأ هي الكلام. */
+  function ccFunnelWhat(c){
+    var st = String((c && c.funnelStage) || '');
+    var p = String((c && c.funnelProductName) || '').trim();
+    if(st === 'tryon') return p ? ('جرّبت «' + p + '» على صورتها في التطبيق') : (c.funnelFromAtelier ? 'جرّبت طرح على صورتها في البروفة (الأتيلييه) في التطبيق' : 'جرّبت منتج على صورتها في التطبيق');
+    if(st === 'cart') return 'حطّت ' + (p ? '«' + p + '»' : 'منتج') + ' في السلة في التطبيق ومكمّلتش';
+    if(st === 'checkout') return 'وصلت لصفحة الدفع' + (p ? ' (' + p + ')' : '') + ' ومكمّلتش الطلب';
+    if(st === 'order') return 'عملت أوردر من التطبيق' + (c.funnelOrderCode ? ' #' + c.funnelOrderCode : '');
+    return '';
+  }
+  function ccFunnelEmpty(c){
+    var what = ccFunnelWhat(c);
+    if(!what) return '<div class="ccEmpty">لسه مفيش رسايل</div>';
+    var at = Number(c.funnelAt) || 0;
+    var when = at ? new Date(at).toLocaleString('ar-EG', { weekday:'long', hour:'2-digit', minute:'2-digit' }) : '';
+    return '<div class="ccEmpty" style="line-height:1.9">'
+      + '<div style="font-size:15px;color:#e8c46a;font-weight:800">' + esc2(what) + '</div>'
+      + (when ? '<div>' + esc2(when) + '</div>' : '')
+      + '<div style="margin-top:6px">العميلة <b>مبعتتش رسايل</b> — المحادثة اتفتحت لوحدها من اللي عملته في التطبيق.<br>ابدئي انتي الكلام 👇</div></div>';
+  }
+  window.ccFunnelWhat = ccFunnelWhat;
 
   function renderThread(arr){
     var box = document.getElementById('ccThread');
@@ -681,7 +705,7 @@
       html += '<div class="ccMsg ' + (st ? 'st' : 'cu') + '">' + body
         + '<span class="mt">' + (st ? esc2(m.by || '') + ' · ' : '') + t + '</span></div>';
     });
-    box.innerHTML = html || '<div class="ccEmpty">لسه مفيش رسايل</div>';
+    box.innerHTML = html || ccFunnelEmpty(conv());
     box.scrollTop = box.scrollHeight;
   }
 

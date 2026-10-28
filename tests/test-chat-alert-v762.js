@@ -79,10 +79,10 @@ const ui = fs.readFileSync(path.join(ROOT,'pos','chat-staff-ui.js'),'utf8');
 ok(/window\.ChatAlert\.update\(rows,\s*\{ open: !!CST\.open, activeId: CST\.activeId, branch: myBranch\(\), filterMine: !!CST\.filterMine \}\)/.test(ui), 'chat-staff-ui بينادي ChatAlert مع كل لقطة');
 [['pos/index.html','chat-alert.js?v=762'],['sales/index.html','../pos/chat-alert.js?v=762'],['Office/old.html','../pos/chat-alert.js?v=762']].forEach(([f, tag]) => {
   const h = fs.readFileSync(path.join(ROOT, f), 'utf8');
-  const i1 = h.indexOf(tag), i2 = h.indexOf('chat-staff-ui.js?v=762');
-  ok(i1 > 0 && i2 > i1, f + ': chat-alert.js قبل chat-staff-ui.js v762');
+  const i1 = h.indexOf(tag), i2 = h.search(/chat-staff-ui\.js\?v=7(6[2-9]|[7-9]\d)/);
+  ok(i1 > 0 && i2 > i1, f + ': chat-alert.js قبل chat-staff-ui.js ≥ v762');
 });
-ok(/pos-shell-v76[2-9]/.test(fs.readFileSync(path.join(ROOT,'pos','sw.js'),'utf8')), 'pos sw v762');
+ok(/pos-shell-v7(6[2-9]|[7-9]\d)/.test(fs.readFileSync(path.join(ROOT,'pos','sw.js'),'utf8')), 'pos sw v762');
 ok(/store-apps-shell-v6(3[6-9]|[4-9]\d)/.test(fs.readFileSync(path.join(ROOT,'sales','sw.js'),'utf8')), 'sales sw ≥ v636');
 ok(/echarpe-office-v7(5[4-9]|[6-9]\d)/.test(fs.readFileSync(path.join(ROOT,'Office','sw.js'),'utf8')), 'Office sw ≥ v754');
 console.log(`  ${pass} ناجح · ${fail} فاشل`);
