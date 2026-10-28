@@ -2932,7 +2932,8 @@ function atelierOpen(){
   if(!frame || !wrap) return;
   frame.src = '../atelier/?embed=1';
   wrap.style.display = 'block';
-  try{ shopFunnelTrack('tryon', null, { funnelFromAtelier:true }); }catch(e){}
+  /* v772: فتح غرفة القياس = «شاهدت» بس (مش بيفتح محادثة). «جرّبت» بتتسجل لما صورة التجربة تطلع فعلًا (atelier-tried). */
+  try{ shopFunnelTrack('view', null, { funnelFromAtelier:true }); }catch(e){}
 }
 window.atelierOpen = atelierOpen;
 
@@ -4317,6 +4318,18 @@ window.addEventListener('message', function(e){
       // 💬 «مش لاقية اللي في بالكِ؟» من غرفة القياس → الشات على طول
       tryonOverlayClose();
       if(typeof openChat === 'function') openChat();
+      return;
+    }
+    if(d.type === 'atelier-tried'){
+      var tbc = String(d.barcode||'').trim(), tp = tbc ? shopFunnelProduct(tbc) : {};
+      if(!tp.name && d.name) tp = { barcode: tbc, name: String(d.name).slice(0,80), price: tp.price||0 };
+      try{ shopFunnelTrack('tryon', tp.name || tbc ? tp : null, { funnelFromAtelier:true }); }catch(e){}
+      return;
+    }
+    if(d.type === 'atelier-ordered'){
+      var obc = String(d.barcode||'').trim(), op = obc ? shopFunnelProduct(obc) : {};
+      if(!op.name && d.name) op = { barcode: obc, name: String(d.name).slice(0,80), price: 0 };
+      try{ shopFunnelTrack('order', op.name || obc ? op : null, { funnelFromAtelier:true, funnelOrderCode:String(d.code||'').slice(0,20), funnelOrderAt:Date.now(), funnelOrderTotal:Number(d.total)||0, funnelOrderCol:'atelier_orders', followUpDueAt:0 }); }catch(e){}
       return;
     }
     if(d.type === 'atelier-order'){

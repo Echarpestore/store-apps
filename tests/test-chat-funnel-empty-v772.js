@@ -17,6 +17,11 @@ ok(e.includes('مبعتتش رسايل') && e.includes('ابدئي انتي ال
 ok(ctx.empty({}) .includes('لسه مفيش رسايل') && ctx.empty(null).includes('لسه مفيش رسايل'), 'سلبي: محادثة عادية من غير funnel → «لسه مفيش رسايل» زي الأول');
 ok(ctx.what({ funnelStage:'view' }) === '' && ctx.what({ funnelStage:'chat' }) === '', 'سلبي: مشاهدة/شات مش بيتعرضوا كحدث');
 ok(!ctx.empty({ funnelStage:'tryon', funnelProductName:'<img src=x onerror=alert(1)>' }).includes('<img'), 'سلبي: اسم المنتج متأمّن (escape)');
+ok(ctx.what({ funnelStage:'order', funnelOrderCol:'atelier_orders', funnelOrderCode:'A12', funnelProductName:'طرحة' }).includes('غرفة القياس #A12'), 'أوردر من غرفة القياس → كوده واسم القطعة');
+const lo = fs.readFileSync(path.join(ROOT,'loyalty','index.html'),'utf8'), at = fs.readFileSync(path.join(ROOT,'atelier','atelier.js'),'utf8');
+ok(!/shopFunnelTrack\('tryon', null, \{ funnelFromAtelier:true \}\)/.test(lo) && /shopFunnelTrack\('view', null, \{ funnelFromAtelier:true \}\)/.test(lo), 'سلبي: فتح غرفة القياس لوحده مبقاش «جرّبت» (view بس)');
+ok(/type: "atelier-tried"/.test(at) && /d\.type === 'atelier-tried'[\s\S]{0,300}shopFunnelTrack\('tryon'/.test(lo), 'صورة التجربة طلعت فعلًا → «جرّبت» باسم القطعة');
+ok(/type: "atelier-ordered"/.test(at) && /d\.type === 'atelier-ordered'[\s\S]{0,400}shopFunnelTrack\('order'[\s\S]{0,200}funnelOrderCol:'atelier_orders'/.test(lo), 'أوردر غرفة القياس (توصيل) → «عملت أوردر» + الكود في الشات');
 ok(/box\.innerHTML = html \|\| ccFunnelEmpty\(conv\(\)\);/.test(ui), 'renderThread بيستخدم الشرح لما مفيش رسايل');
-['pos/index.html','sales/index.html','Office/old.html'].forEach(f=> ok(/chat-staff-ui\.js\?v=772/.test(fs.readFileSync(path.join(ROOT,f),'utf8')), f + ' بيحمّل v772'));
+['pos/index.html','sales/index.html','Office/old.html'].forEach(f=> ok(/chat-staff-ui\.js\?v=77[2-9]/.test(fs.readFileSync(path.join(ROOT,f),'utf8')), f + ' بيحمّل ≥ v772'));
 console.log(`\n${fail ? '❌' : '✅'} chat funnel empty v772: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

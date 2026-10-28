@@ -644,7 +644,7 @@
       (c.name || c.phone || c.id) + (c.brand === 'glow' ? ' · Glow' : '');
     var _fs={tryon:(c.funnelProductName?'🧕 جرّبت منتج':(c.funnelFromAtelier?'🧕 جرّبت في البروفة':'🧕 جرّبت منتج')),cart:'🛒 أضافت للسلة',checkout:'🔥 وصلت لإتمام الطلب',order:'✅ عملت أوردر'};
     document.getElementById('ccSub').textContent=(c.phone||'')+(c.branch?' · 📍'+c.branch:'')
-      +(_fs[c.funnelStage]?' · '+_fs[c.funnelStage]:'')+(c.funnelProductName?' · '+c.funnelProductName:'');
+      +(_fs[c.funnelStage]?' · '+_fs[c.funnelStage]:'')+(c.funnelStage==='order'&&c.funnelOrderCode?' #'+c.funnelOrderCode+(c.funnelOrderCol==='atelier_orders'?' (غرفة القياس)':''):'')+(c.funnelProductName?' · '+c.funnelProductName:'');
     var bb = document.getElementById('ccBlock');
     bb.style.display = 'inline-block';
     bb.textContent = c.blocked === true ? '✅ فك الحظر' : '⛔ حظر';
@@ -659,7 +659,7 @@
     if(st === 'tryon') return p ? ('جرّبت «' + p + '» على صورتها في التطبيق') : (c.funnelFromAtelier ? 'جرّبت طرح على صورتها في البروفة (الأتيلييه) في التطبيق' : 'جرّبت منتج على صورتها في التطبيق');
     if(st === 'cart') return 'حطّت ' + (p ? '«' + p + '»' : 'منتج') + ' في السلة في التطبيق ومكمّلتش';
     if(st === 'checkout') return 'وصلت لصفحة الدفع' + (p ? ' (' + p + ')' : '') + ' ومكمّلتش الطلب';
-    if(st === 'order') return 'عملت أوردر من التطبيق' + (c.funnelOrderCode ? ' #' + c.funnelOrderCode : '');
+    if(st === 'order') return (c.funnelOrderCol === 'atelier_orders' ? 'عملت أوردر من غرفة القياس' : 'عملت أوردر من التطبيق') + (c.funnelOrderCode ? ' #' + c.funnelOrderCode : '') + (p ? ' (' + p + ')' : '');
     return '';
   }
   function ccFunnelEmpty(c){

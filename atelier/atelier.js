@@ -707,6 +707,8 @@
       results.forEach(function (r) {
         if (!useGrid || batch.length === 1) state.hq[r.p.id] = true;   // صورة كاملة مش مقصوصة
         showLook(r.p, r.img, true);
+        /* 📈 v772 — جرّبت فعلًا (الصورة طلعت) → التطبيق يسجّل «جرّبت» باسم القطعة. فتح الغرفة لوحده مبقاش «جرّبت». */
+        if (EMBED && r.p) toParent({ type: "atelier-tried", barcode: r.p.barcode || "", name: displayName(r.p) + (colorLabel(r.p) ? " — " + colorLabel(r.p) : "") });
         PC.saveResultAsync(LS, AC.cacheProductId(r.p, false), face, r.img, null, prodSig(r.p));
       });
     }).catch(function (err) {
@@ -1250,6 +1252,7 @@
     var call = MOCK || !fb ? Promise.reject({ code: "mock" }) : authReady.then(function () { return callable("atelierOrderPlace")(payload); });
     call.then(function (res) {
       var d = (res && res.data) || {};
+      if (EMBED) toParent({ type: "atelier-ordered", code: d.code || "", total: d.total || 0, barcode: (items[0] && items[0].barcode) || "", name: items[0] ? displayName(items[0]) : "" });
       orderDone(tr("رقم الطلب ", "Order ") + (d.code || "") + (d.total ? tr(" · الإجمالي ", " · Total ") + money(d.total) : "") +
         "<br>" + tr("هنكلمكِ على واتساب على ", "We’ll message you on WhatsApp at ") + esc(f.phone) + tr(" للتأكيد 🤍", " to confirm 🤍"));
     }).catch(function (er) {
