@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: Cairo; font-weight: 400; src: url(fonts/cairo-arabic-400-normal.woff2), url(fonts/cairo-latin-400-normal.woff2); }
+  @font-face { font-family: Cairo; font-weight: 400; src: url(fonts/cairo-latin-400-normal.woff2); unicode-range: U+0000-00FF; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(fonts/cairo-arabic-700-normal.woff2), url(fonts/cairo-latin-700-normal.woff2); }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(fonts/cairo-latin-700-normal.woff2); unicode-range: U+0000-00FF; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(fonts/cairo-arabic-900-normal.woff2), url(fonts/cairo-latin-900-normal.woff2); }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(fonts/cairo-latin-900-normal.woff2); unicode-range: U+0000-00FF; }
+  html, body { margin: 0; width: 1080px; height: 1920px; overflow: hidden; }
+  body {
+    font-family: Cairo, sans-serif; color: #fff;
+    background: radial-gradient(circle at 50% 30%, #ff7a3d 0%, #e8431c 45%, #8f1d0b 100%);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 40px;
+  }
+  .tag { font-size: 56px; font-weight: 700; opacity: 0; animation: up .6s ease-out .2s forwards; }
+  .price { display: flex; align-items: baseline; gap: 24px; opacity: 0; animation: pop .7s cubic-bezier(.2,1.6,.4,1) .7s forwards; }
+  .price .now { font-size: 260px; font-weight: 900; line-height: 1; }
+  .price .cur { font-size: 70px; font-weight: 700; }
+  .old { font-size: 64px; font-weight: 700; opacity: 0; animation: up .6s ease-out 1.3s forwards; }
+  .old s { text-decoration-thickness: 6px; text-decoration-color: #ffd23f; }
+  .badge {
+    background: #ffd23f; color: #8f1d0b; font-size: 54px; font-weight: 900;
+    padding: 14px 48px; border-radius: 60px; opacity: 0; animation: pop .6s cubic-bezier(.2,1.6,.4,1) 1.8s forwards;
+  }
+  .note { font-size: 46px; font-weight: 400; opacity: 0; animation: up .6s ease-out 2.3s forwards; }
+  .brand {
+    position: absolute; bottom: 170px; left: 0; right: 0; text-align: center;
+    opacity: 0; animation: up .7s ease-out 2.9s forwards;
+  }
+  .brand .name { font-size: 110px; font-weight: 900; letter-spacing: 2px; direction: ltr; }
+  .brand .url { font-size: 48px; font-weight: 700; direction: ltr; opacity: .9; }
+  @keyframes up  { from { opacity: 0; transform: translateY(60px); } to { opacity: 1; transform: none; } }
+  @keyframes pop { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: scale(1); } }
+</style>
+</head>
+<body>
+  <div class="tag">ثيم المطاعم</div>
+  <div class="price"><span class="now">295</span><span class="cur">جنيه / شهر</span></div>
+  <div class="old">بدل <s>590 جنيه</s></div>
+  <div class="badge">لأول سنة</div>
+  <div class="note">والدفع شهري</div>
+  <div class="brand">
+    <div class="name">ezisite</div>
+    <div class="url" id="url">ezisite.com</div>
+  </div>
+</body>
+</html>
