@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8"><style>
+  @font-face { font-family: Cairo; font-weight: 900; src: url(fonts/cairo-arabic-900-normal.woff2); }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(fonts/cairo-latin-900-normal.woff2); unicode-range: U+0000-00FF; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(fonts/cairo-arabic-700-normal.woff2); }
+  html,body{margin:0;width:1080px;height:1920px;overflow:hidden;font-family:Cairo,sans-serif;color:#fff}
+  body{background:#12261d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:70px}
+  body.two{background:radial-gradient(circle at 50% 35%,#2f7a56 0%,#1b4a34 50%,#0f2a1d 100%)}
+  .row{display:flex;gap:46px;font-size:150px}
+  .row span{opacity:0;animation:pop .5s cubic-bezier(.2,1.6,.4,1) forwards}
+  .row span:nth-child(1){animation-delay:.1s}.row span:nth-child(2){animation-delay:.5s}.row span:nth-child(3){animation-delay:.9s}
+  .q{font-size:78px;font-weight:900;line-height:1.5;text-align:center;padding:0 70px}
+  .q i{font-style:normal;display:block;opacity:0;animation:up .5s ease-out forwards}
+  .q i:nth-child(1){animation-delay:.3s}.q i:nth-child(2){animation-delay:1.3s}.q i:nth-child(3){animation-delay:2.2s;color:#ffd23f}
+  .q.two i:nth-child(1){animation-delay:.3s}.q.two i:nth-child(2){animation-delay:1.2s}.q.two i:nth-child(3){animation-delay:2.2s}
+  .logo{font-size:120px;font-weight:900;direction:ltr;opacity:0;animation:pop .7s cubic-bezier(.2,1.6,.4,1) 3.4s forwards}
+  .links{font-size:130px;direction:ltr;opacity:0;animation:pop .6s ease-out .2s forwards}
+  @keyframes up{from{opacity:0;transform:translateY(50px)}to{opacity:1;transform:none}}
+  @keyframes pop{from{opacity:0;transform:scale(.3)}to{opacity:1;transform:scale(1)}}
+</style></head><body>
+<script>
+ const n=new URLSearchParams(location.search).get('n');
+ if(n==='1'){document.body.insertAdjacentHTML('beforeend',
+  '<div class="row"><span>🧾</span><span>👨‍🍳</span><span>🛵</span></div>'+
+  '<div class="q"><i>«الطلبات في حتة،</i><i>والمطبخ في حتة،</i><i>والدليفري مش عارف رايح فين؟»</i></div>');}
+ else{document.body.classList.add('two');document.body.insertAdjacentHTML('beforeend',
+  '<div class="links">🧾 → 👨‍🍳 → 🛵</div>'+
+  '<div class="q two"><i>«مع إيزي سايت،</i><i>تابع شغل مطعمك</i><i>من مكان واحد»</i></div>'+
+  '<div class="logo">ezisite</div>');}
+</script></body></html>

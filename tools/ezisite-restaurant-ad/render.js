@@ -38,15 +38,21 @@ background:rgba(232,67,28,.92);padding:18px 40px;border-radius:28px;box-shadow:0
     await page.screenshot({ path: path.join(OUT, `${name}.png`), omitBackground: true });
   }
 
-  await page.goto('file://' + path.join(DIR, 'endcard.html'));
-  await page.evaluate((u) => { document.getElementById('url').textContent = u; }, SITE_URL);
-  await page.evaluate(() => document.fonts.ready);
-  // Pause all CSS animations, then step them frame by frame for smooth, exact output.
-  await page.evaluate(() => document.getAnimations().forEach((a) => a.pause()));
-  for (let f = 0; f < FPS * END_SECONDS; f++) {
-    await page.evaluate((ms) => document.getAnimations().forEach((a) => { a.currentTime = ms; }), (f * 1000) / FPS);
-    await page.screenshot({ path: path.join(OUT, 'end', `f${String(f).padStart(4, '0')}.png`) });
+  async function seq(url, dir, seconds, prep) {
+    fs.mkdirSync(path.join(OUT, dir), { recursive: true });
+    await page.goto(url);
+    if (prep) await page.evaluate(prep.fn, prep.arg);
+    await page.evaluate(() => document.fonts.ready);
+    await page.evaluate(() => document.getAnimations().forEach((a) => a.pause()));
+    for (let f = 0; f < FPS * seconds; f++) {
+      await page.evaluate((ms) => document.getAnimations().forEach((a) => { a.currentTime = ms; }), (f * 1000) / FPS);
+      await page.screenshot({ path: path.join(OUT, dir, `f${String(f).padStart(4, '0')}.png`) });
+    }
   }
+  await seq('file://' + path.join(DIR, 'endcard.html'), 'end', END_SECONDS,
+    { fn: (u) => { document.getElementById('url').textContent = u; }, arg: SITE_URL });
+  await seq('file://' + path.join(DIR, 'hook.html') + '?n=1', 'hook1', 4);
+  await seq('file://' + path.join(DIR, 'hook.html') + '?n=2', 'hook2', 5);
   await browser.close();
   console.log('rendered to', OUT);
 })();
