@@ -20,6 +20,10 @@
   var html = document.documentElement;
   html.lang = lang; html.dir = lang === "ar" ? "rtl" : "ltr";
   window.AtelierLang = lang;
+  // 🔎 كل نسخة ليها لينكها الأساسي عند جوجل
+  if (lang === "ar") {
+    var c = document.getElementById("canon"); if (c) c.href = "https://www.echarpe.store/atelier/?lang=ar";
+  }
 
   function apply() {
     var btn = document.getElementById("langBtn");

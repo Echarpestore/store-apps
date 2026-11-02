@@ -351,7 +351,41 @@
     return p;
   }
 
+  /* 🔎 بيانات المنتجات لجوجل (schema.org JSON-LD) — المتجر + كل لون
+     كمنتج بسعره بالجنيه ولينك بيفتح القطعة نفسها (?p=<id>).
+     img(p) بيرجّع لينك صورة كامل، أو "" لو مفيش. */
+  var SITE_URL = "https://www.echarpe.store";
+  function productJsonLd(products, img, lang) {
+    var en = lang !== "ar";
+    var url = SITE_URL + "/atelier/" + (en ? "" : "?lang=ar");
+    var items = (products || []).filter(function (p) { return p && p.price > 0 && img(p); }).slice(0, 60);
+    return {
+      "@context": "https://schema.org",
+      "@graph": [{
+        "@type": "ClothingStore", "@id": SITE_URL + "/#store", name: "echarpe", url: url,
+        logo: SITE_URL + "/logo.png", image: SITE_URL + "/atelier/collection/hero-comfort.jpg",
+        description: en ? "Hijabs and scarves in Egypt — try every piece on yourself with one photo before you buy."
+          : "طرح وإيشاربات في مصر — جرّبي كل قطعة عليكِ بصورة واحدة قبل ما تشتري.",
+        priceRange: "EGP", currenciesAccepted: "EGP", areaServed: "EG"
+      }, {
+        "@type": "ItemList", name: en ? "The echarpe collection" : "مجموعة echarpe",
+        itemListElement: items.map(function (p, i) {
+          return { "@type": "ListItem", position: i + 1, item: {
+            "@type": "Product", sku: String(p.barcode || p.id), name: p.name, image: img(p),
+            color: p.colorName || undefined, brand: { "@type": "Brand", name: "echarpe" },
+            category: "Apparel & Accessories > Clothing Accessories > Hijabs",
+            offers: { "@type": "Offer", priceCurrency: "EGP", price: Number(p.price),
+              availability: "https://schema.org/InStock", itemCondition: "https://schema.org/NewCondition",
+              url: url + (en ? "?" : "&") + "p=" + encodeURIComponent(p.id), seller: { "@id": SITE_URL + "/#store" } }
+          } };
+        })
+      }]
+    };
+  }
+
   var API = {
+    productJsonLd: productJsonLd,
+    SITE_URL: SITE_URL,
     BATCH_SIZE: BATCH_SIZE,
     HOUSE: HOUSE,
     LINES: LINES,
