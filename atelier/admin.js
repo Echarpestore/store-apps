@@ -405,9 +405,30 @@
             "<span>" + esc(it.model && it.model !== it.name ? it.model : it.name) + (it.color ? "<br>لون " + it.color : "") +
             (it.price ? "<br>" + it.price + " ج.م" : "") + (it.barcode ? "<br>" + esc(it.barcode) : "") + "</span></div>";
         }).join("") + "</div>" +
+        // 🛵 المندوب: لينك متابعة أوبر (Share trip) → العميلة تتابعه من صفحة الطلب
+        (o.fulfillment === "delivery" && o.status !== "cancelled" ?
+          '<div class="trk">' +
+            '<input type="url" dir="ltr" class="t-url" placeholder="لينك متابعة أوبر (Share trip status)" value="' + esc(o.trackUrl || "") + '">' +
+            '<input type="text" class="t-cour" placeholder="اسم/رقم المندوب (اختياري)" value="' + esc(o.courier || "") + '">' +
+            '<button type="button" class="btn t-go">🛵 خرج مع المندوب</button>' +
+            (o.token ? '<a class="t-wa" target="_blank" rel="noopener" href="' + AD_trackWa(o) + '">ابعتي للعميلة لينك المتابعة (واتساب)</a>' : "") +
+          "</div>" : "") +
         '<div class="sts">' + Object.keys(ST).map(function (k) {
           return '<button type="button" data-s="' + k + '"' + (k === o.status ? ' class="on"' : "") + ">" + ST[k] + "</button>";
         }).join("") + "</div>";
+      var go = c.querySelector(".t-go");
+      if (go) go.addEventListener("click", function () {
+        var url = c.querySelector(".t-url").value.trim(), cour = c.querySelector(".t-cour").value.trim();
+        go.disabled = true;
+        callable("atelierOrdersAdmin")({ action: "track", id: o.id, url: url, courier: cour }).then(function (r) {
+          var d = r.data || {};
+          o.trackUrl = url; o.courier = cour; o.token = d.token || o.token; o.status = d.status || o.status;
+          renderOrders(); toast("اتحفظ ✓ — ابعتي للعميلة لينك المتابعة");
+          window.open(AD_trackWa(o), "_blank");
+        }).catch(function (e) {
+          toast(/LINK/.test(String(e && e.message)) ? "اللينك ده مش من أوبر أو شركة توصيل معروفة" : "مقدرناش نحفظ — جرّبي تاني");
+        }).then(function () { go.disabled = false; });
+      });
       c.querySelectorAll("[data-s]").forEach(function (b) {
         b.addEventListener("click", function () {
           var s = b.dataset.s; if (s === o.status) return;
@@ -421,6 +442,13 @@
     });
   }
   setInterval(function () { if (!$("app").classList.contains("hidden")) loadOrders(true); }, 60000);
+  /* رسالة واتساب للعميلة بلينك صفحة المتابعة عندنا (مش لينك أوبر مباشرة —
+     الصفحة بتفضل شغالة وبتعرض الحالة لحد ما يوصل) */
+  function AD_trackWa(o) {
+    var link = "https://www.echarpe.store/atelier/track.html?t=" + o.token;
+    var msg = "أهلاً " + o.name + " 🤍 طلبكِ رقم " + o.code + " خرج مع المندوب 🛵\nتابعيه لايف من هنا: " + link;
+    return "https://wa.me/2" + o.phone + "?text=" + encodeURIComponent(msg);
+  }
 
   /* ============================================================
      ⚙️ إعدادات الموقع — pos_test_settings/atelier_site

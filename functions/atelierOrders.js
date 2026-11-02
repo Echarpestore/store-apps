@@ -30,6 +30,7 @@
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
+const crypto = require("crypto");
 
 const COL_ORDERS = "atelier_orders";
 const COL_GUARD = "atelier_order_guard";
@@ -138,6 +139,39 @@ function orderCode(now, rnd) {
   return "A" + String(now).slice(-4) + String(Math.floor(r * 90 + 10));
 }
 
+/* 🛵 متابعة الطلب — لينك سري لكل أوردر (track.html?t=…) من غير رقم
+   تليفون. ١٦ حرف عشوائي = محدش يقدر يخمّن أوردر حد تاني. */
+function trackToken() {
+  const A = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  const b = crypto.randomBytes(16);
+  let s = "";
+  for (let i = 0; i < 16; i++) s += A[b[i] % A.length];
+  return s;
+}
+/* لينك المندوب — https بس ومن شركات التوصيل المعروفة (أوبر وغيرها)،
+   عشان محدش يحط لينك غريب يوصل للعميلة. */
+const TRACK_HOSTS = ["uber.com", "careem.com", "indrive.com", "indriver.com", "didiglobal.com", "bosta.co", "maps.app.goo.gl", "goo.gl"];
+function cleanTrackUrl(u) {
+  let x;
+  try { x = new URL(String(u || "").trim()); } catch (e) { return ""; }
+  if (x.protocol !== "https:" || x.username || x.password) return "";
+  const h = x.hostname.toLowerCase();
+  const ok = TRACK_HOSTS.some((d) => h === d || h.endsWith("." + d)) ||
+    ((h === "google.com" || h.endsWith(".google.com")) && /^\/maps/.test(x.pathname));
+  return ok && x.href.length <= 600 ? x.href : "";
+}
+/* اللي العميلة تشوفه في صفحة المتابعة — من غير عنوان ولا تليفون */
+function publicOrder(o) {
+  return {
+    code: o.code, status: o.status, createdMs: o.createdMs || 0, statusAt: o.statusAt || 0,
+    fulfillment: o.fulfillment, branch: o.fulfillment === "pickup" ? (o.branch || "") : "",
+    governorate: o.fulfillment === "delivery" ? (o.governorate || "") : "",
+    items: (o.items || []).map((it) => ({ name: it.name, price: it.price || 0 })),
+    total: o.total || 0, trackUrl: o.status === "shipped" ? (o.trackUrl || "") : "",
+    courier: o.status === "shipped" ? (o.courier || "") : ""
+  };
+}
+
 function pushText(o) {
   const n = o.items.length;
   const what = n === 1 ? o.items[0].name : o.items[0].name + " + " + (n - 1) + " قطع";
@@ -212,7 +246,7 @@ exports.atelierOrderPlace = onCall({ region: "us-central1" }, async (req) => {
   }
 
   const order = Object.assign({}, v, {
-    code: orderCode(now), status: "new", source: data.source === "app" ? "app" : "web",
+    code: orderCode(now), status: "new", source: data.source === "app" ? "app" : "web", token: trackToken(),
     uid: req.auth.uid, items, subtotal, shipping, total: subtotal + shipping,
     createdAt: FieldValue.serverTimestamp(), createdMs: now
   });
@@ -221,13 +255,29 @@ exports.atelierOrderPlace = onCall({ region: "us-central1" }, async (req) => {
     const t = pushText(order);
     await notifyOffice(db, t.title, t.body, (items.find((x) => x.imgUrl) || {}).imgUrl || "");
   } catch (e) { console.warn("atelier push", e && e.message); }
-  return { code: order.code, total: order.total, shipping };
+  return { code: order.code, total: order.total, shipping, token: order.token };
 });
 
 exports.atelierOrdersAdmin = onCall({ region: "us-central1" }, async (req) => {
   if (!isStaff(req)) throw new HttpsError("permission-denied", "للموظفين بس");
   const db = getFirestore();
   const data = (req && req.data) || {};
+  if (data.action === "track") {
+    // 🛵 خرج مع المندوب: لينك المتابعة (أوبر…) + اسم/رقم المندوب اختياري
+    const id = String(data.id || "");
+    if (!/^[a-zA-Z0-9]{10,40}$/.test(id)) throw new HttpsError("invalid-argument", "BAD");
+    const url = cleanTrackUrl(data.url);
+    if (data.url && !url) throw new HttpsError("invalid-argument", "LINK");
+    const ref = db.collection(COL_ORDERS).doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) throw new HttpsError("not-found", "NO_ORDER");
+    const o = snap.data();
+    const upd = { trackUrl: url, courier: cleanText(data.courier, 60), trackAt: Date.now(), statusBy: req.auth.uid };
+    if (!o.token) upd.token = trackToken();                       // أوردرات قديمة من قبل الميزة
+    if (o.status !== "done" && o.status !== "cancelled") { upd.status = "shipped"; upd.statusAt = Date.now(); }
+    await ref.update(upd);
+    return { ok: true, token: upd.token || o.token, status: upd.status || o.status };
+  }
   if (data.action === "status") {
     const id = String(data.id || "");
     if (!/^[a-zA-Z0-9]{10,40}$/.test(id) || STATUSES.indexOf(data.status) < 0) throw new HttpsError("invalid-argument", "BAD");
@@ -249,6 +299,15 @@ exports.atelierImg = onRequest({ region: "us-central1", cors: true }, async (req
   } catch (e) { res.status(500).send("err"); }
 });
 
+/* 🛵 صفحة متابعة الطلب للعميلة — بالـtoken السري بس */
+exports.atelierOrderTrack = onCall({ region: "us-central1" }, async (req) => {
+  const token = String(req && req.data && req.data.t || "");
+  if (!/^[A-Za-z0-9]{16}$/.test(token)) throw new HttpsError("invalid-argument", "BAD");
+  const snap = await getFirestore().collection(COL_ORDERS).where("token", "==", token).limit(1).get();
+  if (snap.empty) throw new HttpsError("not-found", "NO_ORDER");
+  return publicOrder(snap.docs[0].data());
+});
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports.cleanPhone = cleanPhone;
   module.exports.cleanText = cleanText;
@@ -260,6 +319,9 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports.pushText = pushText;
   module.exports.imageUrlFor = imageUrlFor;
   module.exports.isStaff = isStaff;
+  module.exports.trackToken = trackToken;
+  module.exports.cleanTrackUrl = cleanTrackUrl;
+  module.exports.publicOrder = publicOrder;
   module.exports.STATUSES = STATUSES;
   module.exports.HOUSE_PRICES = HOUSE_PRICES;
 }
