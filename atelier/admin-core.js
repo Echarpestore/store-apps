@@ -150,7 +150,7 @@
      كام قطعة اتعدّلت ونصوص الموقع المقترحة. مفيش حفظ هنا. */
   var ASSIST_FIELDS = ["name", "nameEn", "colorName", "colorEn", "family", "familyEn", "price", "line", "active", "barcode"];
   function applyAssistantActions(items, pending, actions) {
-    var byId = {}, changed = 0, site = {};
+    var byId = {}, changed = 0, site = {}, mkt = {};
     (items || []).concat(pending || []).forEach(function (it) { byId[it.id] = it; });
     (actions || []).forEach(function (a) {
       if (a && a.op === "set" && byId[a.id] && a.fields) {
@@ -159,15 +159,18 @@
         if (did) changed++;
       } else if (a && a.op === "site" && a.fields) {
         Object.keys(a.fields).forEach(function (k) { site[k] = a.fields[k]; });
+      } else if (a && a.op === "mkt" && a.fields) {
+        Object.keys(a.fields).forEach(function (k) { mkt[k] = a.fields[k]; });
       }
     });
-    return { changed: changed, site: site };
+    return { changed: changed, site: site, mkt: mkt };
   }
   /* وصف قصير لكل اقتراح عشان صاحبة المحل تراجعه قبل ما تطبّقه */
   var FIELD_AR = { name: "الاسم", nameEn: "الاسم EN", colorName: "اللون", colorEn: "اللون EN", family: "الموديل", familyEn: "الموديل EN",
     price: "السعر", line: "النوع", active: "ظاهرة", barcode: "الباركود" };
   function describeAction(a, items) {
     if (a.op === "site") return "نصوص الموقع: " + Object.keys(a.fields).join("، ");
+    if (a.op === "mkt") return "التسويق: " + Object.keys(a.fields).map(function (k) { return k + " = " + a.fields[k]; }).join("، ");
     var it = (items || []).filter(function (x) { return x.id === a.id; })[0];
     var who = it ? (it.name + (it.colorName ? " — " + it.colorName : "")) : a.id;
     return who + ": " + Object.keys(a.fields).map(function (k) {

@@ -494,12 +494,17 @@
   /* ============================================================
      📣 التسويق — أرقام + لينك حملة + بيكسلات (pos_test_settings/atelier_site)
      ============================================================ */
-  var MK_FIELDS = ["metaPixelId", "ga4Id", "tiktokPixelId", "googleAdsId", "googleAdsPurchaseLabel"];
-  function loadMkt() {
-    col.doc("atelier_site").get().then(function (d) {
+  var MK_FIELDS = ["metaPixelId", "ga4Id", "tiktokPixelId", "googleAdsId", "googleAdsPurchaseLabel", "instagramUrl", "facebookUrl", "tiktokUrl"];
+  var SOCIAL = { instagramUrl: /(^|\.)instagram\.com$/, facebookUrl: /(^|\.)(facebook|fb)\.com$/, tiktokUrl: /(^|\.)tiktok\.com$/ };
+  function loadMktFields() {
+    return col.doc("atelier_site").get().then(function (d) {
       var v = d.exists ? d.data() : {};
       MK_FIELDS.forEach(function (k) { $("k_" + k).value = v[k] || ""; });
-    });
+    }).catch(function () { });
+  }
+  function mktNow() { var v = {}; MK_FIELDS.forEach(function (k) { if ($("k_" + k).value) v[k] = $("k_" + k).value; }); if ($("s_whatsapp").value) v.whatsapp = $("s_whatsapp").value; return v; }
+  function loadMkt() {
+    loadMktFields();
     // القطع: المحفوظة في اللوحة، وإلا قطع الموقع الثابتة
     var opts = items.length ? items.filter(function (it) { return it.active !== false; }).map(function (it) {
       return { id: "at-" + it.id, name: it.name + (it.colorName ? " — " + it.colorName : "") };
@@ -531,20 +536,26 @@
     (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(function () { toast("اتنسخ ✓"); },
       function () { $("m_link").select(); document.execCommand("copy"); toast("اتنسخ ✓"); });
   });
-  $("k_save").addEventListener("click", function () {
-    var b = this, v = {};
+  function saveMkt(extra) {
+    var b = $("k_save"), v = {};
     MK_FIELDS.forEach(function (k) { v[k] = $("k_" + k).value.trim(); });
     // نفس فحص الموقع (marketing.js) — اللي مش مظبوط بنقول عليه بدل ما يتجاهل في السر
     var ok = window.AtelierMkt ? window.AtelierMkt.cleanConfig(v) : null, bad = [];
     var map = { metaPixelId: "meta", ga4Id: "ga4", tiktokPixelId: "tiktok", googleAdsId: "ads", googleAdsPurchaseLabel: "adsLabel" };
-    if (ok) MK_FIELDS.forEach(function (k) { if (v[k] && !ok[map[k]]) bad.push(k); });
-    $("k_err").textContent = bad.length ? "الرقم ده مش بالشكل الصح: " + bad.join("، ") : "";
-    if (bad.length) return;
+    MK_FIELDS.forEach(function (k) {
+      if (!v[k]) return;
+      if (SOCIAL[k]) { var h = ""; try { var u = new URL(v[k]); h = u.protocol === "https:" ? u.hostname.toLowerCase() : ""; } catch (e) { } if (!SOCIAL[k].test(h)) bad.push(k); }
+      else if (ok && !ok[map[k]]) bad.push(k);
+    });
+    $("k_err").textContent = bad.length ? "ده مش بالشكل الصح: " + bad.join("، ") : "";
+    if (bad.length) return Promise.reject(new Error("bad"));
+    Object.assign(v, extra || {});
     b.disabled = true;
     v.mktUpdatedAt = firebase.firestore.FieldValue.serverTimestamp();
-    col.doc("atelier_site").set(v, { merge: true }).then(function () { toast("اتحفظ ✓ — البيكسلات شغالة على الموقع"); })
-      .catch(function () { toast("الحفظ وقف — جرّبي تاني"); }).then(function () { b.disabled = false; });
-  });
+    return col.doc("atelier_site").set(v, { merge: true }).then(function () { toast("اتحفظ ✓ — شغال على الموقع"); })
+      .catch(function (e) { toast("الحفظ وقف — جرّبي تاني"); throw e; }).then(function (r) { b.disabled = false; return r; }, function (e) { b.disabled = false; throw e; });
+  }
+  $("k_save").addEventListener("click", function () { saveMkt().catch(function () { }); });
 
   /* ============================================================
      🤖 المساعد — atelierAdminAssistant. بيقترح، وإنتي بتطبّقي وتحفظي.
@@ -573,7 +584,8 @@
         family: it.family, familyEn: it.familyEn, price: it.price, line: it.line, active: it.active !== false, barcode: it.barcode }; });
     var imgs = withImgs ? pending.slice(0, 12).map(function (p) { return { id: p.id, image: p.thumb }; }) : [];
     if (!$("s_eyebrow").value) loadSite();
-    callable("atelierAdminAssistant")({ message: text, items: list, images: imgs, site: siteNow(), history: asstHist })
+    if (!$("k_metaPixelId").value && !$("k_ga4Id").value) loadMktFields();
+    callable("atelierAdminAssistant")({ message: text, items: list, images: imgs, site: siteNow(), mkt: mktNow(), history: asstHist })
       .then(function (r) {
         var d = r.data || {}, acts = d.actions || [];
         asstHist.push({ role: "user", text: text || "سمّي الصور الجديدة" }, { role: "model", text: d.reply || "" });
@@ -591,6 +603,13 @@
             b.disabled = true; b.textContent = "اتطبّقت ✓";
             toast(res.changed ? "اتطبّق على " + res.changed + " قطعة — راجعي ودوسي «حفظ»" : "");
             if (Object.keys(res.site).length) toast("النصوص اتكتبت في تاب «إعدادات الموقع» — افتحيه واحفظي");
+            // 📣 التسويق بيتحفظ على طول (طلبتيه بنفسك ودوستي «طبّقي»)
+            var mk = res.mkt || {}, extra = {};
+            Object.keys(mk).forEach(function (k) { if (k === "whatsapp") { $("s_whatsapp").value = mk[k]; extra.whatsapp = mk[k]; } else if ($("k_" + k)) $("k_" + k).value = mk[k]; });
+            if (Object.keys(mk).length) loadMktFields().then(function () {
+              Object.keys(mk).forEach(function (k) { if (k !== "whatsapp" && $("k_" + k)) $("k_" + k).value = mk[k]; });
+              return saveMkt(extra);
+            }).catch(function () { toast("فيه رقم مش مظبوط — افتحي تاب «التسويق»"); });
           });
           box.appendChild(b); wait.appendChild(box);
         }

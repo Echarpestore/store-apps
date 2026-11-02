@@ -28,6 +28,32 @@ const LINES = ["crepe", "plisse", "mono", "zebre", "kinar", "chiffon", "isdal", 
 const ITEM_FIELDS = ["name", "nameEn", "colorName", "colorEn", "family", "familyEn", "price", "line", "active", "barcode"];
 const SITE_FIELDS = ["eyebrow", "title1", "title2", "sub", "statement", "marquee", "chatText",
   "eyebrowEn", "title1En", "title2En", "subEn", "statementEn", "marqueeEn", "chatTextEn"];
+/* 📣 إعدادات التسويق اللي المساعد يقدر يحطها — بنفس فحص marketing.js بالظبط */
+const MKT_RX = {
+  metaPixelId: /^\d{10,20}$/, ga4Id: /^G-[A-Z0-9]{4,14}$/, tiktokPixelId: /^[A-Z0-9]{12,30}$/,
+  googleAdsId: /^AW-\d{6,14}$/, googleAdsPurchaseLabel: /^[\w-]{4,40}$/, whatsapp: /^\d{10,15}$/
+};
+const SOCIAL_HOSTS = { instagramUrl: ["instagram.com"], facebookUrl: ["facebook.com", "fb.com"], tiktokUrl: ["tiktok.com"] };
+const MKT_FIELDS = Object.keys(MKT_RX).concat(Object.keys(SOCIAL_HOSTS));
+function cleanSocial(k, v) {
+  let u; try { u = new URL(String(v || "").trim()); } catch (e) { return ""; }
+  const h = u.hostname.toLowerCase();
+  if (u.protocol !== "https:" || !SOCIAL_HOSTS[k].some((d) => h === d || h.endsWith("." + d))) return "";
+  return (u.origin + u.pathname).replace(/\/+$/, "").slice(0, 200);
+}
+function cleanMkt(fields) {
+  const f = {};
+  MKT_FIELDS.forEach((k) => {
+    if (!(k in (fields || {}))) return;
+    let v = String(fields[k] == null ? "" : fields[k]).trim();
+    if (SOCIAL_HOSTS[k]) { v = cleanSocial(k, v); if (v) f[k] = v; return; }
+    if (k === "ga4Id" || k === "tiktokPixelId" || k === "googleAdsId") v = v.toUpperCase();
+    if (k === "whatsapp") { v = v.replace(/[^\d]/g, ""); if (/^0\d{10}$/.test(v)) v = "2" + v; }
+    if (MKT_RX[k].test(v)) f[k] = v;
+  });
+  return f;
+}
+
 const STYLIST_CAP_USER = 25, STYLIST_CAP_GLOBAL = 3000, ADMIN_CAP_DAY = 300;
 
 /* ============================================================
@@ -53,7 +79,7 @@ function cleanItems(list) {
   })).filter((it) => it.id);
 }
 
-function buildAdminPrompt(items, site, imageIds) {
+function buildAdminPrompt(items, site, imageIds, mkt) {
   return [
     "You are the in-house assistant of echarpe, an Egyptian hijab store, inside its website admin page.",
     "The owner talks to you in Egyptian Arabic (sometimes English). ALWAYS reply in short, friendly Egyptian Arabic.",
@@ -64,7 +90,10 @@ function buildAdminPrompt(items, site, imageIds) {
     "Never invent item ids — only use ids from the CURRENT ITEMS list. If something is ambiguous, ask in 'reply' and return no actions.",
     "If photos are attached, they are product photos of NEW items (ids listed below in the same order). Look at each one and suggest colourName (Arabic, the usual Egyptian shop name, e.g. أسود، أوف وايت، بيج، موكا، كحلي، روز، زيتي…), colorEn, and if clear the family and line.",
     "English colour names are short and elegant (e.g. 'Black with White Border', 'Stone Beige'). English model names are title case.",
-    "Keep 'reply' under 80 words. Summarise what you changed so the owner can review, and remind her to press «حفظ» when happy.",
+    "MARKETING (op 'mkt'): you can set metaPixelId (digits), ga4Id (G-XXXX), tiktokPixelId, googleAdsId (AW-digits), googleAdsPurchaseLabel, whatsapp (international digits, e.g. 2010…), instagramUrl, facebookUrl, tiktokUrl (full https profile links).",
+    "If the owner pastes a whole tracking snippet or a page URL, EXTRACT only the ID (e.g. from fbq('init', '123…') take 123…; from gtag/js?id=G-ABC take G-ABC; from ttq.load('C…') take C…; from a Google Ads snippet AW-…/label take both).",
+    "If she asks where to find an ID, explain briefly in Egyptian Arabic: Meta → Events Manager → Data sources → the Pixel → ID; Google Analytics → Admin → Data streams → the web stream → Measurement ID (G-…); TikTok → Ads Manager → Assets → Events → Web events → the pixel ID; Google Ads → Goals → Conversions → the purchase action → Tag setup (AW-… and the label).",
+    "Keep 'reply' under 80 words. Summarise what you changed so the owner can review. Product/site changes need «حفظ»; marketing settings are saved automatically when she taps apply.",
     "",
     "CURRENT ITEMS (JSON): " + JSON.stringify(items.map((it) => {
       const o = { id: it.id, name: it.name, colorName: it.colorName, family: it.family, price: it.price, line: it.line };
@@ -73,6 +102,7 @@ function buildAdminPrompt(items, site, imageIds) {
       return o;
     })),
     "WEBSITE TEXTS (JSON): " + JSON.stringify(site || {}),
+    "CURRENT MARKETING SETTINGS (JSON): " + JSON.stringify(mkt || {}),
     imageIds.length ? "ATTACHED PHOTOS belong to these new item ids, in order: " + JSON.stringify(imageIds) : "No photos attached."
   ].join("\n");
 }
@@ -82,7 +112,7 @@ const ADMIN_SCHEMA = {
   properties: {
     reply: { type: "STRING" },
     actions: { type: "ARRAY", items: { type: "OBJECT", properties: {
-      op: { type: "STRING", enum: ["set", "site"] },
+      op: { type: "STRING", enum: ["set", "site", "mkt"] },
       id: { type: "STRING" },
       fields: { type: "OBJECT", properties: {
         name: { type: "STRING" }, nameEn: { type: "STRING" }, colorName: { type: "STRING" }, colorEn: { type: "STRING" },
@@ -91,7 +121,10 @@ const ADMIN_SCHEMA = {
         eyebrow: { type: "STRING" }, title1: { type: "STRING" }, title2: { type: "STRING" }, sub: { type: "STRING" },
         statement: { type: "STRING" }, marquee: { type: "STRING" }, chatText: { type: "STRING" },
         eyebrowEn: { type: "STRING" }, title1En: { type: "STRING" }, title2En: { type: "STRING" }, subEn: { type: "STRING" },
-        statementEn: { type: "STRING" }, marqueeEn: { type: "STRING" }, chatTextEn: { type: "STRING" }
+        statementEn: { type: "STRING" }, marqueeEn: { type: "STRING" }, chatTextEn: { type: "STRING" },
+        metaPixelId: { type: "STRING" }, ga4Id: { type: "STRING" }, tiktokPixelId: { type: "STRING" }, googleAdsId: { type: "STRING" },
+        googleAdsPurchaseLabel: { type: "STRING" }, whatsapp: { type: "STRING" },
+        instagramUrl: { type: "STRING" }, facebookUrl: { type: "STRING" }, tiktokUrl: { type: "STRING" }
       } }
     }, required: ["op", "fields"] } }
   },
@@ -120,6 +153,9 @@ function sanitizeAdminActions(raw, items) {
     } else if (a.op === "site") {
       SITE_FIELDS.forEach((k) => { if (k in a.fields) f[k] = clean(a.fields[k], 400); });
       if (Object.keys(f).length) out.push({ op: "site", fields: f });
+    } else if (a.op === "mkt") {
+      const m = cleanMkt(a.fields);
+      if (Object.keys(m).length) out.push({ op: "mkt", fields: m });
     }
   });
   return out;
@@ -242,12 +278,14 @@ exports.atelierAdminAssistant = onCall(
     const items = cleanItems(data.items);
     const site = {};
     SITE_FIELDS.forEach((k) => { if (data.site && data.site[k]) site[k] = clean(data.site[k], 300); });
+    const mkt = {};
+    MKT_FIELDS.forEach((k) => { if (data.mkt && data.mkt[k]) mkt[k] = clean(data.mkt[k], 200); });
     if (!(await bumpGuard(db, "asst_admin_" + cairoDay(), ADMIN_CAP_DAY)))
       throw new HttpsError("resource-exhausted", "المساعد خلّص رسايل النهاردة — نكمّل بكرة");
     try {
       const out = await callGeminiJson({
         apiKey: GEMINI_API_KEY.value(), models: await modelList(db),
-        system: buildAdminPrompt(items, site, imgs.map((i) => i.id)),
+        system: buildAdminPrompt(items, site, imgs.map((i) => i.id), mkt),
         history: cleanHistory(data.history), message: message || "اقترحي أسماء وألوان للصور دي",
         images: imgs, schema: ADMIN_SCHEMA
       });
@@ -295,5 +333,5 @@ exports.atelierStylist = onCall(
 
 if (typeof module !== "undefined" && module.exports) {
   Object.assign(module.exports, { buildAdminPrompt, sanitizeAdminActions, cleanItems, cleanHistory, buildStylistPrompt,
-    sanitizeStylist, cleanCatalog, capDecide, productImages, ADMIN_SCHEMA, STYLIST_SCHEMA, MODELS });
+    sanitizeStylist, cleanCatalog, cleanMkt, MKT_FIELDS, capDecide, productImages, ADMIN_SCHEMA, STYLIST_SCHEMA, MODELS });
 }

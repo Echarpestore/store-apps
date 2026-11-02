@@ -384,3 +384,23 @@ if (O) {
   const aj = fs.readFileSync(path.join(ROOT, 'atelier', 'admin.js'), 'utf8');
   assert(/action: "track"/.test(aj) && /track\.html\?t=/.test(aj), 'الإدارة: خرج مع المندوب + واتساب بلينك المتابعة');
 }
+
+// ١٩) 📣 المساعد بيحط إعدادات التسويق (بيكسلات + سوشيال) بفحص
+{
+  const A2 = loadFn(path.join(ROOT, 'functions', 'atelierAssistant.js'));
+  const m = A2.cleanMkt({ metaPixelId: ' 123456789012345 ', ga4Id: 'g-abc12345', tiktokPixelId: 'cabcdefghijklmno12', googleAdsId: 'aw-123456789',
+    googleAdsPurchaseLabel: 'AbC_d-12', whatsapp: '01148664485', instagramUrl: 'https://www.instagram.com/echarpe.eg/?hl=ar', facebookUrl: 'https://m.facebook.com/echarpe', tiktokUrl: 'https://www.tiktok.com/@echarpe' });
+  assert(m.metaPixelId === '123456789012345' && m.ga4Id === 'G-ABC12345' && m.googleAdsId === 'AW-123456789' && m.whatsapp === '201148664485', 'المساعد: الأرقام بتتنضّف وبتتظبط');
+  assert(m.instagramUrl === 'https://www.instagram.com/echarpe.eg' && m.facebookUrl && m.tiktokUrl, 'المساعد: لينكات الحسابات من غير ?بواقي');
+  const bad = A2.cleanMkt({ metaPixelId: "fbq('init')", instagramUrl: 'https://evil.com/instagram.com', facebookUrl: 'http://facebook.com/x', ga4Id: 'UA-1', whatsapp: '12' });
+  assert(Object.keys(bad).length === 0, 'المساعد: أي حاجة مش مظبوطة بتتشال');
+  const its = A2.cleanItems([{ id: 'a1', name: 'x' }]);
+  const acts = A2.sanitizeAdminActions([{ op: 'mkt', fields: { metaPixelId: '123456789012345', evil: '<script>' } }, { op: 'mkt', fields: { ga4Id: 'nope' } }], its);
+  assert(acts.length === 1 && acts[0].op === 'mkt' && acts[0].fields.metaPixelId && !('evil' in acts[0].fields), 'اقتراح التسويق بيعدّي من الفحص بس');
+  assert(/EXTRACT only the ID/.test(A2.buildAdminPrompt(its, {}, [], {})), 'المساعد بيطلّع الرقم من الكود الملصوق');
+  const AD5 = require(path.join(ROOT, 'atelier', 'admin-core.js'));
+  assert(AD5.applyAssistantActions([], [], [{ op: 'mkt', fields: { ga4Id: 'G-ABC12345' } }]).mkt.ga4Id === 'G-ABC12345', 'الصفحة بتستلم إعدادات التسويق');
+  const ld2 = AC.productJsonLd([], () => '', 'en', ['https://www.instagram.com/echarpe.eg']);
+  assert(ld2['@graph'][0].sameAs[0] === 'https://www.instagram.com/echarpe.eg', 'حسابات السوشيال لجوجل (sameAs)');
+  assert(/id="social"/.test(fs.readFileSync(path.join(ROOT, 'atelier', 'index.html'), 'utf8')), 'لينكات الحسابات في الفوتر');
+}

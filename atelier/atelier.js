@@ -1428,6 +1428,14 @@
     var d = {}, K = ["eyebrow", "title1", "title2", "sub", "statement", "marquee", "chatText"];
     K.forEach(function (k) { d[k] = EN ? raw[k + "En"] : raw[k]; });
     if (/^\d{10,15}$/.test(String(raw.whatsapp || ""))) SITE.whatsapp = String(raw.whatsapp);
+    // 📱 حسابات السوشيال — للفوتر ولجوجل (sameAs). https ومن المنصة نفسها بس
+    SITE.social = [["instagramUrl", /(^|\.)instagram\.com$/, "Instagram"], ["facebookUrl", /(^|\.)(facebook|fb)\.com$/, "Facebook"], ["tiktokUrl", /(^|\.)tiktok\.com$/, "TikTok"]]
+      .map(function (s) {
+        var u = null; try { u = new URL(String(raw[s[0]] || "")); } catch (e) { }
+        return u && u.protocol === "https:" && s[1].test(u.hostname.toLowerCase()) ? { url: u.href, name: s[2] } : null;
+      }).filter(Boolean);
+    var soc = $("social");
+    if (soc) { soc.innerHTML = SITE.social.map(function (s) { return '<a href="' + esc(s.url) + '" target="_blank" rel="noopener">' + esc(s.name) + "</a>"; }).join(""); soc.classList.toggle("hidden", !SITE.social.length); }
     if (d.chatText) SITE.chatText = String(d.chatText).slice(0, 300);
     if (Array.isArray(raw.branches) && raw.branches.length) {
       SITE.branches = raw.branches.map(String).slice(0, 12);
@@ -1529,7 +1537,7 @@
     var ld = AC.productJsonLd(state.products, function (p) {
       if (p.docId) return IMG_FN + encodeURIComponent(p.docId);
       return /^collection\//.test(p.img || "") ? AC.SITE_URL + "/atelier/" + p.img : "";
-    }, LANG);
+    }, LANG, (SITE.social || []).map(function (x) { return x.url; }));
     var s = $("ldjson"); if (!s) { s = document.createElement("script"); s.type = "application/ld+json"; s.id = "ldjson"; document.head.appendChild(s); }
     s.textContent = JSON.stringify(ld);
   }
