@@ -1262,9 +1262,15 @@
     call.then(function (res) {
       var d = (res && res.data) || {};
       mkt("Purchase", items, { value: Number(d.total) || undefined, orderId: d.code || "" });
+      // 🛵 لينك متابعة الطلب — محفوظ على الموبايل عشان تلاقيه من صفحة المتابعة
+      if (d.token) try {
+        var mine = JSON.parse((LS && LS.getItem("atelier_myorders")) || "[]");
+        mine.unshift({ code: d.code, token: d.token, at: Date.now() }); LS.setItem("atelier_myorders", JSON.stringify(mine.slice(0, 10)));
+      } catch (e) { }
       if (EMBED) toParent({ type: "atelier-ordered", code: d.code || "", total: d.total || 0, barcode: (items[0] && items[0].barcode) || "", name: items[0] ? displayName(items[0]) : "" });
       orderDone(tr("رقم الطلب ", "Order ") + (d.code || "") + (d.total ? tr(" · الإجمالي ", " · Total ") + money(d.total) : "") +
-        "<br>" + tr("هنكلمكِ على واتساب على ", "We’ll message you on WhatsApp at ") + esc(f.phone) + tr(" للتأكيد 🤍", " to confirm 🤍"));
+        "<br>" + tr("هنكلمكِ على واتساب على ", "We’ll message you on WhatsApp at ") + esc(f.phone) + tr(" للتأكيد 🤍", " to confirm 🤍") +
+        (d.token ? '<br><a class="btn-link" target="_blank" rel="noopener" href="track.html?t=' + esc(d.token) + '">' + tr("تابعي طلبكِ ←", "Track your order →") + "</a>" : ""));
     }).catch(function (er) {
       var code = String(er && er.code || "").replace(/^functions\//, "");
       if (code === "resource-exhausted" || code === "invalid-argument") {

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title data-en="echarpe — Track your order">echarpe — تابعي طلبكِ</title>
+<meta name="theme-color" content="#f6f2ec">
+<link rel="icon" href="../loyalty/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=IBM+Plex+Sans+Arabic:wght@300;400;500&family=Cormorant+Garamond:wght@400;500&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="./i18n.js?v=2611020500"></script>
+<style>
+  :root{--paper:#f6f2ec; --paper-2:#ede6dc; --ink:#1c1916; --soft:#6f665d; --line:rgba(28,25,22,.14); --bronze:#8a6f4e; --ok:#3f7a52;
+    --ar:'Amiri',serif; --sans:'IBM Plex Sans Arabic',system-ui,sans-serif;}
+  html[lang="en"]{--ar:'Cormorant Garamond',Georgia,serif; --sans:'Jost',system-ui,sans-serif;}
+  *{margin:0; padding:0; box-sizing:border-box;}
+  body{background:var(--paper); color:var(--ink); font-family:var(--sans); font-weight:300; min-height:100vh;}
+  .wrap{width:min(100%,480px); margin:0 auto; padding:calc(22px + env(safe-area-inset-top)) 16px 40px;}
+  header{display:flex; align-items:center; justify-content:space-between; margin-bottom:26px;}
+  header img{height:28px;}
+  .lang-btn{font-size:12px; padding:4px 10px; border:1px solid currentColor; border-radius:999px; background:none; color:inherit;}
+  h1{font-family:var(--ar); font-weight:400; font-size:34px; line-height:1.2;}
+  .sub{color:var(--soft); font-size:13px; margin-top:6px;}
+  .card{background:#fff; border:1px solid var(--line); padding:18px; margin-top:20px;}
+  .steps{list-style:none; display:grid; gap:0; margin-top:6px;}
+  .steps li{display:grid; grid-template-columns:26px 1fr; gap:12px; padding:10px 0; position:relative; color:var(--soft);}
+  .steps li::before{content:''; width:14px; height:14px; border-radius:50%; border:1.5px solid var(--line); margin:3px 6px 0; background:#fff; z-index:1;}
+  .steps li:not(:last-child)::after{content:''; position:absolute; inset-inline-start:12px; top:24px; bottom:-10px; width:1.5px; background:var(--line);}
+  .steps li.done{color:var(--ink);} .steps li.done::before{background:var(--ink); border-color:var(--ink);}
+  .steps li.now{color:var(--ink); font-weight:400;} .steps li.now::before{background:var(--bronze); border-color:var(--bronze); box-shadow:0 0 0 5px rgba(138,111,78,.18); animation:pulse 1.8s infinite;}
+  @keyframes pulse{50%{box-shadow:0 0 0 9px rgba(138,111,78,.05);}}
+  .steps small{display:block; font-size:11.5px; color:var(--soft); font-weight:300;}
+  .live{display:flex; align-items:center; justify-content:center; gap:10px; width:100%; margin-top:16px; padding:16px; background:var(--ink); color:var(--paper); text-decoration:none; font-size:15px;}
+  .live .dot{width:9px; height:9px; border-radius:50%; background:#5fd38a; box-shadow:0 0 0 0 rgba(95,211,138,.6); animation:ping 1.6s infinite;}
+  @keyframes ping{70%{box-shadow:0 0 0 10px rgba(95,211,138,0);} 100%{box-shadow:0 0 0 0 rgba(95,211,138,0);}}
+  .its{font-size:13.5px; line-height:1.8;} .tot{margin-top:8px; font-weight:400;}
+  .muted{color:var(--soft); font-size:12.5px; line-height:1.7;}
+  .list a{display:block; padding:12px 0; border-bottom:1px solid var(--line); color:inherit; text-decoration:none;}
+  .back{display:inline-block; margin-top:22px; color:var(--bronze); font-size:13px;}
+  .hidden{display:none !important;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><a href="./"><img src="../logo.png" alt="echarpe"></a><button class="lang-btn" id="langBtn" type="button">عربي</button></header>
+  <h1 id="title" data-en="Your order">طلبكِ</h1>
+  <p class="sub" id="sub"></p>
+
+  <div class="card hidden" id="orderCard">
+    <ol class="steps" id="steps"></ol>
+    <a class="live hidden" id="live" target="_blank" rel="noopener"><i class="dot"></i><span data-en="Follow your courier live on the map">تابعي المندوب لايف على الخريطة</span></a>
+    <p class="muted hidden" id="courier" style="margin-top:10px;"></p>
+  </div>
+  <div class="card hidden" id="itemsCard"><div class="its" id="its"></div></div>
+  <div class="card hidden" id="listCard"><b data-en="Your recent orders">طلباتكِ الأخيرة</b><div class="list" id="list"></div></div>
+  <p class="muted" id="note" style="margin-top:18px;"></p>
+  <a class="back" href="./" data-en="← Back to the collection">← رجوع للمجموعة</a>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+<script src="./atelier-core.js?v=2611020500"></script>
+<script>
+/* 🛵 متابعة الطلب — track.html?t=<token>. الحالة بتتحدّث كل ٣٠ ثانية،
+   ولما الطلب يخرج مع المندوب يظهر زرار متابعة أوبر لايف. */
+(function () {
+  "use strict";
+  var AC = window.AtelierCore, LANG = window.AtelierLang === "ar" ? "ar" : "en", EN = LANG === "en";
+  function tr(a, e) { return EN ? e : a; }
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  if (window.AtelierI18n) window.AtelierI18n.apply();
+  var m = /[?&]t=([A-Za-z0-9]{16})(?:&|$)/.exec(location.search), token = m ? m[1] : "";
+  var mine = []; try { mine = JSON.parse(localStorage.getItem("atelier_myorders") || "[]"); } catch (e) { mine = []; }
+
+  if (!token) {
+    $("title").textContent = tr("تابعي طلبكِ", "Track your order");
+    if (mine.length) {
+      $("listCard").classList.remove("hidden");
+      $("list").innerHTML = mine.slice(0, 10).map(function (o) {
+        return '<a href="?t=' + esc(o.token) + '">' + tr("طلب ", "Order ") + esc(o.code) + " · " + new Date(o.at).toLocaleDateString(EN ? "en-GB" : "ar-EG") + "</a>";
+      }).join("");
+    } else $("note").textContent = tr("افتحي لينك المتابعة اللي وصلكِ على واتساب.", "Open the tracking link we sent you on WhatsApp.");
+    return;
+  }
+
+  firebase.initializeApp({ apiKey: "AIzaSyCa6Qho3IKoKE_jCNHYuFX6rtaV88jekQs", authDomain: "customer-feedback-8ac1d.firebaseapp.com",
+    projectId: "customer-feedback-8ac1d", appId: "1:408860081491:web:c5fa8b8e757c13196375a6" });
+  var call = firebase.app().functions("us-central1").httpsCallable("atelierOrderTrack");
+  var auth = new Promise(function (res) {
+    var done = false; firebase.auth().onAuthStateChanged(function (u) { if (u) { if (!done) { done = true; res(); } } else firebase.auth().signInAnonymously().catch(res); });
+    setTimeout(res, 5000);
+  });
+
+  function steps(o) {
+    var pick = o.fulfillment === "pickup";
+    var S = [
+      ["new", tr("اتسجّل طلبكِ", "Order placed"), tr("وصلنا وبنجهّزه", "We received it and we’re preparing it")],
+      ["confirmed", tr("اتأكد", "Confirmed"), tr("كلمناكِ وأكدنا التفاصيل", "We confirmed the details with you")],
+      ["shipped", pick ? tr("جاهز في الفرع", "Ready at the store") : tr("خرج مع المندوب 🛵", "Out for delivery 🛵"),
+        pick ? tr("مستنينكِ في فرع ", "Waiting for you at ") + (o.branch || "") : tr("المندوب في الطريق ليكِ", "Your courier is on the way")],
+      ["done", tr("اتسلّم 🤍", "Delivered 🤍"), tr("نتمنى تعجبكِ", "We hope you love it")]
+    ];
+    var at = { new: 0, confirmed: 1, shipped: 2, done: 3 }[o.status];
+    if (o.status === "cancelled") return '<li class="now"><span>' + tr("الطلب اتلغى", "Order cancelled") + "</span></li>";
+    return S.map(function (s, i) {
+      return '<li class="' + (i < at ? "done" : i === at ? "now" : "") + '"><span>' + esc(s[1]) + "<small>" + esc(s[2]) + "</small></span></li>";
+    }).join("");
+  }
+  function render(o) {
+    $("title").textContent = tr("طلب ", "Order ") + o.code;
+    $("sub").textContent = new Date(o.createdMs).toLocaleString(EN ? "en-GB" : "ar-EG", { dateStyle: "medium", timeStyle: "short" });
+    $("orderCard").classList.remove("hidden"); $("steps").innerHTML = steps(o);
+    $("live").classList.toggle("hidden", !o.trackUrl); if (o.trackUrl) $("live").href = o.trackUrl;
+    $("courier").classList.toggle("hidden", !o.courier); $("courier").textContent = tr("المندوب: ", "Courier: ") + (o.courier || "");
+    $("itemsCard").classList.remove("hidden");
+    $("its").innerHTML = o.items.map(function (it) { return "• " + esc(it.name); }).join("<br>") +
+      (o.total ? '<div class="tot">' + tr("الإجمالي ", "Total ") + esc(AC.fmtPrice(o.total, LANG)) + "</div>" : "");
+    $("note").textContent = o.status === "shipped" && !o.trackUrl ? tr("هنبعتلكِ لينك المتابعة أول ما المندوب يتحرك.", "We’ll add the live link as soon as your courier sets off.") : "";
+  }
+  function load() {
+    return auth.then(function () { return call({ t: token }); }).then(function (r) { render(r.data); })
+      .catch(function (e) {
+        var nf = /not-found|invalid-argument/.test(String(e && e.code));
+        $("note").textContent = nf ? tr("مش لاقيين الطلب ده — راجعي اللينك أو كلمينا.", "We couldn’t find this order — please check the link or contact us.")
+          : tr("مش قادرين نجيب الحالة دلوقتي — جرّبي تاني بعد شوية.", "We can’t load the status right now — please try again shortly.");
+      });
+  }
+  load(); setInterval(function () { if (!document.hidden) load(); }, 30000);
+})();
+</script>
+</body>
+</html>

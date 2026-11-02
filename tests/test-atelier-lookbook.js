@@ -33,7 +33,7 @@ function loadFn(file, extraStubs) {
     require: (id) => { if (stubs[id]) return stubs[id]; throw new Error('unexpected require ' + id); },
     module, exports: module.exports, console,
     Object, Array, Math, Number, String, JSON, Date, Set, RegExp, Error, Promise,
-    Intl, encodeURIComponent, fetch: () => { throw new Error('no-net-in-test'); }
+    Intl, URL, encodeURIComponent, fetch: () => { throw new Error('no-net-in-test'); }
   };
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(file, 'utf8'), sandbox, { filename: path.basename(file) });
@@ -206,7 +206,7 @@ assert(AC.atelierItemsFrom({ items: [{ id: 'm', line: 'crepe', family: 'كوري
 // ١١) أوردرات غرفة القياس: إشعار للمالك من غير POS
 const ORD_PATH = path.join(ROOT, 'functions', 'atelierOrders.js');
 let O = null;
-try { O = loadFn(ORD_PATH, { 'firebase-admin/messaging': { getMessaging: () => ({}) },
+try { O = loadFn(ORD_PATH, { 'firebase-admin/messaging': { getMessaging: () => ({}) }, crypto: require('crypto'),
   'firebase-functions/v2/https': { onCall: () => 'ONCALL', onRequest: () => 'ONREQ', HttpsError: class extends Error { constructor(c, m) { super(m); this.code = c; } } } }); }
 catch (e) { assert(false, 'atelierOrders لازم يتحمّل — ' + e.message); }
 if (O) {
@@ -364,4 +364,23 @@ assert(ac.colorName === 'كاكي' && ac.extras === 2, 'الأتيليه بيق�
   assert(/السعر ← ٧٠٠|السعر ← 700/.test(AD4.describeAction({ op: 'set', id: 'a1', fields: { price: 700 } }, its)), 'وصف الاقتراح قبل التطبيق');
   const pj = fs.readFileSync(path.join(ROOT, 'atelier', 'atelier.js'), 'utf8');
   assert(/callable\("atelierStylist"\)/.test(pj) && !/atelierStylist[\s\S]{0,400}state\.face/.test(pj), 'المنسّقة على الصفحة — من غير صورة العميلة');
+}
+
+// ١٨) 🛵 متابعة الطلب مع المندوب (أوبر)
+if (O) {
+  const tk = O.trackToken();
+  assert(/^[A-Za-z0-9]{16}$/.test(tk) && tk !== O.trackToken(), 'لينك متابعة سري لكل أوردر');
+  assert(O.cleanTrackUrl('https://m.uber.com/ul/?action=trackTrip&x=1').indexOf('https://m.uber.com/') === 0 && O.cleanTrackUrl('https://trip.uber.com/abc') !== '', 'لينك أوبر بيتقبل');
+  assert(O.cleanTrackUrl('https://maps.app.goo.gl/xyz') !== '' && O.cleanTrackUrl('https://www.google.com/maps/@30,31') !== '', 'لوكيشن جوجل مابس بيتقبل');
+  assert(O.cleanTrackUrl('http://m.uber.com/x') === '' && O.cleanTrackUrl('https://uber.com.evil.io/x') === '' && O.cleanTrackUrl('javascript:alert(1)') === '' && O.cleanTrackUrl('https://evil.com/?u=uber.com') === '' && O.cleanTrackUrl('https://www.google.com/search?q=x') === '', 'أي لينك غريب بيترفض');
+  const po = O.publicOrder({ code: 'A1', status: 'shipped', phone: '01000000000', address: 'شارع ٩', name: 'منى', fulfillment: 'delivery', governorate: 'القاهرة',
+    items: [{ name: 'كينار', price: 680, barcode: 'b' }], total: 720, trackUrl: 'https://m.uber.com/x', courier: 'أحمد', token: 'x' });
+  assert(!('phone' in po) && !('address' in po) && !('name' in po) && !('token' in po) && po.trackUrl && po.courier === 'أحمد', 'صفحة المتابعة من غير تليفون ولا عنوان ولا اسم');
+  assert(O.publicOrder({ status: 'done', trackUrl: 'https://m.uber.com/x', items: [] }).trackUrl === '', 'لينك المندوب بيختفي بعد التسليم');
+  const os = fs.readFileSync(ORD_PATH, 'utf8');
+  assert(/exports\.atelierOrderTrack/.test(os) && /data\.action === "track"/.test(os) && /token: trackToken\(\)/.test(os), 'الأوردر بيتعمله لينك + الإدارة بتحط لينك المندوب + دالة المتابعة');
+  const th = fs.readFileSync(path.join(ROOT, 'atelier', 'track.html'), 'utf8');
+  assert(/atelierOrderTrack/.test(th) && /id="live"/.test(th) && /noindex/.test(th) && /setInterval\(/.test(th), 'صفحة المتابعة: زرار لايف + تحديث كل شوية + مش في جوجل');
+  const aj = fs.readFileSync(path.join(ROOT, 'atelier', 'admin.js'), 'utf8');
+  assert(/action: "track"/.test(aj) && /track\.html\?t=/.test(aj), 'الإدارة: خرج مع المندوب + واتساب بلينك المتابعة');
 }
