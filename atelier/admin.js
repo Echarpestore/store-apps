@@ -38,11 +38,54 @@
   /* ---------------- الدخول ---------------- */
   auth.onAuthStateChanged(function (u) {
     var staff = u && u.providerData && u.providerData.some(function (p) { return p.providerId === "password"; });
-    $("login").classList.toggle("hidden", !!staff);
-    $("app").classList.toggle("hidden", !staff);
-    $("asstFab").classList.toggle("hidden", !staff);
-    if (staff) { loadAll(); loadOrders(true); loadSite(); }
+    $("denied").classList.add("hidden");
+    if (!staff) { $("login").classList.remove("hidden"); $("loginForm").classList.remove("hidden"); $("app").classList.add("hidden"); $("asstFab").classList.add("hidden"); return; }
+    // 🔐 القايمة (atelierAdmins): مش في القايمة = ممنوع. لو الدالة مش منشورة
+    //    بنكمّل زي الأول — السيرفر والقواعد هما الحماية الحقيقية.
+    checkAdmin(u).then(function (ok) {
+      $("login").classList.toggle("hidden", ok);
+      $("loginForm").classList.toggle("hidden", !ok);           // ممنوعة → رسالة بدل فورم الدخول
+      $("app").classList.toggle("hidden", !ok);
+      $("asstFab").classList.toggle("hidden", !ok);
+      if (ok) { loadAll(); loadOrders(true); loadSite(); }
+    });
   });
+  var adm = null;
+  function checkAdmin(u) {
+    return firebase.app().functions("us-central1").httpsCallable("atelierAdmins")({ action: "me" }).then(function (r) {
+      adm = r.data || {};
+      if (!adm.admin) {
+        $("denied").classList.remove("hidden"); $("deniedWho").textContent = "داخلة بـ: " + (u.email || "");
+        return false;
+      }
+      renderAdm();
+      return true;
+    }).catch(function (e) {
+      if (String(e && e.code).indexOf("permission-denied") >= 0) { $("denied").classList.remove("hidden"); return false; }
+      return true;
+    });
+  }
+  function renderAdm() {
+    $("admSetup").classList.toggle("hidden", !adm || adm.setup !== false);
+    $("admMe").textContent = (adm && adm.email) || "";
+    $("admBox").classList.toggle("hidden", !(adm && adm.owner));
+    if (!adm || !adm.owner) return;
+    var box = $("admList"); box.innerHTML = "";
+    (adm.owners || []).forEach(function (m) { box.appendChild(el("div", "adm-row", "<span dir=\"ltr\">" + esc(m) + "</span><span class=\"muted\">المالكة</span>")); });
+    (adm.emails || []).forEach(function (m) {
+      var r = el("div", "adm-row", "<span dir=\"ltr\">" + esc(m) + "</span>");
+      var b = el("button", "", "شيلي"); b.type = "button";
+      b.addEventListener("click", function () { if (confirm("تشيلي " + m + "؟")) admCall("remove", m); });
+      r.appendChild(b); box.appendChild(r);
+    });
+  }
+  function admCall(action, email) {
+    return firebase.app().functions("us-central1").httpsCallable("atelierAdmins")({ action: action, email: email }).then(function (r) {
+      adm.owners = r.data.owners; adm.emails = r.data.emails; renderAdm(); toast("اتحفظ ✓");
+    }).catch(function (e) { toast(/EMAIL/.test(String(e && e.message)) ? "الإيميل مش مظبوط" : "مقدرناش نحفظ — جرّبي تاني"); });
+  }
+  $("admAdd").addEventListener("click", function () { var v = $("admNew").value.trim(); if (v) admCall("add", v).then(function () { $("admNew").value = ""; }); });
+  $("deniedOut").addEventListener("click", function () { auth.signOut(); });
   $("loginForm").addEventListener("submit", function (e) {
     e.preventDefault(); $("loginErr").textContent = "";
     auth.signInWithEmailAndPassword($("email").value.trim(), $("pass").value)

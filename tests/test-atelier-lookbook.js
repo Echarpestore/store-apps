@@ -26,7 +26,8 @@ function loadFn(file, extraStubs) {
   const stubs = Object.assign({
     'firebase-functions/v2/https': { onCall: () => 'ONCALL', HttpsError: FakeHttpsError },
     'firebase-functions/params': { defineSecret: (n) => ({ value: () => 'STUB_' + n }) },
-    'firebase-admin/firestore': { getFirestore: () => ({}), FieldValue: { serverTimestamp: () => 0 } }
+    'firebase-admin/firestore': { getFirestore: () => ({}), FieldValue: { serverTimestamp: () => 0 } },
+    './atelierAdmins': { requireAtelierAdmin: async () => ({ admin: true }) }
   }, extraStubs || {});
   const module = { exports: {} };
   const sandbox = {
@@ -403,4 +404,22 @@ if (O) {
   const ld2 = AC.productJsonLd([], () => '', 'en', ['https://www.instagram.com/echarpe.eg']);
   assert(ld2['@graph'][0].sameAs[0] === 'https://www.instagram.com/echarpe.eg', 'حسابات السوشيال لجوجل (sameAs)');
   assert(/id="social"/.test(fs.readFileSync(path.join(ROOT, 'atelier', 'index.html'), 'utf8')), 'لينكات الحسابات في الفوتر');
+}
+
+// ٢٠) 🔐 صفحة الإدارة لقايمة المالكة بس
+{
+  const AA = loadFn(path.join(ROOT, 'functions', 'atelierAdmins.js'));
+  const staff = (email) => ({ auth: { uid: 'u', token: { email, firebase: { sign_in_provider: 'password' } } } });
+  const anon = { auth: { uid: 'a', token: { firebase: { sign_in_provider: 'anonymous' } } } };
+  const cfg = { owners: ['Owner@Echarpe.com'], emails: ['manager@echarpe.com'] };
+  assert(AA.decide(staff('owner@echarpe.com'), cfg).owner && AA.decide(staff('owner@echarpe.com'), cfg).admin, 'المالكة: أدمن ومالكة (الإيميل من غير فرق حروف كبيرة)');
+  assert(AA.decide(staff('manager@echarpe.com'), cfg).admin && !AA.decide(staff('manager@echarpe.com'), cfg).owner, 'اللي المالكة ضافته: أدمن بس');
+  assert(!AA.decide(staff('cashier@echarpe.com'), cfg).admin, '🔐 كاشير مش في القايمة = ممنوع');
+  assert(!AA.decide(anon, cfg).admin && !AA.decide(anon, null).admin, '🔐 عميل = ممنوع دايمًا');
+  assert(AA.decide(staff('cashier@echarpe.com'), null).admin && !AA.decide(staff('x@y.com'), null).setup, 'قبل ما القايمة تتعمل: الموظفين زي الأول');
+  assert(AA.normEmail(' A@B.co ') === 'a@b.co' && AA.normEmail('nope') === '', 'تنضيف الإيميل');
+  const os = fs.readFileSync(path.join(ROOT, 'functions', 'atelierOrders.js'), 'utf8');
+  const as = fs.readFileSync(path.join(ROOT, 'functions', 'atelierAssistant.js'), 'utf8');
+  assert(/await requireAtelierAdmin\(req, db\)/.test(os) && /await requireAtelierAdmin\(req, db\)/.test(as), 'الأوردرات والمساعد بيشيكوا على القايمة');
+  assert(/exports\.atelierAdmins = require\("\.\/atelierAdmins"\)\.atelierAdmins/.test(fs.readFileSync(IDX_PATH, 'utf8')), 'atelierAdmins مربوطة في index.js');
 }
