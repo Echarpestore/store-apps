@@ -40,6 +40,7 @@
     var staff = u && u.providerData && u.providerData.some(function (p) { return p.providerId === "password"; });
     $("login").classList.toggle("hidden", !!staff);
     $("app").classList.toggle("hidden", !staff);
+    $("asstFab").classList.toggle("hidden", !staff);
     if (staff) { loadAll(); loadOrders(true); loadSite(); }
   });
   $("loginForm").addEventListener("submit", function (e) {
@@ -515,6 +516,61 @@
     v.mktUpdatedAt = firebase.firestore.FieldValue.serverTimestamp();
     col.doc("atelier_site").set(v, { merge: true }).then(function () { toast("اتحفظ ✓ — البيكسلات شغالة على الموقع"); })
       .catch(function () { toast("الحفظ وقف — جرّبي تاني"); }).then(function () { b.disabled = false; });
+  });
+
+  /* ============================================================
+     🤖 المساعد — atelierAdminAssistant. بيقترح، وإنتي بتطبّقي وتحفظي.
+     ============================================================ */
+  var asstHist = [];
+  $("asstFab").addEventListener("click", function () { $("asst").classList.remove("hidden"); $("asstFab").classList.add("hidden"); $("asstText").focus(); });
+  $("asstClose").addEventListener("click", function () { $("asst").classList.add("hidden"); $("asstFab").classList.remove("hidden"); });
+  function asstMsg(cls, html) {
+    var m = el("div", "msg " + cls, html); $("asstLog").appendChild(m); $("asstLog").scrollTop = 1e6; return m;
+  }
+  function siteNow() {
+    var v = {}; SITE_FIELDS.forEach(function (k) { var e = $("s_" + k); if (e && k !== "whatsapp" && !/^branches/.test(k) && e.value) v[k] = e.value; }); return v;
+  }
+  $("asstForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var text = $("asstText").value.trim();
+    var withImgs = $("asstImgs").checked && pending.length;
+    if (!text && !withImgs) return;
+    $("asstText").value = "";
+    asstMsg("me", esc(text || "📷 سمّي الصور الجديدة"));
+    var wait = asstMsg("bot wait", "بيفكّر…");
+    $("asstSend").disabled = true;
+    var list = items.map(function (it) { return Object.assign({}, it, { isNew: false }); })
+      .concat(pending.map(function (p) { return Object.assign({}, p, { isNew: true }); }))
+      .map(function (it) { return { id: it.id, isNew: it.isNew, name: it.name, nameEn: it.nameEn, colorName: it.colorName, colorEn: it.colorEn,
+        family: it.family, familyEn: it.familyEn, price: it.price, line: it.line, active: it.active !== false, barcode: it.barcode }; });
+    var imgs = withImgs ? pending.slice(0, 12).map(function (p) { return { id: p.id, image: p.thumb }; }) : [];
+    if (!$("s_eyebrow").value) loadSite();
+    callable("atelierAdminAssistant")({ message: text, items: list, images: imgs, site: siteNow(), history: asstHist })
+      .then(function (r) {
+        var d = r.data || {}, acts = d.actions || [];
+        asstHist.push({ role: "user", text: text || "سمّي الصور الجديدة" }, { role: "model", text: d.reply || "" });
+        asstHist = asstHist.slice(-8);
+        wait.classList.remove("wait"); wait.textContent = d.reply || "تمام";
+        if (acts.length) {
+          var box = el("div", "acts");
+          acts.slice(0, 40).forEach(function (a) { box.appendChild(el("div", "", "• " + esc(AD.describeAction(a, items.concat(pending))))); });
+          if (acts.length > 40) box.appendChild(el("div", "", "و" + (acts.length - 40) + " كمان…"));
+          var b = el("button", "btn", "طبّقي التعديلات (" + acts.length + ")"); b.type = "button";
+          b.addEventListener("click", function () {
+            var res = AD.applyAssistantActions(items, pending, acts);
+            Object.keys(res.site).forEach(function (k) { var e = $("s_" + k); if (e) e.value = res.site[k]; });
+            renderList(); renderReview(); if (res.changed) markDirty();
+            b.disabled = true; b.textContent = "اتطبّقت ✓";
+            toast(res.changed ? "اتطبّق على " + res.changed + " قطعة — راجعي ودوسي «حفظ»" : "");
+            if (Object.keys(res.site).length) toast("النصوص اتكتبت في تاب «إعدادات الموقع» — افتحيه واحفظي");
+          });
+          box.appendChild(b); wait.appendChild(box);
+        }
+      }).catch(function (er) {
+        wait.classList.remove("wait");
+        wait.textContent = (er && er.message && /resource-exhausted|unavailable/.test(String(er.code))) ? er.message :
+          "المساعد لسه مش متاح — محتاجين ننشر دالة atelierAdminAssistant.";
+      }).then(function () { $("asstSend").disabled = false; });
   });
 
   window.addEventListener("beforeunload", function (e) { if (dirty || pending.length) { e.preventDefault(); e.returnValue = ""; } });

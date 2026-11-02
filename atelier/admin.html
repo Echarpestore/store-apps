@@ -66,6 +66,20 @@
   .linkbox{display:flex; gap:8px; margin-top:8px;} .linkbox input{flex:1; font-size:12px;}
   .checklist{padding-inline-start:18px; display:grid; gap:6px;}
   .err{color:var(--bad); font-size:12px; min-height:1em;}
+  .asst-fab{position:fixed; z-index:80; bottom:calc(76px + env(safe-area-inset-bottom)); inset-inline-start:16px; background:var(--ink); color:var(--paper); padding:12px 16px; border-radius:999px; box-shadow:0 6px 20px rgba(0,0,0,.2); font-size:14px;}
+  .asst{position:fixed; z-index:90; inset-inline:12px; bottom:calc(12px + env(safe-area-inset-bottom)); max-width:460px; height:min(72vh,620px); background:var(--paper); border:1px solid var(--line); box-shadow:0 18px 50px rgba(0,0,0,.22); display:flex; flex-direction:column;}
+  @media (min-width:700px){ .asst{inset-inline-start:auto; inset-inline-end:16px; width:440px;} }
+  .asst-head{display:flex; justify-content:space-between; align-items:center; padding:12px 14px; border-bottom:1px solid var(--line);}
+  .asst-log{flex:1; overflow:auto; padding:12px; display:flex; flex-direction:column; gap:10px;}
+  .asst .msg{padding:10px 12px; font-size:13.5px; line-height:1.6; max-width:92%; white-space:pre-wrap;}
+  .asst .msg.bot{background:#fff; border:1px solid var(--line); align-self:flex-start;}
+  .asst .msg.me{background:var(--ink); color:var(--paper); align-self:flex-end;}
+  .asst .msg.wait{opacity:.6;}
+  .asst .acts{margin-top:8px; display:grid; gap:4px; font-size:12px; color:var(--soft);}
+  .asst .acts .btn{margin-top:6px; justify-self:start;}
+  .asst-img{font-size:12px; color:var(--soft); padding:0 12px;}
+  .asst-in{display:flex; gap:8px; padding:10px 12px; border-top:1px solid var(--line);}
+  .asst-in textarea{flex:1; resize:none; padding:8px; border:1px solid var(--line); font:inherit;}
   .fields details.en{display:grid; gap:6px;} .fields details.en[open]{display:grid;}
   .fields details.en summary{font-size:12px; color:var(--bronze); cursor:pointer;}
   .fields details.en input{margin-top:6px; width:100%;}
@@ -262,14 +276,25 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- 🤖 المساعد -->
+<button class="asst-fab hidden" id="asstFab" type="button">🤖 المساعد</button>
+<div class="asst hidden" id="asst" role="dialog" aria-label="المساعد">
+  <div class="asst-head"><b>🤖 مساعد الموقع</b><button type="button" id="asstClose" aria-label="قفل">✕</button></div>
+  <div class="asst-log" id="asstLog">
+    <div class="msg bot">أهلاً 🤍 قوليلي عاوزة تعملي إيه، مثلاً:<br>• «الكينار كله ب ٧٠٠»<br>• «سمّي الصور الجديدة وحطّي ألوانها بالعربي والإنجليزي»<br>• «اخفي الروز» · «غيّري جملة العنوان لحاجة عن الشتا»<br>هقترح التعديلات، تراجعيها وتطبّقيها، وبعدين «حفظ».</div>
+  </div>
+  <label class="asst-img"><input type="checkbox" id="asstImgs" checked> ابعتي صور القطع الجديدة مع الرسالة</label>
+  <form class="asst-in" id="asstForm"><textarea id="asstText" rows="2" placeholder="اكتبي هنا…"></textarea><button class="btn" type="submit" id="asstSend">ابعتي</button></form>
+</div>
+
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
-<script src="../tryon/photo-core.js?v=2611020100"></script>
-<script src="./atelier-core.js?v=2611020100"></script>
-<script src="./admin-core.js?v=2611020100"></script>
-<script src="./marketing.js?v=2611020100"></script>
-<script src="./admin.js?v=2611020100"></script>
+<script src="../tryon/photo-core.js?v=2611020300"></script>
+<script src="./atelier-core.js?v=2611020300"></script>
+<script src="./admin-core.js?v=2611020300"></script>
+<script src="./marketing.js?v=2611020300"></script>
+<script src="./admin.js?v=2611020300"></script>
 </body>
 </html>

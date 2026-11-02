@@ -486,3 +486,27 @@ html[lang="en"] .meta .nm, html[lang="en"] .m-cap b{font-size:19px;}
 html[lang="en"] em{font-style:italic;}
 .lang-btn{font-size:12px; letter-spacing:.06em; padding:4px 10px; border:1px solid currentColor; border-radius:999px; line-height:1.4; font-family:'IBM Plex Sans Arabic',system-ui,sans-serif;}
 html[lang="ar"] .lang-btn{font-family:'Jost',system-ui,sans-serif; letter-spacing:.14em;}
+
+/* ---------- ✦ المنسّقة ---------- */
+.sty-fab{position:fixed; z-index:65; inset-inline-end:16px; bottom:calc(18px + env(safe-area-inset-bottom)); background:var(--ink); color:var(--paper); padding:11px 16px; border-radius:999px; font-size:13px; letter-spacing:.02em; box-shadow:0 10px 30px rgba(28,25,22,.25); transition:transform .5s var(--ease), bottom .5s var(--ease);}
+body.alive .sty-fab{bottom:calc(92px + env(safe-area-inset-bottom));}
+body.sty-on .sty-fab{transform:scale(0); pointer-events:none;}
+.sty{position:fixed; z-index:105; inset-inline:12px; bottom:calc(12px + env(safe-area-inset-bottom)); height:min(70vh,560px); max-width:420px; background:var(--paper); border:1px solid var(--line); box-shadow:0 24px 60px rgba(28,25,22,.28); display:flex; flex-direction:column; transform:translateY(120%); transition:transform .6s var(--ease);}
+@media (min-width:700px){ .sty{inset-inline-start:auto; width:400px;} }
+body.sty-on .sty{transform:none;}
+.sty-head{display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-bottom:1px solid var(--line);}
+.sty-head b{font-family:var(--ar); font-weight:400; font-size:21px;}
+.sty-head .lb-x{position:relative; top:auto; inset-inline-end:auto;}
+.sty-log{flex:1; overflow:auto; padding:14px; display:flex; flex-direction:column; gap:10px;}
+.sty .msg{padding:10px 13px; font-size:14px; line-height:1.65; max-width:88%;}
+.sty .msg.bot{background:#fff; border:1px solid var(--line); align-self:flex-start;}
+.sty .msg.me{background:var(--ink); color:var(--paper); align-self:flex-end;}
+.sty .msg.wait{opacity:.55;}
+.sty .picks{display:flex; gap:8px; overflow-x:auto; margin-top:8px;}
+.sty .pick{flex:0 0 86px; text-align:start; font-size:11px; line-height:1.35;}
+.sty .pick img{width:86px; height:112px; object-fit:cover; display:block; margin-bottom:4px; background:var(--paper-2);}
+.sty .handoff{margin-top:8px; font-size:12px; text-decoration:underline; color:var(--bronze);}
+.sty-sugg{display:flex; gap:6px; flex-wrap:wrap; padding:0 14px 8px;}
+.sty-sugg button{font-size:12px; border:1px solid var(--line); padding:6px 10px; border-radius:999px; background:#fff;}
+.sty-in{display:flex; gap:8px; padding:10px 12px; border-top:1px solid var(--line);}
+.sty-in input{flex:1; border:1px solid var(--line); padding:10px; font:inherit; background:#fff; min-width:0;}

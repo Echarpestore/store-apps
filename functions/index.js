@@ -1089,6 +1089,10 @@ Object.assign(exports, require("./hijabLookbook"));
 //    firebase deploy --only functions:atelierOrderPlace,functions:atelierOrdersAdmin,functions:atelierImg
 Object.assign(exports, require("./atelierOrders"));
 
+// 🤖 مساعدين غرفة القياس — مساعد صفحة الإدارة + منسّقة العميلات (Gemini). النشر:
+//    firebase deploy --only functions:atelierAdminAssistant,functions:atelierStylist
+Object.assign(exports, require("./atelierAssistant"));
+
 // 📱 إنستاباي على تابلت الفرع — دالتين بس (instaPay + instaScan).
 //    بديل الـ29 دالة اللي عدّوا حد الـCPU. النشر:
 //    firebase deploy --only functions:instaPay,functions:instaScan

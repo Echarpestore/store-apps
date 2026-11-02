@@ -146,7 +146,37 @@
     return { count: list.length, revenue: revenue, avg: list.length ? Math.round(revenue / list.length) : 0, web: web, app: app, top: top };
   }
 
+  /* 🤖 تطبيق اقتراحات المساعد على القايمة (المحفوظة + الجديدة) — بيرجّع
+     كام قطعة اتعدّلت ونصوص الموقع المقترحة. مفيش حفظ هنا. */
+  var ASSIST_FIELDS = ["name", "nameEn", "colorName", "colorEn", "family", "familyEn", "price", "line", "active", "barcode"];
+  function applyAssistantActions(items, pending, actions) {
+    var byId = {}, changed = 0, site = {};
+    (items || []).concat(pending || []).forEach(function (it) { byId[it.id] = it; });
+    (actions || []).forEach(function (a) {
+      if (a && a.op === "set" && byId[a.id] && a.fields) {
+        var it = byId[a.id], did = false;
+        ASSIST_FIELDS.forEach(function (k) { if (k in a.fields && it[k] !== a.fields[k]) { it[k] = a.fields[k]; did = true; } });
+        if (did) changed++;
+      } else if (a && a.op === "site" && a.fields) {
+        Object.keys(a.fields).forEach(function (k) { site[k] = a.fields[k]; });
+      }
+    });
+    return { changed: changed, site: site };
+  }
+  /* وصف قصير لكل اقتراح عشان صاحبة المحل تراجعه قبل ما تطبّقه */
+  var FIELD_AR = { name: "الاسم", nameEn: "الاسم EN", colorName: "اللون", colorEn: "اللون EN", family: "الموديل", familyEn: "الموديل EN",
+    price: "السعر", line: "النوع", active: "ظاهرة", barcode: "الباركود" };
+  function describeAction(a, items) {
+    if (a.op === "site") return "نصوص الموقع: " + Object.keys(a.fields).join("، ");
+    var it = (items || []).filter(function (x) { return x.id === a.id; })[0];
+    var who = it ? (it.name + (it.colorName ? " — " + it.colorName : "")) : a.id;
+    return who + ": " + Object.keys(a.fields).map(function (k) {
+      var v = a.fields[k]; return (FIELD_AR[k] || k) + " ← " + (v === true ? "أيوه" : v === false ? "لأ" : v);
+    }).join("، ");
+  }
+
   var API = {
+    applyAssistantActions: applyAssistantActions, describeAction: describeAction,
     campaignLink: campaignLink, orderStats: orderStats, SOURCES: SOURCES,
     dHash: dHash, hamming: hamming, colorDist: colorDist, isSimilar: isSimilar,
     groupSimilar: groupSimilar, colorName: colorName, defaultName: defaultName,
