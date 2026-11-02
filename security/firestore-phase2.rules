@@ -97,6 +97,14 @@ service cloud.firestore {
     match /office_merchant_txns/{id}  { allow read, write: if isStaff(); }
     // 🛡️ Office 2 v6 — قرار المالك على حالات الحماية (✓ عادي / 🚩 مشكلة). الحالة نفسها بتتبني من pos_activity_log والفواتير.
     match /office_cases/{id}          { allow read, write: if isStaff(); }
+    // 🤖 تقارير مراجع الكاميرات الذكي — الدالة (Admin SDK) بس اللي بتكتبها.
+    //    المالك بيعدّل حقل feedback بس (✓ طبيعي / 🚩 مشكلة على كل لحظة).
+    match /office_cctv_ai/{id} {
+      allow read: if isStaff();
+      allow update: if isStaff()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['feedback']);
+      allow create, delete: if false;
+    }
 
     // 💳📒 دفتر اليومية — تعديلات المالك اليدوية والعدّ الفعلي والتجميد
     match /office_cash_days/{dayKey} {
