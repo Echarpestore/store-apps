@@ -115,7 +115,39 @@
     };
   }
 
+  /* 📣 لينك حملة: بيفتح القطعة نفسها + UTM عشان Google Analytics والبيكسلات
+     تعرف الطلب جه منين. */
+  var SOURCES = { instagram: ["instagram", "social"], facebook: ["facebook", "social"], tiktok: ["tiktok", "social"],
+    whatsapp: ["whatsapp", "messaging"], google: ["google", "cpc"], influencer: ["influencer", "referral"], qr: ["qr", "offline"] };
+  function slug(s) { return String(s || "").toLowerCase().trim().replace(/[^a-z0-9\u0600-\u06FF]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40); }
+  function campaignLink(opts) {
+    var o = opts || {}, src = SOURCES[o.source] || SOURCES.instagram;
+    var q = [];
+    if (o.lang === "ar") q.push("lang=ar");
+    if (o.piece) q.push("p=" + encodeURIComponent(o.piece));
+    q.push("utm_source=" + src[0], "utm_medium=" + src[1], "utm_campaign=" + encodeURIComponent(slug(o.campaign) || "atelier"));
+    return "https://www.echarpe.store/atelier/?" + q.join("&");
+  }
+  /* 📊 أرقام سريعة من الأوردرات (آخر ١٥٠): العدد والفلوس وأكتر القطع طلبًا */
+  function orderStats(orders, nowMs, days) {
+    var since = (nowMs || Date.now()) - (days || 30) * 86400000;
+    var list = (orders || []).filter(function (o) { return o && o.status !== "cancelled" && Number(o.createdMs) >= since; });
+    var revenue = 0, pieces = {}, web = 0, app = 0;
+    list.forEach(function (o) {
+      revenue += Number(o.total) || 0;
+      if (o.source === "app") app++; else web++;
+      (o.items || []).forEach(function (it) {
+        var k = String(it.name || "قطعة") + (it.colorName ? " — " + it.colorName : "");
+        pieces[k] = (pieces[k] || 0) + 1;
+      });
+    });
+    var top = Object.keys(pieces).map(function (k) { return { name: k, n: pieces[k] }; })
+      .sort(function (a, b) { return b.n - a.n; }).slice(0, 5);
+    return { count: list.length, revenue: revenue, avg: list.length ? Math.round(revenue / list.length) : 0, web: web, app: app, top: top };
+  }
+
   var API = {
+    campaignLink: campaignLink, orderStats: orderStats, SOURCES: SOURCES,
     dHash: dHash, hamming: hamming, colorDist: colorDist, isSimilar: isSimilar,
     groupSimilar: groupSimilar, colorName: colorName, defaultName: defaultName,
     uniqueNames: uniqueNames, cleanItem: cleanItem, newId: newId

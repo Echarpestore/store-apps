@@ -60,6 +60,12 @@
   .extras button{display:block; width:100%; font-size:10px; color:var(--bronze); margin-top:2px;}
   .fields{display:grid; gap:8px; padding:10px;}
   .row2{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px;}
+  .stats .st{border:1px solid var(--line); background:#fff; padding:10px;} .stats .st b{display:block; font-size:20px;}
+  .stats .top{grid-column:1/-1;}
+  .linkbox{display:flex; gap:8px; margin-top:8px;} .linkbox input{flex:1; font-size:12px;}
+  .checklist{padding-inline-start:18px; display:grid; gap:6px;}
+  .err{color:var(--bad); font-size:12px; min-height:1em;}
   .fields details.en{display:grid; gap:6px;} .fields details.en[open]{display:grid;}
   .fields details.en summary{font-size:12px; color:var(--bronze); cursor:pointer;}
   .fields details.en input{margin-top:6px; width:100%;}
@@ -138,6 +144,7 @@
     <button type="button" data-tab="collection" class="on">المجموعة</button>
     <button type="button" data-tab="orders">الأوردرات <span class="badge hidden" id="newBadge"></span></button>
     <button type="button" data-tab="site">إعدادات الموقع</button>
+    <button type="button" data-tab="mkt">التسويق</button>
   </nav>
 
   <div class="wrap" id="tab-collection">
@@ -211,6 +218,42 @@
     </div>
   </div>
 
+  <div class="wrap hidden" id="tab-mkt">
+    <div class="site">
+      <h3 style="margin:4px 0;">📊 آخر ٣٠ يوم</h3>
+      <div class="stats" id="mStats"><div class="empty">بتحمّل…</div></div>
+
+      <h3 style="margin:18px 0 4px;">🔗 لينك لإعلان أو بوست</h3>
+      <p class="muted">اللينك بيفتح القطعة نفسها على الموقع، وبيعرّف Google Analytics والبيكسلات إن العميلة جت من الإعلان ده.</p>
+      <div class="row2"><label>القطعة<select id="m_piece"></select></label>
+        <label>المكان<select id="m_source">
+          <option value="instagram">إنستجرام</option><option value="facebook">فيسبوك</option><option value="tiktok">تيك توك</option>
+          <option value="whatsapp">واتساب</option><option value="google">جوجل</option><option value="influencer">إنفلونسر</option><option value="qr">QR في المحل</option>
+        </select></label></div>
+      <div class="row2"><label>اسم الحملة<input type="text" id="m_campaign" placeholder="مثلاً: كينار-نوفمبر"></label>
+        <label>اللغة<select id="m_lang"><option value="en">إنجليزي</option><option value="ar">عربي</option></select></label></div>
+      <div class="linkbox"><input type="text" id="m_link" readonly dir="ltr"><button class="btn" type="button" id="m_copy">نسخ</button></div>
+
+      <h3 style="margin:18px 0 4px;">📣 البيكسلات والتحليلات</h3>
+      <p class="muted">الصقي الأرقام من كل منصة واحفظي — بتشتغل على الموقع على طول. اللي بيتبعت: القطع اللي اتشافت واتضافت للحقيبة واتطلبت وسعرها بس — <b>عمر صورة العميلة ما بتتبعت</b>.</p>
+      <label>Meta Pixel ID (فيسبوك وإنستجرام)<input type="text" id="k_metaPixelId" dir="ltr" placeholder="123456789012345"></label>
+      <label>Google Analytics 4 — Measurement ID<input type="text" id="k_ga4Id" dir="ltr" placeholder="G-XXXXXXXXXX"></label>
+      <label>TikTok Pixel ID<input type="text" id="k_tiktokPixelId" dir="ltr" placeholder="CXXXXXXXXXXXXXXXXXXX"></label>
+      <div class="row2"><label>Google Ads ID<input type="text" id="k_googleAdsId" dir="ltr" placeholder="AW-123456789"></label>
+        <label>Google Ads — Purchase label<input type="text" id="k_googleAdsPurchaseLabel" dir="ltr" placeholder="AbC-dEfGhIj"></label></div>
+      <p class="err" id="k_err"></p>
+      <button class="btn" type="button" id="k_save">حفظ البيكسلات</button>
+
+      <h3 style="margin:18px 0 4px;">🔎 جوجل</h3>
+      <ul class="muted checklist">
+        <li>الموقع فيه دلوقتي: خريطة الموقع <span dir="ltr">echarpe.store/sitemap.xml</span>، وملف robots بيقفل أنظمة المحل الداخلية، وبيانات كل قطعة بسعرها وصورتها لجوجل، ولينك لكل قطعة.</li>
+        <li>افتحي <b>Google Search Console</b> وضيفي <span dir="ltr">echarpe.store</span> كـ Domain (التأكيد من إعدادات الدومين DNS)، وبعدين ابعتي خريطة الموقع.</li>
+        <li>اعملي <b>Google Business Profile</b> لكل فرع (الرحاب، مدينتي، سيتي سنتر) — ده اللي بيطلع في الخرايط والبحث المحلي.</li>
+        <li>لإعلانات التسوق في جوجل: <b>Google Merchant Center</b> بيقرا بيانات القطع من الموقع.</li>
+      </ul>
+    </div>
+  </div>
+
   <div class="bar" id="bar">
     <span id="barText">فيه تعديلات لسه ما اتحفظتش</span><span class="sp"></span>
     <button class="btn" id="save" type="button">حفظ</button>
@@ -223,9 +266,10 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
-<script src="../tryon/photo-core.js?v=2610250120"></script>
-<script src="./atelier-core.js?v=2610250120"></script>
-<script src="./admin-core.js?v=2610250120"></script>
-<script src="./admin.js?v=2610250120"></script>
+<script src="../tryon/photo-core.js?v=2611020100"></script>
+<script src="./atelier-core.js?v=2611020100"></script>
+<script src="./admin-core.js?v=2611020100"></script>
+<script src="./marketing.js?v=2611020100"></script>
+<script src="./admin.js?v=2611020100"></script>
 </body>
 </html>

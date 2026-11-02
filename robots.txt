@@ -1,0 +1,23 @@
+# echarpe — اللي يظهر في جوجل: الصفحة الرئيسية، غرفة القياس، نادي العملاء، الوظائف.
+# أنظمة المحل الداخلية (الكاشير، المكتب، الكاميرات…) ممنوعة من الفهرسة.
+User-agent: *
+Allow: /
+Disallow: /Office/
+Disallow: /office2/
+Disallow: /pos/
+Disallow: /sales/
+Disallow: /guide/
+Disallow: /feedback/
+Disallow: /cctv-gateway/
+Disallow: /tools/
+Disallow: /tests/
+Disallow: /docs/
+Disallow: /security/
+Disallow: /functions/
+Disallow: /tryon/
+Disallow: /tryon37/
+Disallow: /atelier/admin.html
+Disallow: /photo.html
+Disallow: /*.js$
+
+Sitemap: https://www.echarpe.store/sitemap.xml

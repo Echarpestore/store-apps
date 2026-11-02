@@ -289,3 +289,40 @@ assert(ac.colorName === 'كاكي' && ac.extras === 2, 'الأتيليه بيق�
   const js = fs.readFileSync(path.join(ROOT, 'atelier', 'atelier.js'), 'utf8');
   assert(/hq: !!hq/.test(js) && /maybeSharpen\(p\)/.test(js) && /HQ_CAP = 4/.test(js), 'الصفحة بتطلب التوضيح لما القطعة تتفتح');
 }
+
+// ١٦) 🔎 جوجل + 📣 التسويق
+{
+  const robots = fs.readFileSync(path.join(ROOT, 'robots.txt'), 'utf8');
+  assert(/Disallow: \/pos\//.test(robots) && /Disallow: \/Office\//.test(robots) && /Disallow: \/atelier\/admin\.html/.test(robots) && /Sitemap: https:\/\/www\.echarpe\.store\/sitemap\.xml/.test(robots), 'robots بيقفل أنظمة المحل وبيشاور على خريطة الموقع');
+  assert(!/Disallow: \/atelier\/\s/.test(robots) && !/Disallow: \/\s*$/m.test(robots), 'غرفة القياس نفسها مفتوحة لجوجل');
+  const sm = fs.readFileSync(path.join(ROOT, 'sitemap.xml'), 'utf8');
+  assert(/<loc>https:\/\/www\.echarpe\.store\/atelier\/<\/loc>/.test(sm) && /hreflang="ar"/.test(sm), 'خريطة الموقع فيها غرفة القياس بالنسختين');
+  const SEO = require(path.join(ROOT, 'tools', 'atelier-seo.js'));
+  const html = fs.readFileSync(path.join(ROOT, 'atelier', 'index.html'), 'utf8');
+  assert(SEO.expected(html) === html, 'بيانات جوجل في index.html متحدّثة (شغّلي node tools/atelier-seo.js)');
+  const ld = JSON.parse(/<script type="application\/ld\+json" id="ldjson">([\s\S]*?)<\/script>/.exec(html)[1]);
+  const prodsLd = ld['@graph'][1].itemListElement.map((x) => x.item);
+  assert(prodsLd.length === AC.HOUSE.length && prodsLd.every((p) => p.offers.priceCurrency === 'EGP' && p.offers.price > 0 && /^https:\/\/www\.echarpe\.store\/atelier\/collection\//.test(p.image) && /[?&]p=/.test(p.offers.url)), 'كل قطعة لجوجل بسعر وصورة ولينك');
+  assert(/rel="canonical"/.test(html) && /hreflang="ar"/.test(html) && /og:url/.test(html), 'canonical + hreflang + og:url');
+  const MK = require(path.join(ROOT, 'atelier', 'marketing.js'));
+  const c = MK.cleanConfig({ metaPixelId: '123456789012345', ga4Id: 'g-ab12cd34', tiktokPixelId: 'C1234567890ABCDEFGHI', googleAdsId: 'AW-1234567', googleAdsPurchaseLabel: 'AbC-123x' });
+  assert(c.meta === '123456789012345' && c.ga4 === 'G-AB12CD34' && c.tiktok && c.ads === 'AW-1234567' && c.adsLabel === 'AbC-123x', 'أرقام البيكسلات الصح بتتقبل');
+  const bad = MK.cleanConfig({ metaPixelId: '"><script>', ga4Id: 'UA-1', tiktokPixelId: 'x', googleAdsPurchaseLabel: 'abcd' });
+  assert(!bad.meta && !bad.ga4 && !bad.tiktok && !bad.adsLabel, 'أي رقم غلط أو محاولة حقن بتتشال');
+  const ev = MK.mapEvent('Purchase', { items: [{ id: 'b1', name: 'x', price: 680 }, { id: 'b2', name: 'y', price: 490 }], orderId: 'A12' });
+  assert(ev.meta.name === 'Purchase' && ev.meta.params.value === 1170 && ev.ga.name === 'purchase' && ev.ga.params.transaction_id === 'A12' && ev.tt.name === 'PlaceAnOrder' && ev.adsConversion.value === 1170, 'حدث الشراء بيتترجم صح لكل منصة');
+  assert(MK.mapEvent('TryOn').meta.custom === true && MK.mapEvent('Lead').ga.name === 'generate_lead', 'التجربة والشات أحداث برضه');
+  const mk = fs.readFileSync(path.join(ROOT, 'atelier', 'marketing.js'), 'utf8');
+  assert(!/face|look|image/i.test(mk.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')), 'البيكسلات عمرها ما بتلمس صورة العميلة');
+  const js = fs.readFileSync(path.join(ROOT, 'atelier', 'atelier.js'), 'utf8');
+  ['ViewContent', 'AddToCart', 'InitiateCheckout', 'Purchase', 'TryOn', 'Lead'].forEach((e) => assert(js.indexOf('mkt("' + e + '"') >= 0, 'الصفحة بتبعت ' + e));
+  assert(/\[\?&\]p=/.test(js), 'لينك القطعة (?p=) بيفتحها');
+  const AD3 = require(path.join(ROOT, 'atelier', 'admin-core.js'));
+  assert(AD3.campaignLink({ piece: 'house-kinar-taupe', source: 'tiktok', campaign: 'Kinar Nov', lang: 'ar' }) === 'https://www.echarpe.store/atelier/?lang=ar&p=house-kinar-taupe&utm_source=tiktok&utm_medium=social&utm_campaign=kinar-nov', 'لينك الحملة');
+  const now = Date.UTC(2026, 10, 2);
+  const st = AD3.orderStats([{ createdMs: now - 86400000, total: 720, source: 'web', items: [{ name: 'A' }] },
+    { createdMs: now - 2 * 86400000, total: 490, source: 'app', items: [{ name: 'A' }, { name: 'B' }] },
+    { createdMs: now - 3 * 86400000, total: 999, status: 'cancelled', items: [] },
+    { createdMs: now - 40 * 86400000, total: 100, items: [] }], now, 30);
+  assert(st.count === 2 && st.revenue === 1210 && st.avg === 605 && st.web === 1 && st.app === 1 && st.top[0].name === 'A' && st.top[0].n === 2, 'أرقام آخر ٣٠ يوم (من غير الملغي والقديم)');
+}

@@ -16,6 +16,13 @@
   var LANG = window.AtelierLang === "ar" ? "ar" : "en", EN = LANG === "en";
   function tr(ar, en) { return EN ? en : ar; }
   function money(n) { return AC.fmtPrice(n, LANG); }
+  /* 📣 البيكسلات (marketing.js) — اسم القطعة وسعرها بس، عمر الصورة ما بتتبعت */
+  function mkt(ev, items, extra) {
+    if (!window.AtelierMkt) return;
+    window.AtelierMkt.track(ev, Object.assign({ items: (items || []).map(function (p) {
+      return { id: p.barcode || p.id, name: displayName(p) + (colorLabel(p) ? " — " + colorLabel(p) : ""), price: p.price || 0 };
+    }) }, extra || {}));
+  }
   if (window.AtelierI18n) window.AtelierI18n.apply();
   function $(id) { return document.getElementById(id); }
   var REDUCED = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -464,7 +471,7 @@
       var n = m.items.length;
       c.innerHTML =
         '<div class="frame" role="button" tabindex="0">' +
-          '<img class="prod" alt="" loading="lazy"><img class="look" alt="">' +
+          '<img class="prod" alt="' + esc(n > 1 ? m.title + " — " + (colorLabel(p) || "") : p.name) + '" loading="lazy"><img class="look" alt="">' +
           '<i class="sheen"></i><div class="weave"></div><div class="weave-txt">' + tr("نُجهّزها لكِ…", "Preparing it for you…") + '</div>' +
           '<div class="chip"><img alt=""></div>' +
           '<button class="try-btn" type="button">' + tr("جرّبيها بألوانها", "Try all its colours") + '</button>' +
@@ -527,6 +534,7 @@
     return c;
   }
   function openChatCta() {
+    mkt("Lead");
     if (EMBED) { toParent({ type: "atelier-chat" }); return; }
     location.href = "../loyalty/?chat=1";
   }
@@ -885,6 +893,7 @@
 
   /* ---------------- عرض القطعة + الدقة العالية ---------------- */
   function openLook(p) {
+    mkt("ViewContent", [p]);
     state.lbOpen = p; setLb(p);
     $("lb").classList.add("on"); document.body.style.overflow = "hidden";
   }
@@ -990,7 +999,7 @@
   });
   $("file").addEventListener("change", function () {
     var f = this.files && this.files[0]; if (!f) return;
-    fileToFace(f).then(startWithFace).catch(function () { toast(MSG.badImg); });
+    fileToFace(f).then(function (face) { mkt("TryOn"); startWithFace(face); }).catch(function () { toast(MSG.badImg); });
   });
 
   /* ---------------- معاينة التصميم (?mock=1) ----------------
@@ -1100,7 +1109,7 @@
   }
   function addToBag(p, srcImg) {
     if (inBag(p)) { openSheet("bag"); return; }
-    bag.push(p.id); writeIds("atelier_bag", bag); buzz();
+    bag.push(p.id); writeIds("atelier_bag", bag); buzz(); mkt("AddToCart", [p]);
     flyToBag(srcImg);
     setTimeout(syncBagCount, 700);
     syncMirrorActs(); if (state.lbOpen === p) setLb(p);
@@ -1213,7 +1222,7 @@
       (co.ful === "delivery" ? "<br>" + tr("الشحن: ", "Shipping: ") + (ship ? esc(money(ship)) : tr("مجاني", "Free")) : "") +
       (sub ? "<br><b>" + tr("الإجمالي: ", "Total: ") + esc(money(sub + ship)) + "</b>" : "<br><small>" + tr("السعر بنأكّده معاكِ على واتساب", "We’ll confirm the price with you on WhatsApp") + "</small>");
   }
-  $("bagCheckout").addEventListener("click", function () { $("coErr").textContent = ""; fillCheckout(); showBagStep("form"); });
+  $("bagCheckout").addEventListener("click", function () { mkt("InitiateCheckout", bagItems()); $("coErr").textContent = ""; fillCheckout(); showBagStep("form"); });
   $("coBack").addEventListener("click", function () { showBagStep("list"); });
   document.querySelectorAll("#checkout .seg button").forEach(function (b) {
     b.addEventListener("click", function () { co.ful = b.dataset.ful; fillCheckout(); });
@@ -1252,6 +1261,7 @@
     var call = MOCK || !fb ? Promise.reject({ code: "mock" }) : authReady.then(function () { return callable("atelierOrderPlace")(payload); });
     call.then(function (res) {
       var d = (res && res.data) || {};
+      mkt("Purchase", items, { value: Number(d.total) || undefined, orderId: d.code || "" });
       if (EMBED) toParent({ type: "atelier-ordered", code: d.code || "", total: d.total || 0, barcode: (items[0] && items[0].barcode) || "", name: items[0] ? displayName(items[0]) : "" });
       orderDone(tr("رقم الطلب ", "Order ") + (d.code || "") + (d.total ? tr(" · الإجمالي ", " · Total ") + money(d.total) : "") +
         "<br>" + tr("هنكلمكِ على واتساب على ", "We’ll message you on WhatsApp at ") + esc(f.phone) + tr(" للتأكيد 🤍", " to confirm 🤍"));
@@ -1386,6 +1396,7 @@
   /* ---------------- البداية ---------------- */
   /* ⚙️ إعدادات الموقع من صفحة الإدارة — النصوص والبانر والواتساب والفروع */
   function loadSite() {
+    var mktInit = function (d) { if (window.AtelierMkt && !MOCK) window.AtelierMkt.init(d || {}); };
     if (MOCK || !fb) return Promise.resolve();
     var col = fb.firestore().collection("pos_test_settings");
     return authReady.then(function () {
@@ -1395,14 +1406,15 @@
       if (cfg.shippingFee != null) SITE.shippingFee = Number(cfg.shippingFee) || 0;
       if (cfg.freeOver) SITE.freeOver = Number(cfg.freeOver) || 0;
       if (Array.isArray(cfg.governorates) && cfg.governorates.length) SITE.governorates = cfg.governorates;
-      if (!r[0].exists) return;
+      if (!r[0].exists) { mktInit({}); return; }
       var d = r[0].data() || {};
+      mktInit(d);
       applySite(d);
       if (d.hasBanner) col.doc("atelier_site_banner").get().then(function (b) {
         var u = b.exists ? b.data().img : "";
         if (AC.isImageDataUrl(u)) document.querySelector(".banner-img img").src = u;
       }).catch(function () { });
-    }).catch(function () { });
+    }).catch(function () { mktInit({}); });
   }
   function applySite(raw) {
     var set = function (id, v) { if (v && $(id)) $(id).textContent = v; };
@@ -1436,5 +1448,20 @@
     renderHero(); renderFilters(); renderGrid(); syncBagCount(); updateDock();
     var saved = LS ? PC.readFace(LS) : "";
     if (saved) { $("salonImg").src = saved; $("salonArch").classList.add("has"); }
+    updateLd();
+    // 🔗 لينك قطعة بعينها (?p=<id>) — من إعلان أو مشاركة: بتتفتح على طول
+    var m = /[?&]p=([^&#]+)/.exec(location.search), dp = m && state.byId[decodeURIComponent(m[1])];
+    if (dp) setTimeout(function () { userPicked = true; setMirror(dp, true); openLook(dp); }, 900);
   });
+
+  /* 🔎 بيانات جوجل بالمنتجات الحيّة (اللي في صفحة الإدارة كمان) */
+  function updateLd() {
+    var IMG_FN = "https://us-central1-customer-feedback-8ac1d.cloudfunctions.net/atelierImg?id=";
+    var ld = AC.productJsonLd(state.products, function (p) {
+      if (p.docId) return IMG_FN + encodeURIComponent(p.docId);
+      return /^collection\//.test(p.img || "") ? AC.SITE_URL + "/atelier/" + p.img : "";
+    }, LANG);
+    var s = $("ldjson"); if (!s) { s = document.createElement("script"); s.type = "application/ld+json"; s.id = "ldjson"; document.head.appendChild(s); }
+    s.textContent = JSON.stringify(ld);
+  }
 })();

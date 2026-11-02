@@ -345,15 +345,16 @@
      📑 التابات
      ============================================================ */
   function showTab(t) {
-    ["collection", "orders", "site"].forEach(function (k) {
+    ["collection", "orders", "site", "mkt"].forEach(function (k) {
       $("tab-" + k).classList.toggle("hidden", k !== t);
       document.querySelector('#tabs [data-tab="' + k + '"]').classList.toggle("on", k === t);
     });
     if (t === "orders") loadOrders();
+    if (t === "mkt") loadMkt();
     try { history.replaceState(null, "", "#" + t); } catch (e) { }
   }
   document.querySelectorAll("#tabs button").forEach(function (b) { b.addEventListener("click", function () { showTab(b.dataset.tab); }); });
-  if (/^#(orders|site)$/.test(location.hash)) showTab(location.hash.slice(1));
+  if (/^#(orders|site|mkt)$/.test(location.hash)) showTab(location.hash.slice(1));
 
   /* ============================================================
      🛍️ الأوردرات — من atelierOrdersAdmin (الأوردرات مقفولة على
@@ -459,6 +460,61 @@
       }).then(function () { bannerNew = ""; toast("اتحفظ ✓ — افتحي الصفحة وشوفي"); })
       .catch(function () { toast("الحفظ وقف — جرّبي تاني"); })
       .then(function () { b.disabled = false; });
+  });
+
+  /* ============================================================
+     📣 التسويق — أرقام + لينك حملة + بيكسلات (pos_test_settings/atelier_site)
+     ============================================================ */
+  var MK_FIELDS = ["metaPixelId", "ga4Id", "tiktokPixelId", "googleAdsId", "googleAdsPurchaseLabel"];
+  function loadMkt() {
+    col.doc("atelier_site").get().then(function (d) {
+      var v = d.exists ? d.data() : {};
+      MK_FIELDS.forEach(function (k) { $("k_" + k).value = v[k] || ""; });
+    });
+    // القطع: المحفوظة في اللوحة، وإلا قطع الموقع الثابتة
+    var opts = items.length ? items.filter(function (it) { return it.active !== false; }).map(function (it) {
+      return { id: "at-" + it.id, name: it.name + (it.colorName ? " — " + it.colorName : "") };
+    }) : AC.houseCollection("collection/").map(function (h) { return { id: h.id, name: h.name }; });
+    $("m_piece").innerHTML = '<option value="">الموقع كله</option>' + opts.map(function (o) {
+      return '<option value="' + esc(o.id) + '">' + esc(o.name) + "</option>";
+    }).join("");
+    buildLink();
+    var show = function () {
+      var s = AD.orderStats(orders, Date.now(), 30), nf = function (n) { return Number(n).toLocaleString("ar-EG"); };
+      $("mStats").innerHTML =
+        '<div class="st"><b>' + nf(s.count) + '</b>أوردر</div>' +
+        '<div class="st"><b>' + nf(s.revenue) + '</b>ج.م مبيعات</div>' +
+        '<div class="st"><b>' + nf(s.avg) + '</b>ج.م متوسط الأوردر</div>' +
+        '<div class="st"><b>' + nf(s.web) + " / " + nf(s.app) + '</b>الموقع / التطبيق</div>' +
+        '<div class="st top"><b style="font-size:14px;">الأكتر طلبًا</b>' +
+          (s.top.length ? s.top.map(function (t) { return esc(t.name) + " · " + nf(t.n); }).join("<br>") : '<span class="muted">لسه مفيش أوردرات</span>') + "</div>";
+    };
+    if (orders.length) show(); else loadOrders(true).then(show, show);
+  }
+  function buildLink() {
+    $("m_link").value = AD.campaignLink({ piece: $("m_piece").value, source: $("m_source").value,
+      campaign: $("m_campaign").value, lang: $("m_lang").value });
+  }
+  ["m_piece", "m_source", "m_lang"].forEach(function (id) { $(id).addEventListener("change", buildLink); });
+  $("m_campaign").addEventListener("input", buildLink);
+  $("m_copy").addEventListener("click", function () {
+    var v = $("m_link").value;
+    (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(function () { toast("اتنسخ ✓"); },
+      function () { $("m_link").select(); document.execCommand("copy"); toast("اتنسخ ✓"); });
+  });
+  $("k_save").addEventListener("click", function () {
+    var b = this, v = {};
+    MK_FIELDS.forEach(function (k) { v[k] = $("k_" + k).value.trim(); });
+    // نفس فحص الموقع (marketing.js) — اللي مش مظبوط بنقول عليه بدل ما يتجاهل في السر
+    var ok = window.AtelierMkt ? window.AtelierMkt.cleanConfig(v) : null, bad = [];
+    var map = { metaPixelId: "meta", ga4Id: "ga4", tiktokPixelId: "tiktok", googleAdsId: "ads", googleAdsPurchaseLabel: "adsLabel" };
+    if (ok) MK_FIELDS.forEach(function (k) { if (v[k] && !ok[map[k]]) bad.push(k); });
+    $("k_err").textContent = bad.length ? "الرقم ده مش بالشكل الصح: " + bad.join("، ") : "";
+    if (bad.length) return;
+    b.disabled = true;
+    v.mktUpdatedAt = firebase.firestore.FieldValue.serverTimestamp();
+    col.doc("atelier_site").set(v, { merge: true }).then(function () { toast("اتحفظ ✓ — البيكسلات شغالة على الموقع"); })
+      .catch(function () { toast("الحفظ وقف — جرّبي تاني"); }).then(function () { b.disabled = false; });
   });
 
   window.addEventListener("beforeunload", function (e) { if (dirty || pending.length) { e.preventDefault(); e.returnValue = ""; } });
