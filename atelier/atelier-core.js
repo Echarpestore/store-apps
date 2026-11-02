@@ -355,7 +355,7 @@
      كمنتج بسعره بالجنيه ولينك بيفتح القطعة نفسها (?p=<id>).
      img(p) بيرجّع لينك صورة كامل، أو "" لو مفيش. */
   var SITE_URL = "https://www.echarpe.store";
-  function productJsonLd(products, img, lang) {
+  function productJsonLd(products, img, lang, sameAs) {
     var en = lang !== "ar";
     var url = SITE_URL + "/atelier/" + (en ? "" : "?lang=ar");
     var items = (products || []).filter(function (p) { return p && p.price > 0 && img(p); }).slice(0, 60);
@@ -366,7 +366,8 @@
         logo: SITE_URL + "/logo.png", image: SITE_URL + "/atelier/collection/hero-comfort.jpg",
         description: en ? "Hijabs and scarves in Egypt — try every piece on yourself with one photo before you buy."
           : "طرح وإيشاربات في مصر — جرّبي كل قطعة عليكِ بصورة واحدة قبل ما تشتري.",
-        priceRange: "EGP", currenciesAccepted: "EGP", areaServed: "EG"
+        priceRange: "EGP", currenciesAccepted: "EGP", areaServed: "EG",
+        sameAs: (sameAs || []).length ? sameAs : undefined
       }, {
         "@type": "ItemList", name: en ? "The echarpe collection" : "مجموعة echarpe",
         itemListElement: items.map(function (p, i) {

@@ -510,3 +510,7 @@ body.sty-on .sty{transform:none;}
 .sty-sugg button{font-size:12px; border:1px solid var(--line); padding:6px 10px; border-radius:999px; background:#fff;}
 .sty-in{display:flex; gap:8px; padding:10px 12px; border-top:1px solid var(--line);}
 .sty-in input{flex:1; border:1px solid var(--line); padding:10px; font:inherit; background:#fff; min-width:0;}
+
+.social{display:flex; gap:18px; justify-content:center; margin:6px 0 2px; font-size:12px; letter-spacing:.08em; text-transform:uppercase;}
+.social a{border-bottom:1px solid currentColor; padding-bottom:2px;}
+.social.hidden{display:none;}
