@@ -326,3 +326,42 @@ assert(ac.colorName === 'كاكي' && ac.extras === 2, 'الأتيليه بيق�
     { createdMs: now - 40 * 86400000, total: 100, items: [] }], now, 30);
   assert(st.count === 2 && st.revenue === 1210 && st.avg === 605 && st.web === 1 && st.app === 1 && st.top[0].name === 'A' && st.top[0].n === 2, 'أرقام آخر ٣٠ يوم (من غير الملغي والقديم)');
 }
+
+// ١٧) 🤖 المساعدين — صفحة الإدارة + المنسّقة
+{
+  let A = null;
+  try { A = loadFn(path.join(ROOT, 'functions', 'atelierAssistant.js')); } catch (e) { assert(false, 'atelierAssistant بيتحمّل — ' + e.message); }
+  if (A) {
+    const items = A.cleanItems([{ id: 'a1', name: 'كينار', colorName: 'أسود', price: 680, line: 'kinar', family: 'كينار' },
+      { id: 'n1', isNew: true, name: 'طرحة', price: 0, line: 'weird' }, { id: '"><x', name: 'x' }]);
+    assert(items.length === 3 && items[1].line === 'other' && items[2].id === 'x', 'القايمة بتتنضّف (نوع غلط → other، id من غير رموز)');
+    const acts = A.sanitizeAdminActions([
+      { op: 'set', id: 'a1', fields: { price: '700', colorEn: 'Black', hack: 'x' } },
+      { op: 'set', id: 'ghost', fields: { price: 1 } },
+      { op: 'set', id: 'n1', fields: { line: 'kinar', price: -5, active: 'yes' } },
+      { op: 'site', fields: { title1: 'Winter <b>', whatsapp: '0100' } },
+      { op: 'delete', id: 'a1', fields: {} }], items);
+    assert(acts.length === 3 && acts[0].fields.price === 700 && acts[0].fields.colorEn === 'Black' && !('hack' in acts[0].fields), 'تعديل قطعة: حقول معروفة بس');
+    assert(acts[1].id === 'n1' && acts[1].fields.line === 'kinar' && !('price' in acts[1].fields) && !('active' in acts[1].fields), 'سعر سالب أو قيمة غلط بتتشال');
+    assert(acts[2].op === 'site' && acts[2].fields.title1 === 'Winter b' && !('whatsapp' in acts[2].fields) && !/[<>]/.test(acts[2].fields.title1), 'نصوص الموقع من غير وسوم ومن غير رقم الواتساب');
+    assert(!acts.some((a) => a.id === 'ghost'), 'id مش موجود = متجاهل (المساعد ميخترعش قطع)');
+    const pr = A.buildAdminPrompt(items, { title1: 'x' }, ['n1']);
+    assert(/Egyptian Arabic/.test(pr) && /Never invent item ids/.test(pr) && /"n1"/.test(pr), 'برومبت الإدارة');
+    const cat = A.cleanCatalog([{ id: 'house-kinar-taupe', name: 'Kinar', color: 'Taupe', price: 680 }, { id: '', name: 'x' }]);
+    const st = A.sanitizeStylist({ reply: 'Hi <script>', picks: ['house-kinar-taupe', 'fake', 'house-kinar-taupe'], handoff: true }, cat);
+    assert(cat.length === 1 && st.picks.join() === 'house-kinar-taupe,house-kinar-taupe' && st.handoff && !/[<>]/.test(st.reply), 'المنسّقة بتقترح من المجموعة بس');
+    assert(/Never invent products, prices or discounts/.test(A.buildStylistPrompt(cat, {}, 'en')) && /Egyptian Arabic/.test(A.buildStylistPrompt(cat, {}, 'ar')), 'برومبت المنسّقة باللغتين');
+    assert(A.capDecide(24, 25).allow && !A.capDecide(25, 25).allow, 'سقف رسايل المنسّقة');
+    assert(A.productImages([{ id: 'n1', image: 'data:image/jpeg;base64,AAAA' }, { id: 'n2', image: 'http://x' }]).length === 1, 'صور المنتجات data-URL بس');
+  }
+  const src = fs.readFileSync(path.join(ROOT, 'functions', 'atelierAssistant.js'), 'utf8');
+  assert(/isStaff\(req\)/.test(src) && /permission-denied/.test(src), 'مساعد الإدارة للموظفين بس');
+  assert(/require\("\.\/atelierAssistant"\)/.test(fs.readFileSync(IDX_PATH, 'utf8')), 'المساعدين مربوطين في index.js');
+  const AD4 = require(path.join(ROOT, 'atelier', 'admin-core.js'));
+  const its = [{ id: 'a1', name: 'كينار', price: 680 }], pen = [{ id: 'n1', name: 'طرحة', price: 0 }];
+  const res = AD4.applyAssistantActions(its, pen, [{ op: 'set', id: 'a1', fields: { price: 700 } }, { op: 'set', id: 'n1', fields: { colorName: 'روز', price: 490 } }, { op: 'site', fields: { title1: 'Hi' } }]);
+  assert(res.changed === 2 && its[0].price === 700 && pen[0].colorName === 'روز' && res.site.title1 === 'Hi', 'تطبيق اقتراحات المساعد (من غير حفظ)');
+  assert(/السعر ← ٧٠٠|السعر ← 700/.test(AD4.describeAction({ op: 'set', id: 'a1', fields: { price: 700 } }, its)), 'وصف الاقتراح قبل التطبيق');
+  const pj = fs.readFileSync(path.join(ROOT, 'atelier', 'atelier.js'), 'utf8');
+  assert(/callable\("atelierStylist"\)/.test(pj) && !/atelierStylist[\s\S]{0,400}state\.face/.test(pj), 'المنسّقة على الصفحة — من غير صورة العميلة');
+}

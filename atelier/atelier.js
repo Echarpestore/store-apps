@@ -1454,6 +1454,69 @@
     if (dp) setTimeout(function () { userPicked = true; setMirror(dp, true); openLook(dp); }, 900);
   });
 
+  /* ---------------- ✦ المنسّقة (atelierStylist) ----------------
+     بتقترح قطع من المجموعة بس (بالـid)، واللمس على القطعة بيفتحها.
+     مفيش صورة العميلة هنا خالص — كلام بس. */
+  var styHist = [];
+  function styOpen(on) {
+    document.body.classList.toggle("sty-on", on);
+    if (on) { if (!$("stySugg").childElementCount) styChips(); setTimeout(function () { $("styText").focus(); }, 300); }
+  }
+  $("styFab").addEventListener("click", function () { styOpen(true); mkt("Lead"); });
+  $("styClose").addEventListener("click", function () { styOpen(false); });
+  function styChips() {
+    var list = EN ? ["What suits a black abaya?", "Colours for a wedding", "Something light for summer", "How do I order?"]
+      : ["إيه اللي يليق على عباية سودا؟", "ألوان لفرح", "حاجة خفيفة للصيف", "أطلب إزاي؟"];
+    list.forEach(function (t) {
+      var b = el("button", "", esc(t)); b.type = "button";
+      b.addEventListener("click", function () { styAsk(t); });
+      $("stySugg").appendChild(b);
+    });
+  }
+  function styMsg(cls, text) { var m = el("div", "msg " + cls); m.textContent = text; $("styLog").appendChild(m); $("styLog").scrollTop = 1e6; return m; }
+  function styCatalog() {
+    return state.products.filter(function (p) { return p.tryable; }).slice(0, 120).map(function (p) {
+      return { id: p.id, name: displayName(p), color: colorLabel(p), price: p.price || 0, tried: !!state.looks[p.id] };
+    });
+  }
+  function styAsk(text) {
+    text = String(text || "").trim(); if (!text) return;
+    $("stySugg").innerHTML = "";
+    styMsg("me", text);
+    var wait = styMsg("bot wait", tr("بتفكّر…", "Thinking…"));
+    $("stySend").disabled = true;
+    var info = { branches: EN ? SITE.branches.map(branchLabel) : SITE.branches, shippingFee: SITE.shippingFee };
+    var call = MOCK || !fb ? Promise.resolve({ data: { reply: tr("دي اقتراحاتي ليكِ 🤍", "Here are my picks for you 🤍"),
+      picks: styCatalog().slice(0, 3).map(function (p) { return p.id; }) } })
+      : authReady.then(function () { return callable("atelierStylist")({ message: text, lang: LANG, history: styHist, catalog: styCatalog(), info: info }); });
+    call.then(function (r) {
+      var d = (r && r.data) || {};
+      styHist.push({ role: "user", text: text }, { role: "model", text: d.reply || "" }); styHist = styHist.slice(-8);
+      wait.classList.remove("wait"); wait.textContent = d.reply || "🤍";
+      var picks = (d.picks || []).map(function (id) { return state.byId[id]; }).filter(Boolean);
+      if (picks.length) {
+        var box = el("div", "picks");
+        picks.forEach(function (p) {
+          var b = el("button", "pick", '<img alt="">' + esc(colorLabel(p) || displayName(p)) + (p.price ? "<br>" + esc(money(p.price)) : ""));
+          b.type = "button"; b.querySelector("img").src = state.looks[p.id] || p.img;
+          b.addEventListener("click", function () { styOpen(false); userPicked = true; setMirror(p, true); openLook(p); });
+          box.appendChild(b);
+        });
+        wait.appendChild(box);
+      }
+      if (d.handoff) {
+        var h = el("button", "handoff", tr("كلّمي الفريق في الشات", "Chat with our team")); h.type = "button";
+        h.addEventListener("click", openChatCta); wait.appendChild(h);
+      }
+    }).catch(function (er) {
+      wait.classList.remove("wait");
+      var code = String(er && er.code || "").replace(/^functions\//, "");
+      wait.textContent = code === "resource-exhausted" && er.message ? er.message
+        : tr("المنسّقة مش متاحة دلوقتي — كلّمي الفريق في الشات 🤍", "Your stylist isn’t available right now — please chat with our team 🤍");
+    }).then(function () { $("stySend").disabled = false; });
+  }
+  $("styForm").addEventListener("submit", function (e) { e.preventDefault(); var t = $("styText").value; $("styText").value = ""; styAsk(t); });
+
   /* 🔎 بيانات جوجل بالمنتجات الحيّة (اللي في صفحة الإدارة كمان) */
   function updateLd() {
     var IMG_FN = "https://us-central1-customer-feedback-8ac1d.cloudfunctions.net/atelierImg?id=";
