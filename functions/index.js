@@ -1093,6 +1093,10 @@ Object.assign(exports, require("./atelierOrders"));
 //    firebase deploy --only functions:atelierAdminAssistant,functions:atelierStylist
 Object.assign(exports, require("./atelierAssistant"));
 
+// 🔐 مين يدخل صفحة إدارة غرفة القياس (atelier_admins/config). النشر:
+//    firebase deploy --only functions:atelierAdmins
+exports.atelierAdmins = require("./atelierAdmins").atelierAdmins;
+
 // 📱 إنستاباي على تابلت الفرع — دالتين بس (instaPay + instaScan).
 //    بديل الـ29 دالة اللي عدّوا حد الـCPU. النشر:
 //    firebase deploy --only functions:instaPay,functions:instaScan

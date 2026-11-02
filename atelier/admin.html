@@ -66,6 +66,9 @@
   .linkbox{display:flex; gap:8px; margin-top:8px;} .linkbox input{flex:1; font-size:12px;}
   .checklist{padding-inline-start:18px; display:grid; gap:6px;}
   .err{color:var(--bad); font-size:12px; min-height:1em;}
+  .denied{margin-top:16px; display:grid; gap:8px;}
+  .adm-row{display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--line); font-size:13px;}
+  .adm-row button{color:var(--bad); font-size:12px;}
   .trk{display:grid; gap:6px; margin-top:10px; padding-top:10px; border-top:1px dashed var(--line);}
   .trk input{width:100%; padding:9px 10px; border:1px solid var(--line); background:#fff; font:inherit; font-size:13px;}
   .trk .t-wa{font-size:12.5px; color:var(--ok);}
@@ -147,6 +150,12 @@
     <div class="err" id="loginErr"></div>
     <button class="btn" type="submit">دخول</button>
   </form>
+  <div class="denied hidden" id="denied">
+    <p><b>الحساب ده مش مسموح له بصفحة الإدارة.</b></p>
+    <p class="muted" id="deniedWho"></p>
+    <p class="muted">لو المفروض تدخلي، اطلبي من المالكة تضيف إيميلك.</p>
+    <button class="btn ghost" type="button" id="deniedOut">خروج</button>
+  </div>
 </div>
 
 <div id="app" class="hidden">
@@ -205,6 +214,16 @@
 
   <div class="wrap hidden" id="tab-site">
     <div class="site">
+      <div class="card hidden" id="admBox" style="margin-bottom:14px;">
+        <b>🔐 مين يدخل صفحة الإدارة</b>
+        <p class="muted">المالكة + الإيميلات دي بس. الكاشير والمكتب مش هيقدروا يدخلوا هنا ولا يشوفوا أوردرات الموقع.</p>
+        <div id="admList"></div>
+        <div class="linkbox"><input type="email" id="admNew" dir="ltr" placeholder="name@example.com"><button class="btn" type="button" id="admAdd">إضافة</button></div>
+      </div>
+      <div class="card hidden" id="admSetup" style="margin-bottom:14px; border-color:var(--bad);">
+        <b>🔐 الصفحة دي لسه مفتوحة لأي حساب موظفين</b>
+        <p class="muted">عشان تقفليها عليكِ: من Firebase Console ← Firestore ← Start collection باسم <b dir="ltr">atelier_admins</b> ← Document ID <b dir="ltr">config</b> ← حقل <b dir="ltr">owners</b> نوعه array وجواه إيميلك اللي بتدخلي بيه هنا: <b dir="ltr" id="admMe"></b></p>
+      </div>
       <p class="muted">كل اللي هنا بيظهر في صفحة غرفة القياس على طول بعد الحفظ.</p>
       <h3 style="margin:10px 0 4px;">النسخة العربي</h3>
       <label>السطر الصغير فوق العنوان<input type="text" id="s_eyebrow" placeholder="مجموعة الموسم"></label>
@@ -298,10 +317,10 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
-<script src="../tryon/photo-core.js?v=2611030100"></script>
-<script src="./atelier-core.js?v=2611030100"></script>
-<script src="./admin-core.js?v=2611030100"></script>
-<script src="./marketing.js?v=2611030100"></script>
-<script src="./admin.js?v=2611030100"></script>
+<script src="../tryon/photo-core.js?v=2611030300"></script>
+<script src="./atelier-core.js?v=2611030300"></script>
+<script src="./admin-core.js?v=2611030300"></script>
+<script src="./marketing.js?v=2611030300"></script>
+<script src="./admin.js?v=2611030300"></script>
 </body>
 </html>

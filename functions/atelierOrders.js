@@ -31,6 +31,7 @@ const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https")
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
 const crypto = require("crypto");
+const { requireAtelierAdmin } = require("./atelierAdmins");
 
 const COL_ORDERS = "atelier_orders";
 const COL_GUARD = "atelier_order_guard";
@@ -261,6 +262,8 @@ exports.atelierOrderPlace = onCall({ region: "us-central1" }, async (req) => {
 exports.atelierOrdersAdmin = onCall({ region: "us-central1" }, async (req) => {
   if (!isStaff(req)) throw new HttpsError("permission-denied", "للموظفين بس");
   const db = getFirestore();
+  // 🔐 أوردرات الموقع (تليفونات وعناوين) لقايمة صفحة الإدارة بس — مش لأي كاشير
+  await requireAtelierAdmin(req, db);
   const data = (req && req.data) || {};
   if (data.action === "track") {
     // 🛵 خرج مع المندوب: لينك المتابعة (أوبر…) + اسم/رقم المندوب اختياري

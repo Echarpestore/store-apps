@@ -64,6 +64,8 @@ function evalTerm(t, ctx){
     const neg = t.trim().charAt(0) === '!';
     return neg ? !ctx.lockedDoc : !!ctx.lockedDoc;
   }
+  // 🛍️🔐 مستندات غرفة القياس: الكتابة لقايمة الإدارة بس
+  if(t.indexOf('atelierWriteOk(id)') >= 0) return !ctx.atelierDoc || (ctx.auth === 'staff' && !!ctx.atelierAdmin);
   if(t.indexOf('request.query.limit') >= 0){
     const m = t.match(/limit <= (\d+)/);
     return !!m && ctx.limit != null && ctx.limit <= Number(m[1]);
@@ -239,6 +241,12 @@ const OPS = [
     '🔒 office_cash / gift_cards / staff_access مقفولين على العملاء'],
   ['POS', 'pos_test_settings', 'update', { auth:'staff', lockedDoc:true }, false,
     '🔒⭐⭐ staff_access (قايمة مين يلمس فلوس) ممنوعة حتى على الموظفين'],
+  ['صفحة إدارة غرفة القياس', 'pos_test_settings', 'update', { auth:'staff', atelierDoc:true, atelierAdmin:true }, true,
+    'atelier/admin.js — حفظ المنتجات والنصوص (من القايمة)'],
+  ['POS', 'pos_test_settings', 'update', { auth:'staff', atelierDoc:true, atelierAdmin:false }, false,
+    '🔐 كاشير مش في قايمة الإدارة ميعدّلش منتجات/أسعار غرفة القياس'],
+  ['تطبيق الولاء', 'pos_test_settings', 'update', { auth:'anon', atelierDoc:true }, false,
+    '🔐 عميل ميكتبش في مستندات غرفة القياس'],
 
   // ---- POS و sales و Office (دخول بإيميل وباسورد) ----
   ['POS',    'pos_test_sales',     'create', STAFF, true, 'حفظ الفاتورة'],
@@ -375,6 +383,9 @@ DENY.forEach(function(d){
   // ⚠️ القفل لازم يبقى **برّه** فرعي الشرط مش جوّه واحد بس
   const setBlock = rules.slice(rules.indexOf('match /pos_test_settings/'),
                                rules.indexOf('match /pos_test_inventory/'));
-  assert(/allow create, update: if !settingsLocked\(id\) && \(/.test(setBlock),
+  assert(/allow create, update: if !settingsLocked\(id\) && (atelierWriteOk\(id\) && )?\(/.test(setBlock),
     '⚠️⭐⭐ والقفل على برّه الشرط كله — حطّه جوّه فرع واحد كان بيخليه وهمي');
+  assert(/allow create, update: if !settingsLocked\(id\) && atelierWriteOk\(id\) && \(/.test(setBlock),
+    '🔐 وقفل غرفة القياس برّه الشرط كله برضه (مش جوّه فرع الموظفين بس)');
+  assert(!/match \/atelier_admins\//.test(rules), '🔐 قايمة إدارة غرفة القياس ملهاش قاعدة = محدش يكتبها من الموبايل');
 }

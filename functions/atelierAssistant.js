@@ -17,6 +17,7 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
+const { requireAtelierAdmin } = require("./atelierAdmins");
 
 const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
 const COL_SETTINGS = "pos_test_settings";
@@ -271,6 +272,7 @@ exports.atelierAdminAssistant = onCall(
   async (req) => {
     if (!isStaff(req)) throw new HttpsError("permission-denied", "للموظفين بس");
     const db = getFirestore();
+    await requireAtelierAdmin(req, db);
     const data = (req && req.data) || {};
     const message = clean(data.message, 2000);
     const imgs = productImages(data.images);

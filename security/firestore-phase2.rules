@@ -90,6 +90,18 @@ service cloud.firestore {
       return id == 'staff_access' || id == 'credit_cfg';
     }
 
+    // 🛍️🔐 مستندات غرفة القياس (atelier_*: المنتجات والنصوص والبيكسلات) —
+    //    الكتابة لقايمة صفحة الإدارة بس (atelier_admins/config)، مش لأي كاشير.
+    //    القايمة نفسها ملهاش قاعدة = محدش يكتبها غير الكونسول والدوال.
+    //    لو المستند لسه مش موجود → أي موظف (زي الأول) لحد ما المالكة تعمله.
+    function atelierDoc(id) { return id.matches('atelier_.*'); }
+    function atelierAdmin() {
+      return !exists(/databases/$(database)/documents/atelier_admins/config)
+        || request.auth.token.email.lower() in get(/databases/$(database)/documents/atelier_admins/config).data.get('owners', [])
+        || request.auth.token.email.lower() in get(/databases/$(database)/documents/atelier_admins/config).data.get('emails', []);
+    }
+    function atelierWriteOk(id) { return !atelierDoc(id) || (isStaff() && atelierAdmin()); }
+
     // ---------- Office (محاسبة المكتب) ----------
     match /office_recurring/{id}      { allow read, write: if isStaff(); }
     match /office_expenses/{id}       { allow read, write: if isStaff(); }
@@ -208,7 +220,7 @@ service cloud.firestore {
       //    حطّيته على فرع الموظفين بس في الأول، والاختبار مسك إن الفرع
       //    التاني (signedIn) لسه بيسمح — يعني القفل كان وهمي.
       //    القاعدة: القفل بيتحط مرة على برّه، مش مرة جوّه فرع واحد.
-      allow create, update: if !settingsLocked(id) && (
+      allow create, update: if !settingsLocked(id) && atelierWriteOk(id) && (
            isStaff()
         || (signedIn() && (id == 'offer_stats_echarpe' || id == 'offer_stats_glow')));
       allow delete: if false;
