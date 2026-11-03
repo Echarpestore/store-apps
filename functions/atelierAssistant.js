@@ -162,42 +162,64 @@ function sanitizeAdminActions(raw, items) {
   return out;
 }
 
-/* 🧕 المنسّقة — الكتالوج من الصفحة (أسماء وألوان وأسعار بس) */
+/* 🧕 المنسّقة — الكتالوج من الصفحة. الموديل بيشوف **رقم** القطعة (n) مش
+   الـid: الـids فيها كلمات فرنساوي (noir/blanc/gris) كانت بتلخبطه فيختار
+   لون غير اللي بيتكلم عنه. السيرفر هو اللي بيرجّع الرقم لـid. */
+const FABRIC = {
+  kinar: "Kuwaiti Lady kinar linen: light, breathable linen with a contrasting printed border and frayed edges; soft, polished day look",
+  chiffon: "Messi Kuwaiti chiffon: airy, lightly crinkled chiffon-linen with fringed ends; very light, drapes softly; easy everyday and summer",
+  crepe: "crepe: smooth matte drape, holds its shape; office and formal", plisse: "plissé: pleated texture, dressy",
+  mono: "monogram print", zebre: "zebra print", isdal: "prayer dress (isdal)", other: "hijab"
+};
 function cleanCatalog(list) {
-  return (Array.isArray(list) ? list : []).slice(0, 120).map((p) => ({
+  return (Array.isArray(list) ? list : []).slice(0, 120).map((p, i) => ({
+    n: i + 1,
     id: String(p && p.id || "").replace(/[^\w-]/g, "").slice(0, 60),
-    name: clean(p.name, 70), color: clean(p.color, 40), price: Math.max(0, Math.round(Number(p.price) || 0)),
+    model: clean(p.model || p.name, 60), color: clean(p.color, 50), tone: clean(p.tone, 20),
+    fabric: FABRIC[p.line] || FABRIC.other, price: Math.max(0, Math.round(Number(p.price) || 0)),
     tried: !!p.tried
-  })).filter((p) => p.id && p.name);
+  })).filter((p) => p.id && p.model);
 }
 function buildStylistPrompt(catalog, info, lang) {
   const en = lang !== "ar";
   return [
     "You are the personal stylist of echarpe, an Egyptian hijab boutique, chatting with a customer on its try-on website.",
     en ? "Reply in warm, elegant, concise English." : "Reply in warm, elegant, concise Egyptian Arabic, addressing a woman (feminine forms).",
-    "Help her choose hijabs: colours that suit her outfit, skin tone, occasion or season; how to style them; fabric feel (linen and chiffon are light summer fabrics).",
-    "Only recommend pieces from the CATALOG below, by id, in 'picks' (max 4). Never invent products, prices or discounts.",
+    "Help her choose hijabs: colours that suit her outfit, skin tone, occasion or season; how to style them; fabric feel.",
+    "HOW TO PICK — think like a real stylist, then pick:",
+    "1) Work out what she needs (occasion, outfit colour, season, formality).",
+    "2) Choose the colours that truly fit. Styling sense: weddings, engagements and evening events → soft light or luminous shades (off-white, ivory, light grey, beige, rose, lilac), or black with a light/silver border for an elegant contrast; avoid dull everyday tones unless she asks. Work/office → neutrals (black, grey, taupe, beige, stone). Summer and daytime → light airy shades. A black outfit → contrast (off-white, beige, rose, light grey) or tone-on-tone black with a light border. Match borders to her accessories when she mentions them.",
+    "3) Put in 'picks' ONLY catalog items whose colour matches what you recommend, each with a short 'why' that names its colour. Your 'reply' must talk about exactly those same colours. Never pick an item whose colour you did not recommend.",
+    "4) If nothing in the catalog really fits, say so honestly, suggest the closest option or ask a question, and return fewer or no picks. Fewer correct picks beat many random ones.",
+    "Identify items ONLY by their number 'n' from the CATALOG (max 4 picks). Never invent products, colours, prices or discounts.",
     "Pieces marked tried=true were already tried on her photo; you may mention she can compare them.",
     "To see a piece on herself she taps it and presses 'Try it on'. To buy: add to bag, then complete the order (home delivery or pickup from a branch).",
     "STORE INFO: " + JSON.stringify(info || {}),
     "If she asks something you don't know (stock of a specific branch, exact delivery day, custom orders), tell her kindly to message the team in the chat, and set handoff=true.",
     "Stay on topic (hijabs, styling, the store). Keep replies under 70 words. No markdown.",
-    "CATALOG (JSON): " + JSON.stringify(catalog)
+    "CATALOG (JSON): " + JSON.stringify(catalog.map((p) => ({ n: p.n, model: p.model, color: p.color, tone: p.tone || undefined, fabric: p.fabric, price: p.price, tried: p.tried || undefined })))
   ].join("\n");
 }
 const STYLIST_SCHEMA = {
   type: "OBJECT",
-  properties: { reply: { type: "STRING" }, picks: { type: "ARRAY", items: { type: "STRING" } }, handoff: { type: "BOOLEAN" } },
-  required: ["reply"]
+  properties: {
+    reply: { type: "STRING" },
+    picks: { type: "ARRAY", items: { type: "OBJECT", properties: { n: { type: "INTEGER" }, why: { type: "STRING" } }, required: ["n", "why"] } },
+    handoff: { type: "BOOLEAN" }
+  },
+  required: ["reply", "picks"]
 };
+/* الأرقام → ids (من غير تكرار)، والسبب لكل قطعة بيظهر للعميلة تحتها */
 function sanitizeStylist(raw, catalog) {
-  const ids = new Set(catalog.map((p) => p.id));
-  const r = raw || {};
-  return {
-    reply: String(r.reply || "").replace(/[<>]/g, "").trim().slice(0, 900),
-    picks: (Array.isArray(r.picks) ? r.picks : []).map(String).filter((id) => ids.has(id)).slice(0, 4),
-    handoff: r.handoff === true
-  };
+  const byN = {}; catalog.forEach((p) => { byN[p.n] = p; });
+  const r = raw || {}, seen = {}, picks = [];
+  (Array.isArray(r.picks) ? r.picks : []).forEach((x) => {
+    const p = byN[Number(x && typeof x === "object" ? x.n : x)];
+    if (!p || seen[p.id] || picks.length >= 4) return;
+    seen[p.id] = 1;
+    picks.push({ id: p.id, why: String(x && x.why || "").replace(/[<>]/g, "").trim().slice(0, 140) });
+  });
+  return { reply: String(r.reply || "").replace(/[<>]/g, "").trim().slice(0, 900), picks, handoff: r.handoff === true };
 }
 
 function capDecide(count, cap) {
@@ -218,7 +240,7 @@ async function callGeminiJson({ apiKey, models, system, history, message, images
   const body = {
     systemInstruction: { parts: [{ text: system }] },
     contents,
-    generationConfig: { responseMimeType: "application/json", responseSchema: schema, temperature: 0.4 }
+    generationConfig: { responseMimeType: "application/json", responseSchema: schema, temperature: 0.25 }
   };
   let lastErr = null;
   for (const model of models) {
