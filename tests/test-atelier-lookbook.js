@@ -348,10 +348,14 @@ assert(ac.colorName === 'كاكي' && ac.extras === 2, 'الأتيليه بيق�
     assert(!acts.some((a) => a.id === 'ghost'), 'id مش موجود = متجاهل (المساعد ميخترعش قطع)');
     const pr = A.buildAdminPrompt(items, { title1: 'x' }, ['n1']);
     assert(/Egyptian Arabic/.test(pr) && /Never invent item ids/.test(pr) && /"n1"/.test(pr), 'برومبت الإدارة');
-    const cat = A.cleanCatalog([{ id: 'house-kinar-taupe', name: 'Kinar', color: 'Taupe', price: 680 }, { id: '', name: 'x' }]);
-    const st = A.sanitizeStylist({ reply: 'Hi <script>', picks: ['house-kinar-taupe', 'fake', 'house-kinar-taupe'], handoff: true }, cat);
-    assert(cat.length === 1 && st.picks.join() === 'house-kinar-taupe,house-kinar-taupe' && st.handoff && !/[<>]/.test(st.reply), 'المنسّقة بتقترح من المجموعة بس');
-    assert(/Never invent products, prices or discounts/.test(A.buildStylistPrompt(cat, {}, 'en')) && /Egyptian Arabic/.test(A.buildStylistPrompt(cat, {}, 'ar')), 'برومبت المنسّقة باللغتين');
+    const cat = A.cleanCatalog([{ id: 'house-kinar-taupe', model: 'Kinar', line: 'kinar', color: 'Taupe with White Border', price: 680 },
+      { id: 'house-kinar-ivoire', model: 'Kinar', line: 'kinar', color: 'Off-White with Grey Border', price: 680 }, { id: '', model: 'x' }]);
+    assert(cat.length === 2 && cat[0].n === 1 && /linen/.test(cat[0].fabric), 'كل قطعة برقم ووصف قماش');
+    const st = A.sanitizeStylist({ reply: 'Hi <script>', picks: [{ n: 2, why: 'off-white glows at a wedding' }, { n: 9, why: 'x' }, { n: 2, why: 'dup' }], handoff: true }, cat);
+    assert(st.picks.length === 1 && st.picks[0].id === 'house-kinar-ivoire' && /off-white/.test(st.picks[0].why) && st.handoff && !/[<>]/.test(st.reply), 'المنسّقة: الرقم بيرجع للقطعة الصح، ومن غير تكرار أو أرقام مش موجودة');
+    const sp = A.buildStylistPrompt(cat, {}, 'en');
+    assert(/Never pick an item whose colour you did not recommend/.test(sp) && /weddings/.test(sp) && !/house-kinar/.test(sp), 'برومبت المنسّقة: قواعد الاختيار + من غير ids تلخبط');
+    assert(/Never invent products, colours, prices or discounts/.test(A.buildStylistPrompt(cat, {}, 'en')) && /Egyptian Arabic/.test(A.buildStylistPrompt(cat, {}, 'ar')), 'برومبت المنسّقة باللغتين');
     assert(A.capDecide(24, 25).allow && !A.capDecide(25, 25).allow, 'سقف رسايل المنسّقة');
     assert(A.productImages([{ id: 'n1', image: 'data:image/jpeg;base64,AAAA' }, { id: 'n2', image: 'http://x' }]).length === 1, 'صور المنتجات data-URL بس');
   }

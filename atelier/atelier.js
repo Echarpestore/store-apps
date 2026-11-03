@@ -1490,7 +1490,11 @@
   function styMsg(cls, text) { var m = el("div", "msg " + cls); m.textContent = text; $("styLog").appendChild(m); $("styLog").scrollTop = 1e6; return m; }
   function styCatalog() {
     return state.products.filter(function (p) { return p.tryable; }).slice(0, 120).map(function (p) {
-      return { id: p.id, name: displayName(p), color: colorLabel(p), price: p.price || 0, tried: !!state.looks[p.id] };
+      // بالإنجليزي للموديل دايمًا (أدق في الألوان) — اللون العربي مكتوب في colorAr
+      var m = modelOf[p.id];
+      return { id: p.id, model: (m && m.items.length > 1 ? m.title : displayName(p)), line: p.line,
+        color: (EN ? colorLabel(p) : (AC.colorToEn(p.colorAr || p.colorName) || colorLabel(p))) || "",
+        tone: p.tone || AC.toneFromName(p.colorAr || p.colorName) || "", price: p.price || 0, tried: !!state.looks[p.id] };
     });
   }
   function styAsk(text) {
@@ -1501,17 +1505,20 @@
     $("stySend").disabled = true;
     var info = { branches: EN ? SITE.branches.map(branchLabel) : SITE.branches, shippingFee: SITE.shippingFee };
     var call = MOCK || !fb ? Promise.resolve({ data: { reply: tr("دي اقتراحاتي ليكِ 🤍", "Here are my picks for you 🤍"),
-      picks: styCatalog().slice(0, 3).map(function (p) { return p.id; }) } })
+      picks: styCatalog().slice(0, 3).map(function (p) { return { id: p.id, why: "mock" }; }) } })
       : authReady.then(function () { return callable("atelierStylist")({ message: text, lang: LANG, history: styHist, catalog: styCatalog(), info: info }); });
     call.then(function (r) {
       var d = (r && r.data) || {};
       styHist.push({ role: "user", text: text }, { role: "model", text: d.reply || "" }); styHist = styHist.slice(-8);
       wait.classList.remove("wait"); wait.textContent = d.reply || "🤍";
-      var picks = (d.picks || []).map(function (id) { return state.byId[id]; }).filter(Boolean);
+      var picks = (d.picks || []).map(function (x) {
+        var p = state.byId[typeof x === "string" ? x : x && x.id]; if (p) p._why = (x && x.why) || ""; return p;
+      }).filter(Boolean);
       if (picks.length) {
         var box = el("div", "picks");
         picks.forEach(function (p) {
-          var b = el("button", "pick", '<img alt="">' + esc(colorLabel(p) || displayName(p)) + (p.price ? "<br>" + esc(money(p.price)) : ""));
+          var b = el("button", "pick", '<img alt="">' + esc(colorLabel(p) || displayName(p)) + (p.price ? "<br>" + esc(money(p.price)) : "") +
+            (p._why ? '<small>' + esc(p._why) + "</small>" : ""));
           b.type = "button"; b.querySelector("img").src = state.looks[p.id] || p.img;
           b.addEventListener("click", function () { styOpen(false); userPicked = true; setMirror(p, true); openLook(p); });
           box.appendChild(b);
