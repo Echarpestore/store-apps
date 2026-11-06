@@ -6314,6 +6314,7 @@ function _recentShiftsHtml(emp,monthKey,openId){
       +'<span><b>'+Number(r.day.slice(8,10))+'</b> '+_empEsc(wd(r.clockInTs))+(r.manual?' ✍️':'')+warn+'</span>'
       +'<span style="font-family:Space Grotesk,Cairo;direction:ltr">'+t(r.clockInTs)+' → '+(r.clockOutTs?t(r.clockOutTs):'—')+(dur?' <span style="color:var(--sub)">('+dur+')</span>':'')+'</span></div>'
       +(isOpen?'<div style="margin-top:8px" onclick="event.stopPropagation()">'
+        +'<button type="button" class="erFixOut" data-id="'+_empEsc(r.id)+'" style="width:100%;padding:10px;margin-bottom:8px;border:1px solid var(--gold);border-radius:10px;background:transparent;color:var(--gold);font:800 13px Cairo;cursor:pointer">🕐 '+(r.clockOutTs?'عدّل وقت الانصراف':'سجّل وقت الانصراف')+'</button>'
         +'<input class="erVoidReason" placeholder="السبب (إجباري) — مثال: حد سجّلها بالغلط" style="width:100%;padding:9px;border-radius:9px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);font-family:Cairo;margin-bottom:6px">'
         +'<button type="button" class="erVoidShift" data-id="'+_empEsc(r.id)+'" style="width:100%;padding:10px;border:none;border-radius:10px;background:var(--bad);color:#fff;font:800 13px Cairo;cursor:pointer">✖ إلغاء حضور يوم '+Number(r.day.slice(8,10))+'</button></div>':'')
       +'</div>';
@@ -6329,6 +6330,11 @@ function _bindRecentShifts(emp,box,msg,monthKey,openId){
   if(pv) pv.onclick=()=>_bindRecentShifts(emp,box,msg,keys[i-1],null);
   if(nx) nx.onclick=()=>_bindRecentShifts(emp,box,msg,keys[i+1],null);
   box.querySelectorAll('.erShiftRow').forEach(r=>{ r.onclick=()=>_bindRecentShifts(emp,box,msg,mk,r.dataset.id===openId?null:r.dataset.id); });
+  /* 🕐 v661: مشيت 6 ورجعت 7:30 داست «حضور» فاتسجّل انصراف 7:26 → المالك يصحح وقت المشي من هنا */
+  box.querySelectorAll('.erFixOut').forEach(b=>{ b.onclick=async()=>{
+    const okSaved = await ownerCloseShift(b.dataset.id);
+    if(okSaved){ if(msg) msg.textContent='✅ اتعدّل وقت الانصراف'; setTimeout(()=>_bindRecentShifts(emp,box,msg,mk,null), 600); }
+  }; });
   box.querySelectorAll('.erVoidShift').forEach(b=>{ b.onclick=()=>{
     const reason=String((box.querySelector('.erVoidReason')||{}).value||'').trim();
     if(!reason){ const inp=box.querySelector('.erVoidReason'); if(inp){ inp.style.borderColor='var(--bad)'; inp.focus(); } return; }
@@ -11138,10 +11144,13 @@ async function ownerCloseShift(shiftId){
       // ⛔ مفيش خصم انصراف بدري — الوقت اتحدد يدوي مش من الجهاز
       earlyMin: 0, earlyHours: 0,
       forgotClockOut: false, autoClosedAt1: false, needsClockOutReview: false,
-      closedByOwner: true, closedAt: Date.now()
+      closedByOwner: true, closedAt: Date.now(),
+      ...(sh.clockOutTs ? { prevClockOutTs: sh.clockOutTs, clockOutEditedAt: Date.now() } : {})
     });
-    renderOvertimeApprovals();
+    try{ Object.assign(sh, { clockOutTs: out.getTime(), shiftMinutes: totalMin, overtimeMinutes, overtimeApprovedMin: overtimeMinutes, closedByOwner: true }); }catch(_e){}
+    try{ renderOvertimeApprovals(); }catch(_e){}
     try{ renderSalaryPanel(); }catch(_e){}
-  }catch(e){ alert('تعذر الحفظ: ' + (e && e.message ? e.message : e)); }
+    return true;
+  }catch(e){ alert('تعذر الحفظ: ' + (e && e.message ? e.message : e)); return false; }
 }
 window.ownerCloseShift = ownerCloseShift;
