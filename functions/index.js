@@ -1117,3 +1117,8 @@ Object.assign(exports, require("./loyaltyAuth"));
 Object.assign(exports, require("./customerStats"));
 
 Object.assign(exports, require("./paymobProbe"));
+
+// 🤖 مراجع الكاميرات الذكي — Claude بيراجع يوم كل فرع ويقول تبص على أنهي لحظات (cctvAgent.js)
+const cctvAgent = require("./cctvAgent");
+cctvAgent.useNotifier(sendToOffice);
+Object.assign(exports, cctvAgent.functions);
