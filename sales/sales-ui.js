@@ -856,14 +856,15 @@ window.closeShiftNow = async function(shiftId){
   }) : emp;
   const requiredMin = window.scheduledShiftMinutes(shiftEmp, window.complianceCfg, window.todayStr(new Date(s.clockInTs)));
   const early = window.earlyLeaveFromWorked(totalMin, requiredMin, Number(s.lateMinutes)||0, tc);
-  const overtimeMinutes = Math.max(0, totalMin - (8*60 + 15));
+  const _std = (typeof window.empStdShiftMin === 'function') ? window.empStdShiftMin(emp) : (8*60 + 15);
+  const overtimeMinutes = Math.max(0, totalMin - _std);
   const msg = '🚪 إغلاق شيفت ' + (emp.name || 'الموظف') + ' الآن؟\n\n'
     + 'مدة الشيفت: ' + Math.floor(totalMin/60) + ' س ' + (totalMin%60) + ' د'
     + (early.hours ? ('\nنقص: ' + early.earlyMin + ' دقيقة = ' + early.hours + ' ساعات رصيد') : '')
     + (overtimeMinutes ? ('\nأوفرتايم معتمد: ' + overtimeMinutes + ' دقيقة') : '') + '\n\nتكمّل؟';
   if(!confirm(msg)) return;
   const patch = {
-    clockOutTs:now, shiftMinutes:totalMin, overtimeMinutes:overtimeMinutes,
+    clockOutTs:now, shiftMinutes:totalMin, overtimeMinutes:overtimeMinutes, stdShiftMin:_std,
     earlyMin:early.earlyMin, earlyHours:early.hours,
     otRequiresApproval:true, overtimeApprovedMin:overtimeMinutes,
     overtimeDecision:overtimeMinutes>0?'approved':'none', overtimeAutoApproved:false,

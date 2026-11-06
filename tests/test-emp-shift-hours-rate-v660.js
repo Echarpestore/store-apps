@@ -1,0 +1,28 @@
+'use strict';
+// v660 — شيفت خاص لموظف (shiftHours=9) + سعر نقطة خاص (commissionPerPoint=2.5)
+const assert = require('assert'), fs = require('fs'), path = require('path');
+const { loadSalesApp } = require('./helpers/load-sales');
+const S = loadSalesApp().sandbox, W = S.window;
+const ROOT = path.join(__dirname, '..');
+let n = 0; const ok = (c, m)=>{ assert.ok(c, m); n++; console.log('  ✅ ' + m); };
+ok(W.empStdShiftMin({ shiftHours: 9 }) === 555, 'شيفت 9 ساعات → الأوفرتايم بعد 9:15');
+ok(W.empStdShiftMin({}) === 495 && W.empStdShiftMin(null) === 495, 'سلبي: من غير إعداد = 8:15 زي الأول');
+ok(W.empStdShiftMin({ shiftHours: 30 }) === 495 && W.empStdShiftMin({ shiftHours: 'x' }) === 495, 'سلبي: رقم مش منطقي = يتجاهل');
+const cfg = { shifts: { morning: { start:'10:00', end:'18:00' } } };
+ok(W.scheduledShiftMinutes({ id:'a', scheduledStartTime:'10:00', scheduledEndTime:'18:00', shiftHours:9 }, cfg) === 540, 'المطلوب منه 9 ساعات حتى لو ميعاده مكتوب 10–6');
+ok(W.scheduledShiftMinutes({ id:'b', scheduledStartTime:'10:00', scheduledEndTime:'18:00' }, cfg) === 480, 'سلبي: موظف عادي = 8 ساعات');
+ok(W.scheduledShiftMinutes({ id:'c', shift:'morning', shiftHours:9 }, cfg) === 540, 'من شيفت الفرع: بداية 10 + 9 = 7');
+const base = Date.UTC(2026,10,6,8,0,0);
+const mk = (dur, ot, std)=>({ clockInTs:base, clockOutTs:base+dur*60000, shiftMinutes:dur, overtimeMinutes:ot, stdShiftMin:std, otRequiresApproval:true, overtimeDecision:'pending' });
+ok(W.overtimeReviewInfo(mk(615, 60, 555)).needsReview === false, '10:15 شغل لشيفت 9 س = ساعة أوفرتايم بتتعتمد لوحدها (مش «حساب غلط»)');
+ok(W.overtimeReviewInfo(mk(615, 120)).needsReview === false, 'شيفت قديم من غير stdShiftMin = حسبة 8:15 زي ما هي');
+ok(W.empPointRate({ commissionPerPoint: 2.5 }) === 2.5, 'سعر نقطة خاص 2.5');
+ok(W.empPointRate({ commissionPerPoint: null }) === null && W.empPointRate({}) === null, 'سلبي: فاضي = زي الفرع');
+ok(W.empPointRate({ commissionPerPoint: 0 }) === 0, 'صفر مسموح (من غير عمولة نقط)');
+const src = fs.readFileSync(path.join(ROOT,'sales','sales-app.js'),'utf8'), ui = fs.readFileSync(path.join(ROOT,'sales','sales-ui.js'),'utf8');
+ok(/function commissionRateForEmployee\(emp\)\{\s*if\(typeof empPointRate === 'function' && empPointRate\(emp\) !== null\) return empPointRate\(emp\);/.test(src), 'سعر الموظف بيغلب سعر الفرع في المكافآت');
+ok(/const pointRate = \(typeof empPointRate === 'function' && empPointRate\(emp\) !== null\) \? empPointRate\(emp\) :/.test(src), 'وفي المستحق الشهري');
+ok(/data-act="shifthours"/.test(src) && /data-act="ptrate"/.test(src), 'خانتين في الجدول: ساعات الشيفت + ج/نقطة');
+ok(/STANDARD_SHIFT_MINUTES = \(typeof empStdShiftMin === 'function'\) \? empStdShiftMin\(emp\)/.test(src) && /stdShiftMin: STANDARD_SHIFT_MINUTES/.test(src), 'الانصراف بيحسب الأوفرتايم على شيفت الموظف ويحفظه');
+ok(/window\.empStdShiftMin\(emp\)/.test(ui), 'قفل الشيفت من شاشة الإدارة بنفس القاعدة');
+console.log('emp shift hours + point rate v660: ' + n + ' PASS');

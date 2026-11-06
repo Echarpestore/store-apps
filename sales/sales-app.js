@@ -1005,6 +1005,14 @@ window._fmtKey = _fmtKey; window.caiDayKey = caiDayKey;
 // ⚠️ بيحوّل للقاهرة. لو التاريخ **مبني بإيدنا** أو جاي من cai() استخدم _fmtKey.
 function _dayKeyOf(d){ return _fmtKey(cai(d)); }
 
+/* ⏱️ v660 قرار المالك 06-11: مدة شيفت خاصة لموظف (emp.shiftHours، مثلًا 9) بدل 8 ساعات.
+   - المطلوب منه = الساعات دي (التأخير/الانصراف بدري/الرصيد) ونهاية شيفته = بدايته + الساعات.
+   - الأوفرتايم بيبدأ بعد الساعات دي + 15 د سماح (زي 8:15 للعادي). من غيرها = 495 زي الأول. */
+function empShiftHours(emp){ const h = Number(emp && emp.shiftHours); return (h >= 4 && h <= 14) ? h : 0; }
+function empStdShiftMin(emp){ const h = empShiftHours(emp); return h ? Math.round(h*60) + 15 : (8*60 + 15); }
+function _hmPlusHours(hm, h){ const m = /^(\d{1,2}):(\d{2})$/.exec(String(hm||'')); if(!m) return ''; const t = ((+m[1])*60 + (+m[2]) + Math.round(h*60)) % 1440; return String(Math.floor(t/60)).padStart(2,'0') + ':' + String(t%60).padStart(2,'0'); }
+window.empShiftHours = empShiftHours; window.empStdShiftMin = empStdShiftMin;
+
 function effectiveStartHM(emp, cfg, dateKey){
   cfg = cfg || complianceCfg;
   // 🔄 تبديل شيفت معتمد لليوم ده → الميعاد بتاع الشيفت الجديد
@@ -1023,6 +1031,7 @@ function effectiveStartHM(emp, cfg, dateKey){
 // نهاية الشيفت بنفس القاعدة
 function effectiveEndHM(emp, cfg, dateKey){
   cfg = cfg || complianceCfg;
+  if(typeof empShiftHours === 'function' && empShiftHours(emp)){ const e = _hmPlusHours(effectiveStartHM(emp, cfg, dateKey), empShiftHours(emp)); if(e) return e; }
   if(dateKey && emp){
     const lv = approvedLeaveFor(emp.id, dateKey);
     if(lv && lv.type === 'shiftSwap' && lv.toShift){
@@ -1540,7 +1549,7 @@ function overtimeReviewInfo(s, cfg){
   if(s.forgotClockOut) return { needsReview:true, reason:'forgot_clockout', expected:0, asked:Number(s.overtimeMinutes)||0 };
   if(!Number(s.clockOutTs)) return { needsReview:true, reason:'open_shift', expected:0, asked:Number(s.overtimeMinutes)||0 };
   const dur = Number(s.shiftMinutes) || Math.max(0, Math.round((Number(s.clockOutTs)-Number(s.clockInTs||0))/60000));
-  const expected = Math.max(0, dur - (8*60+15));
+  const expected = Math.max(0, dur - (Number(s.stdShiftMin) || (8*60+15)));
   const asked = Number(s.overtimeMinutes)||0;
   if(Math.abs(expected-asked) > 2) return { needsReview:true, reason:'calc_mismatch', expected, asked };
   /* ✅ v659 قرار المالك 06-11: الموظفة اللي سجّلت انصرافها بنفسها = الأوفرتايم كله بيتعتمد لوحده، من غير حد.
@@ -1695,7 +1704,8 @@ function expectedShiftEndTs(shift, emp, cCfg){
   if(!shift || !shift.clockInTs) return null;
   const cfg = cCfg || (typeof complianceCfg !== 'undefined' ? complianceCfg : null);
   const sdef = (cfg && cfg.shifts) ? cfg.shifts[emp && emp.shift] : null;
-  const endHM = (emp && emp.scheduledEndTime) || (sdef && sdef.end) || '';
+  let endHM = (emp && emp.scheduledEndTime) || (sdef && sdef.end) || '';
+  if(typeof empShiftHours === 'function' && empShiftHours(emp)){ const _st = (emp && emp.scheduledStartTime) || (sdef && sdef.start) || ''; const _e = _hmPlusHours(_st, empShiftHours(emp)); if(_e) endHM = _e; }
   if(!/^\d{1,2}:\d{2}$/.test(String(endHM))) return null;
   const parts = String(endHM).split(':').map(Number);
   const base = cai(shift.clockInTs);                     // 🕒 يوم الحضور بالقاهرة
@@ -4228,7 +4238,7 @@ async function clockOut(empId, photoDataUri){
      = ~15.75 ساعة أوفرتايم **مدفوعة** من غير ما حد يوافق.
      دلوقتي: الرقم بيتسجّل زي ما هو للمراجعة، والمرتب مبياخدش منه
      غير الدقايق اللي المالك يعتمدها من لوحة "أوفرتايم مستني موافقتك". */
-  const STANDARD_SHIFT_MINUTES = 8*60 + 15; // 495
+  const STANDARD_SHIFT_MINUTES = (typeof empStdShiftMin === 'function') ? empStdShiftMin(emp) : (8*60 + 15); // 495 (أو شيفت خاص: ساعاته + 15 د)
   const cfg = window.timeCfg || timeCfgDefaults;
   const maxShiftMin = (Number(cfg.maxShiftHours) || 14) * 60;
   // 🚨 شيفت أطول من المعقول = نسيان انصراف، مش شغل
@@ -4273,13 +4283,13 @@ async function clockOut(empId, photoDataUri){
     }
   }
 
-  const _otProbe = { clockInTs:shift.clockInTs, clockOutTs:now, shiftMinutes:totalMin,
+  const _otProbe = { clockInTs:shift.clockInTs, clockOutTs:now, shiftMinutes:totalMin, stdShiftMin: STANDARD_SHIFT_MINUTES,
       overtimeMinutes, forgotClockOut:forgotten || false, otRequiresApproval:true,
       overtimeDecision:overtimeMinutes > 0 ? 'pending' : 'none' };
   const _otInfo = overtimeReviewInfo(_otProbe, cfg);
   const _otAuto = overtimeMinutes > 0 && !_otInfo.needsReview;
   const patch = {
-      clockOutTs: now, overtimeMinutes, clockOutPhoto: photoDataUri || null,
+      clockOutTs: now, overtimeMinutes, stdShiftMin: STANDARD_SHIFT_MINUTES, clockOutPhoto: photoDataUri || null,
       earlyMin: earlyInfo.earlyMin, earlyHours: earlyInfo.hours,
       otRequiresApproval: true,
       overtimeApprovedMin: _otAuto ? overtimeMinutes : 0,
@@ -6636,6 +6646,16 @@ function renderScheduleList(){
           style="width:80px; padding:8px; border-radius:8px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Space Grotesk';">
       </div>
       <div style="display:flex; align-items:center; gap:6px;">
+        <span style="font-size:11px; color:var(--gold);">⏱️ ساعات الشيفت</span>
+        <input type="number" min="4" max="14" step="0.5" data-act="shifthours" data-id="${e.id}" value="${e.shiftHours || ''}" placeholder="8"
+          style="width:64px; padding:8px; border-radius:8px; border:1px solid var(--gold-dim); background:var(--panel2); color:var(--ink); font-family:'Space Grotesk';">
+      </div>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <span style="font-size:11px; color:var(--gold);">💰 ج/نقطة</span>
+        <input type="number" min="0" step="0.1" data-act="ptrate" data-id="${e.id}" value="${(e.commissionPerPoint ?? '') === null ? '' : (e.commissionPerPoint ?? '')}" placeholder="زي الفرع"
+          style="width:74px; padding:8px; border-radius:8px; border:1px solid var(--gold-dim); background:var(--panel2); color:var(--ink); font-family:'Space Grotesk';">
+      </div>
+      <div style="display:flex; align-items:center; gap:6px;">
         <span style="font-size:11px; color:var(--sub);">المرتب الأساسي/شهر</span>
         <input type="number" min="0" data-act="salary" data-id="${e.id}" value="${e.baseSalary || ''}" placeholder="بالجنيه"
           style="width:90px; padding:8px; border-radius:8px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Space Grotesk';">
@@ -6675,6 +6695,22 @@ function renderScheduleList(){
       const val = inp.value.trim() === '' ? null : parseInt(inp.value.trim());
       try{ await updateDoc(doc(db,'sales_employees', inp.dataset.id), { minWeeklyPoints: val }); }
       catch(err){ console.error('تعذر حفظ الحد الأدنى للنقط', err); }
+    });
+  });
+  wrap.querySelectorAll('input[data-act="shifthours"]').forEach(inp=>{
+    inp.addEventListener('change', async ()=>{
+      const raw = inp.value.trim(); const v = raw === '' ? null : Number(raw);
+      if(v !== null && !(v >= 4 && v <= 14)){ alert('ساعات الشيفت من 4 لـ 14 (أو سيبها فاضية = 8 ساعات)'); inp.value = ''; return; }
+      try{ await updateDoc(doc(db,'sales_employees', inp.dataset.id), { shiftHours: (v === null || v === 8) ? null : v }); }
+      catch(err){ console.error('تعذر حفظ ساعات الشيفت', err); }
+    });
+  });
+  wrap.querySelectorAll('input[data-act="ptrate"]').forEach(inp=>{
+    inp.addEventListener('change', async ()=>{
+      const raw = inp.value.trim(); const v = raw === '' ? null : Number(raw);
+      if(v !== null && !(v >= 0)){ alert('سعر النقطة رقم (أو سيبه فاضي = زي الفرع)'); inp.value = ''; return; }
+      try{ await updateDoc(doc(db,'sales_employees', inp.dataset.id), { commissionPerPoint: v }); }
+      catch(err){ console.error('تعذر حفظ سعر النقطة', err); }
     });
   });
   wrap.querySelectorAll('input[data-act="salary"]').forEach(inp=>{
@@ -7565,7 +7601,7 @@ function commissionDueFor(emp, monthKey){
   const ptsDue = Math.max(0, Math.round((ptsTotal - ptsPaid) * 100)/100);
   const branchCfg = (typeof allSettingsByBranch!=='undefined' && allSettingsByBranch)
     ? allSettingsByBranch[String(emp.branch||'').trim()] : null;
-  const pointRate = branchCfg && Object.prototype.hasOwnProperty.call(branchCfg,'commissionPerPoint')
+  const pointRate = (typeof empPointRate === 'function' && empPointRate(emp) !== null) ? empPointRate(emp) : branchCfg && Object.prototype.hasOwnProperty.call(branchCfg,'commissionPerPoint')
     ? (Number(branchCfg.commissionPerPoint)||0)
     : ((typeof allSettingsByBranch==='undefined' || String(emp.branch||'').trim()===String((typeof window!=='undefined'&&window.currentBranch)||'').trim()) ? (Number(commissionPerPoint)||0) : 0);
   const ptsDueAmt = Math.round(ptsDue * pointRate * 100)/100;
@@ -7592,7 +7628,11 @@ function commissionDueFor(emp, monthKey){
            totalPaid: Math.round((ptsPaidAmt + refPaidAmt + tgtPaidAmt) * 100)/100 };
 }
 window.commissionDueFor = commissionDueFor;
+/* 💰 v660: سعر نقطة خاص لموظف (emp.commissionPerPoint، مثلًا 2.5) بيغلب سعر الفرع. فاضي = سعر الفرع. */
+function empPointRate(emp){ const v = emp && emp.commissionPerPoint; return (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) || Number(v) < 0) ? null : Number(v); }
+window.empPointRate = empPointRate;
 function commissionRateForEmployee(emp){
+  if(typeof empPointRate === 'function' && empPointRate(emp) !== null) return empPointRate(emp);
   const cfg=(allSettingsByBranch||{})[String(emp&&emp.branch||'').trim()];
   return cfg && Object.prototype.hasOwnProperty.call(cfg,'commissionPerPoint')
     ? (Number(cfg.commissionPerPoint)||0)
@@ -11078,7 +11118,8 @@ async function ownerCloseShift(shiftId){
     alert('كده الشيفت بقى ' + Math.floor(totalMin/60) + ' ساعة — أكتر من المعقول.\nراجع الوقت اللي كتبته.');
     return;
   }
-  const overtimeMinutes = Math.max(0, totalMin - (8*60 + 15));
+  const _std = (typeof empStdShiftMin === 'function') ? empStdShiftMin(emp) : (8*60 + 15);
+  const overtimeMinutes = Math.max(0, totalMin - _std);
 
   if(!confirm((emp.name || sh.employeeName || '') + '\n\n'
     + 'دخلت ' + fmt(inD) + ' · مشيت ' + t + '\n'
@@ -11089,7 +11130,7 @@ async function ownerCloseShift(shiftId){
   try{
     await window.fbUpdateDoc(window.fbDoc(window.db,'sales_shifts', shiftId), {
       clockOutTs: out.getTime(), shiftMinutes: totalMin,
-      overtimeMinutes,
+      overtimeMinutes, stdShiftMin: _std,
       // 🕐 هو اللي حدد الوقت، فالأوفرتايم معتمد بقراره
       otRequiresApproval: true, overtimeApprovedMin: overtimeMinutes,
       overtimeDecision: overtimeMinutes > 0 ? 'approved' : 'none',
