@@ -13,10 +13,12 @@ assert.equal(x.needsReview,false,'60m normal overtime auto');
 assert.equal(S.window.autoApprovedOvertimeMinutes(mk(555,60)),60,'normal pending is payable automatically');
 assert.deepEqual(S.window.pendingOvertimeShifts([mk(555,60)]).map(x=>x.id||'normal'),[],'normal does not bother owner');
 
+// v659 قرار المالك: قفلته بنفسها = يتعتمد مهما كان طوله (الحماية: >14س = نسيان)
 x=S.window.overtimeReviewInfo(mk(735,240));
-assert.equal(x.needsReview,true,'4h overtime needs review');
-assert.equal(x.reason,'too_much_overtime');
-assert.equal(S.window.autoApprovedOvertimeMinutes(mk(735,240)),0,'suspicious pending not paid');
+assert.equal(x.needsReview,false,'4h self-closed overtime auto (v659)');
+assert.equal(S.window.autoApprovedOvertimeMinutes(mk(735,240)),240,'self-closed long overtime is paid');
+assert.deepEqual(S.window.pendingOvertimeShifts([mk(735,240)]),[],'self-closed long overtime does not bother owner');
+assert.equal(S.window.autoApprovedOvertimeMinutes(mk(735,240,{overtimeDecision:'rejected'})),0,'negative: owner rejection still wins');
 
 x=S.window.overtimeReviewInfo(mk(555,120));
 assert.equal(x.needsReview,true,'mismatched overtime needs review');

@@ -1528,8 +1528,8 @@ function forgottenShifts(shifts, cfg, nowTs){
 
 /* ⏱️ v492 — الأوفرتايم المنطقي يتعتمد تلقائيًا، والمشبوه بس يروح للمالك.
    - الحساب المرجعي = مدة الشيفت - 8س15د.
-   - لحد ساعتين إضافي عادي يتعتمد تلقائيًا لو الحساب مطابق ومفيش نسيان.
-   - نسيان انصراف / قفل 1ص تلقائي / رقم غير منطقي / أكتر من ساعتين = مراجعة. */
+   - v659: أي أوفرتايم الموظفة قفلته بنفسها يتعتمد تلقائيًا لو الحساب مطابق ومفيش نسيان (من غير حد ساعتين).
+   - نسيان انصراف / قفل 1ص تلقائي / رقم غير منطقي = مراجعة. */
 function overtimeReviewInfo(s, cfg){
   cfg = cfg || (typeof window !== 'undefined' && window.timeCfg) || timeCfgDefaults;
   if(!s) return { needsReview:false, reason:'none', expected:0, asked:0 };
@@ -1543,9 +1543,8 @@ function overtimeReviewInfo(s, cfg){
   const expected = Math.max(0, dur - (8*60+15));
   const asked = Number(s.overtimeMinutes)||0;
   if(Math.abs(expected-asked) > 2) return { needsReview:true, reason:'calc_mismatch', expected, asked };
-  const autoMax = Number(cfg.autoOvertimeMaxMin);
-  const maxMin = Number.isFinite(autoMax) && autoMax >= 0 ? autoMax : 120;
-  if(asked > maxMin) return { needsReview:true, reason:'too_much_overtime', expected, asked };
+  /* ✅ v659 قرار المالك 06-11: الموظفة اللي سجّلت انصرافها بنفسها = الأوفرتايم كله بيتعتمد لوحده، من غير حد.
+     الحماية من النسيان فاضلة: شيفت أطول من maxShiftHours (14 س) بيتسجّل نسيان وبيتقفل على ميعاده. */
   return { needsReview:false, reason:'normal', expected, asked };
 }
 function autoApprovedOvertimeMinutes(s, cfg){
