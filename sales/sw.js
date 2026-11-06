@@ -1,4 +1,4 @@
-const CACHE_NAME = 'store-apps-shell-v658';
+const CACHE_NAME = 'store-apps-shell-v659';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

@@ -1533,6 +1533,9 @@ function forgottenShifts(shifts, cfg, nowTs){
 function overtimeReviewInfo(s, cfg){
   cfg = cfg || (typeof window !== 'undefined' && window.timeCfg) || timeCfgDefaults;
   if(!s) return { needsReview:false, reason:'none', expected:0, asked:0 };
+  /* 🏦 v658: الشيفت المنسي اللي السيستم قفله على ميعاد نهايته (أو آخر فاتورة + 15 د) = **اتحسم** —
+     أوفرتايمه صفر والرصيد بيحسبه نسيان. مبيحتاجش مراجعة المالك. */
+  if(s.bankAutoEnd) return { needsReview:false, reason:'bank_fixed', expected:0, asked:0 };
   if(s.needsClockOutReview || s.autoClosedAt1) return { needsReview:true, reason:'auto_closed', expected:0, asked:Number(s.overtimeMinutes)||0 };
   if(s.forgotClockOut) return { needsReview:true, reason:'forgot_clockout', expected:0, asked:Number(s.overtimeMinutes)||0 };
   if(!Number(s.clockOutTs)) return { needsReview:true, reason:'open_shift', expected:0, asked:Number(s.overtimeMinutes)||0 };
@@ -8448,24 +8451,32 @@ window.bankTargetsReportHtml = function(){
 /* 🧹 الشيفت المنسي: يتقفل على ميعاد نهاية شيفته (أو آخر فاتورة الموظف نفسه + 15 د لو سهر) —
    بيشتغل على أي جهاز بعد ما الشيفتات تتحمّل، مرة لكل شيفت. مفيش مراجعة يدوية. */
 const _bankFixed = new Set();
-async function bankFinalizeForgotten(){
-  if(!(typeof _bankOn==='function'?_bankOn:()=>false)()) return;
+/* ⚡ v658: opt.force + opt.ids = زرار المالك «اقفل المنسيين كلهم» — نفس القاعدة بالظبط على الشيفتات اللي في اللوحة. */
+async function bankFinalizeForgotten(opt){
+  opt = opt || {};
+  const out = { done:0, failed:0 };
+  if(!opt.force && !(typeof _bankOn==='function'?_bankOn:()=>false)()) return out;
   const cfg = _timeCfgNow(); const now = Date.now();
-  const list = (allShifts||[]).filter(s=> s && s.employeeId && !s.voided && !_bankFixed.has(s.id) && !s.bankAutoEnd
-    && (TimeBank.isForgottenOpen(s, now, cfg) || (s.clockOutTs && s.needsClockOutReview && s.autoClosedAt1)));
+  const ids = opt.ids ? new Set(opt.ids) : null;
+  const list = (allShifts||[]).filter(s=> s && s.employeeId && !s.voided && !s.bankAutoEnd
+    && (ids ? ids.has(s.id) : (!_bankFixed.has(s.id)
+      && (TimeBank.isForgottenOpen(s, now, cfg) || (s.clockOutTs && s.needsClockOutReview && s.autoClosedAt1)))));
   for(const s of list){
     _bankFixed.add(s.id);
     try{
       const emp = (window.allEmployees||window.employees||[]).find(e=> e.id===s.employeeId) || {};
       const endTs = expectedShiftEndTs(s, _bankShiftEmp(s, emp), complianceCfg);
       const lastSale = bankLastSaleTs(s.employeeId, s.clockInTs, s.clockInTs + TimeBank.cfgOf(cfg).bankMaxShiftMin*60000);
-      const fix = TimeBank.forgottenFix(s, endTs, lastSale, cfg); if(!fix) continue;
+      const fix = TimeBank.forgottenFix(s, endTs, lastSale, cfg); if(!fix){ out.failed++; continue; }
       const patch = { clockOutTs: fix.clockOutTs, shiftMinutes: fix.shiftMinutes, overtimeMinutes: 0, overtimeApprovedMin: 0, overtimeDecision: 'none',
-        earlyMin: 0, earlyHours: 0, forgotClockOut: true, needsClockOutReview: false, bankAutoEnd: true, bankAutoReason: fix.reason, bankAutoAt: now };
+        earlyMin: 0, earlyHours: 0, forgotClockOut: true, needsClockOutReview: false, bankAutoEnd: true, bankAutoReason: fix.reason, bankAutoAt: now,
+        ...(opt.force ? { bankAutoBy: 'owner_bulk' } : {}) };
       await updateDoc(doc(db, 'sales_shifts', s.id), patch);
       Object.assign(s, patch);
-    }catch(e){ console.warn('bank fix', s.id, e && e.code); }
+      out.done++;
+    }catch(e){ out.failed++; console.warn('bank fix', s.id, e && e.code); }
   }
+  return out;
 }
 window.bankFinalizeForgotten = bankFinalizeForgotten;
 
@@ -10733,6 +10744,7 @@ function renderOvertimeApprovals(){
   const needTime = forgottenShifts(window.allShifts || [], cfg0)
     .concat((window.allShifts || []).filter(sh=> sh && (sh.forgotClockOut || sh.needsClockOutReview || sh.autoClosedAt1)))
     .filter((sh, i, arr)=> arr.findIndex(x=> x.id === sh.id) === i)
+    .filter(sh=> sh && !sh.voided && !sh.bankAutoEnd)   // 🏦 v658: اللي اتقفل تلقائي على ميعاده اتحسم — مش للمراجعة
     .filter(sh=> !pend.some(p=> p.id === sh.id));
   const list = needTime.concat(pend).sort((a,b)=> (b.clockInTs||0) - (a.clockInTs||0));
   if(!list.length){
@@ -10741,7 +10753,9 @@ function renderOvertimeApprovals(){
   }
   const cfg = cfg0;
   const maxMin = (Number(cfg.maxShiftHours) || 14) * 60;
-  host.innerHTML = list.map(s=>{
+  const _bulkN = needTime.length;
+  const _bulk = _bulkN > 1 ? `<button id="otBulkClose" style="width:100%; padding:11px; margin-bottom:10px; border-radius:10px; border:0; background:var(--gold); color:#111; font-family:'Cairo'; font-weight:900; font-size:14px; cursor:pointer;">⚡ اقفل الـ${_bulkN} شيفت المنسيين تلقائي (ميعاد نهاية الشيفت أو آخر فاتورة + 15 د)</button>` : '';
+  host.innerHTML = _bulk + list.map(s=>{
     const mins = Number(s.overtimeMinutes)||0;
     // 🔴 لسه مفتوح؟ المدة بتتحسب لحد **دلوقتي**، مش من صفر التاريخ.
     //    (0 − طابع الدخول) كان بيطلّع "-496165 ساعة" في اللوحة.
@@ -10770,6 +10784,14 @@ function renderOvertimeApprovals(){
     </div>`;
   }).join('');
 
+  const _bb = host.querySelector('#otBulkClose');
+  if(_bb) _bb.addEventListener('click', async ()=>{
+    if(!confirm('هيتقفل ' + _bulkN + ' شيفت منسي على ميعاد نهاية الشيفت (أو آخر فاتورة للموظف + 15 دقيقة لو سهر).\nمن غير أوفرتايم، وبيتحسب «نسيان انصراف».\n\nتكمّل؟')) return;
+    _bb.disabled = true; _bb.textContent = '⏳ بيقفل…';
+    const r = await bankFinalizeForgotten({ force:true, ids: needTime.map(x=> x.id) });
+    alert('✅ اتقفل ' + r.done + ' شيفت' + (r.failed ? ' · ' + r.failed + ' ماتقفلش (اقفلهم واحد واحد)' : ''));
+    try{ renderOvertimeApprovals(); }catch(e){}
+  });
   host.querySelectorAll('[data-ot-time]').forEach(b=>
     b.addEventListener('click', ()=> ownerCloseShift(b.dataset.otTime)));
   host.querySelectorAll('[data-ot-full]').forEach(b=>
