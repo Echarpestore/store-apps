@@ -93,13 +93,61 @@
   });
   $("logout").addEventListener("click", function () { auth.signOut(); });
 
-  /* ---------------- الأنواع ---------------- */
+  /* ---------------- 🗂️ الأقسام (صاحبة المحل بتحددها) ----------------
+     بتتحفظ مع القطع في نفس المستند (cats). القسم الجديد بياخد id عشوائي
+     حروف بس، والاسم بالعربي والإنجليزي ووصف القماش بيتعدّلوا وقت ما تحبي. */
+  var cats = [];
   function lineOptions(sel) {
-    return AC.LINES.filter(function (l) { return l.id !== "all"; }).map(function (l) {
-      return '<option value="' + l.id + '"' + (l.id === sel ? " selected" : "") + ">" + esc(l.ar) + "</option>";
-    }).join("");
+    var list = cats.slice();
+    if (sel && !list.some(function (c) { return c.id === sel; }) && sel !== "__new") {
+      var b = AC.catOf(sel); list.push({ id: sel, ar: b ? b.ar : sel });            // قسم قديم مش في القايمة
+    }
+    return list.map(function (l) {
+      return '<option value="' + esc(l.id) + '"' + (l.id === sel ? " selected" : "") + ">" + esc(l.ar) + "</option>";
+    }).join("") + '<option value="__new">➕ قسم جديد…</option>';
   }
-  $("defLine").innerHTML = lineOptions("crepe");
+  function addCat(name) {
+    var ar = String(name == null ? prompt("اسم القسم الجديد (مثلاً: طرح سادة)") || "" : name).trim();
+    if (!ar) return "";
+    var c = { id: AC.newCatId(), ar: ar.slice(0, 30), en: ar.slice(0, 30), desc: "", isdal: false };
+    cats.push(c); AC.useCats(cats); markDirty();
+    renderCats(); renderList(); renderReview(); syncDefLine(c.id);
+    toast("اتضاف القسم — اكتبي اسمه بالإنجليزي ووصف القماش تحت «الأقسام»");
+    return c.id;
+  }
+  function syncDefLine(sel) { $("defLine").innerHTML = lineOptions(sel || $("defLine").value || (cats[0] && cats[0].id)); }
+  $("defLine").addEventListener("change", function () {
+    if (this.value === "__new") { var id = addCat(); syncDefLine(id || (cats[0] && cats[0].id)); }
+  });
+  $("catAdd").addEventListener("click", function () { addCat(); });
+  function nounLine(l) { var c = AC.catOf(l); return c && c.isdal ? "isdal" : l; }
+  function usedBy(id) { return items.concat(pending).filter(function (it) { return it.line === id; }).length; }
+  function renderCats() {
+    var box = $("cats"); box.innerHTML = "";
+    if (!cats.length) box.innerHTML = '<p class="muted">لسه مفيش أقسام — دوسي «قسم جديد».</p>';
+    cats.forEach(function (c, i) {
+      var n = usedBy(c.id);
+      var r = el("div", "cat-row",
+        '<input type="text" data-k="ar" placeholder="الاسم بالعربي" value="' + esc(c.ar) + '">' +
+        '<input type="text" data-k="en" dir="ltr" placeholder="English name" value="' + esc(c.en) + '">' +
+        '<input type="text" class="full" data-k="desc" placeholder="وصف القماش للمنسّقة (اختياري) — مثلاً: لينن خفيف بكنار، للخروج والصيف" value="' + esc(c.desc || "") + '">' +
+        '<div class="bar2"><label><input type="checkbox" data-k="isdal"' + (c.isdal ? " checked" : "") + '> ده قسم إسدالات</label>' +
+          '<span class="sp"></span><span>' + n + ' قطعة</span><button type="button">حذف القسم</button></div>');
+      r.querySelectorAll("[data-k]").forEach(function (inp) {
+        inp.addEventListener(inp.type === "checkbox" ? "change" : "input", function () {
+          c[inp.dataset.k] = inp.type === "checkbox" ? inp.checked : inp.value;
+          AC.useCats(cats); markDirty();
+          if (inp.dataset.k === "ar") { renderList(); renderReview(); syncDefLine(); }
+        });
+      });
+      r.querySelector("button").addEventListener("click", function () {
+        if (usedBy(c.id)) { toast("فيه " + usedBy(c.id) + " قطعة في القسم ده — انقليهم لقسم تاني الأول"); return; }
+        if (!confirm("حذف قسم «" + c.ar + "»؟")) return;
+        cats.splice(i, 1); AC.useCats(cats); markDirty(); renderCats(); syncDefLine();
+      });
+      box.appendChild(r);
+    });
+  }
 
   /* ---------------- التحميل ---------------- */
   function loadAll() {
@@ -120,6 +168,9 @@
         }).concat(items);
         $("siteNote").classList.remove("hidden");
       }
+      // 🗂️ الأقسام: المحفوظة، أو (أول مرة) الأقسام اللي القطع فيها فعلًا بس
+      cats = AC.catsFrom(data, items.map(function (it) { return it.line; }));
+      AC.useCats(cats); renderCats(); syncDefLine(cats[0] && cats[0].id);
       renderList();
       items.forEach(function (it) {
         if (it.fromSite) return;
@@ -164,7 +215,12 @@
     c.querySelectorAll("[data-f]").forEach(function (inp) {
       inp.addEventListener(inp.type === "checkbox" ? "change" : "input", function () {
         var f = inp.dataset.f;
+        if (f === "line" && inp.value === "__new") {            // ➕ قسم جديد من جوّه القطعة
+          var nid = addCat(); if (nid) { it.line = nid; renderList(); renderReview(); renderCats(); } else inp.value = it.line;
+          return;
+        }
         it[f] = inp.type === "checkbox" ? inp.checked : (f === "price" ? Number(inp.value) || 0 : inp.value);
+        if (f === "line") renderCats();
         if (f === "active") c.classList.toggle("off", !inp.checked);
         if (!isNew) markDirty();
       });
@@ -218,7 +274,7 @@
   function splitExtra(group, k) {
     var x = group.extras.splice(k, 1)[0];
     pending.splice(pending.indexOf(group) + 1, 0, {
-      id: AD.newId(), name: AD.defaultName($("defLine").value, x.color), price: Number($("defPrice").value) || 0,
+      id: AD.newId(), name: AD.defaultName(nounLine($("defLine").value), x.color), price: Number($("defPrice").value) || 0,
       line: group.line, family: group.family || "", barcode: "", thumb: x.thumb, full: x.full, color: x.color, extras: []
     });
     renderReview();
@@ -284,7 +340,7 @@
     var line = $("defLine").value, price = Number($("defPrice").value) || 0, family = $("defFamily").value.trim();
     AD.groupSimilar(shots).forEach(function (g) {
       var main = shots[g[0]];
-      pending.push({ id: AD.newId(), name: AD.defaultName(line, main.color), price: price, line: line, barcode: "", family: family,
+      pending.push({ id: AD.newId(), name: AD.defaultName(nounLine(line), main.color), price: price, line: line, barcode: "", family: family,
         thumb: main.thumb, full: main.full, color: main.color,
         extras: g.slice(1).map(function (k) { return shots[k]; }) });
     });
@@ -366,7 +422,7 @@
       clean.forEach(function (it) { if (it.family && it.familyEn && !famEn[it.family]) famEn[it.family] = it.familyEn; });
       clean.forEach(function (it) { if (it.family && !it.familyEn && famEn[it.family]) it.familyEn = famEn[it.family]; });
       // houseSeen: منتجات الموقع الثابتة دي كلها اتنقلت (أو اتمسحت) — متظهرش تاني
-      return col.doc(DOC).set({ items: clean, houseSeen: AC.HOUSE.map(function (h) { return h[0]; }),
+      return col.doc(DOC).set({ items: clean, cats: AC.cleanCats(cats), houseSeen: AC.HOUSE.map(function (h) { return h[0]; }),
         updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
     }).then(function () {
       // صور القطع المحذوفة بتتفضّى (المسح نفسه ممنوع في القواعد)
@@ -628,7 +684,8 @@
     var imgs = withImgs ? pending.slice(0, 12).map(function (p) { return { id: p.id, image: p.thumb }; }) : [];
     if (!$("s_eyebrow").value) loadSite();
     if (!$("k_metaPixelId").value && !$("k_ga4Id").value) loadMktFields();
-    callable("atelierAdminAssistant")({ message: text, items: list, images: imgs, site: siteNow(), mkt: mktNow(), history: asstHist })
+    callable("atelierAdminAssistant")({ message: text, items: list, images: imgs, site: siteNow(), mkt: mktNow(), history: asstHist,
+      cats: cats.map(function (c) { return { id: c.id, ar: c.ar, en: c.en }; }) })
       .then(function (r) {
         var d = r.data || {}, acts = d.actions || [];
         asstHist.push({ role: "user", text: text || "سمّي الصور الجديدة" }, { role: "model", text: d.reply || "" });

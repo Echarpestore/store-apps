@@ -53,9 +53,48 @@
     { id: "isdal",  ar: "الإسدال",       en: "Prayer Dresses" },
     { id: "other",  ar: "قطع أخرى",      en: "More Pieces" }
   ];
+  /* 🗂️ الأقسام — صاحبة المحل هي اللي بتحددها من صفحة الإدارة (doc.cats).
+     القايمة اللي فوق دي أسماء احتياطية بس لقطع قديمة. LINES بتتملا من
+     الأقسام بـuseCats (نفس المصفوفة — اللي ماسك مرجع ليها بيشوف التحديث). */
+  var BUILTIN_LINES = LINES.slice(1);
+  function builtinLine(id) { for (var i = 0; i < BUILTIN_LINES.length; i++) if (BUILTIN_LINES[i].id === id) return BUILTIN_LINES[i]; return null; }
+  function cleanCats(list) {
+    var seen = {}, out = [];
+    (Array.isArray(list) ? list : []).forEach(function (c) {
+      var id = String(c && c.id || "").replace(/[^a-z]/g, "").slice(0, 12);
+      var ar = String(c && c.ar || "").replace(/[<>"]/g, "").trim().slice(0, 30);
+      if (!id || id === "all" || !ar || seen[id] || out.length >= 30) return;
+      seen[id] = 1;
+      out.push({ id: id, ar: ar, en: String(c.en || "").replace(/[<>"]/g, "").trim().slice(0, 30) || ar,
+        desc: String(c.desc || "").replace(/[<>"]/g, "").trim().slice(0, 160), isdal: c.isdal === true });
+    });
+    return out;
+  }
+  /* أقسام المستند، ولو لسه مفيش (أول مرة) بتتعمل من الأقسام اللي القطع فعلًا فيها بس */
+  function catsFrom(doc, extraLines) {
+    if (doc && Array.isArray(doc.cats) && doc.cats.length) return cleanCats(doc.cats);
+    var used = [];
+    ((doc && doc.items) || []).forEach(function (it) { if (it && it.line && used.indexOf(it.line) < 0) used.push(String(it.line)); });
+    (extraLines || []).forEach(function (l) { if (l && used.indexOf(l) < 0) used.push(l); });
+    return cleanCats(used.map(function (id) {
+      var b = builtinLine(id) || { id: id, ar: id, en: id };
+      return { id: b.id, ar: b.ar, en: b.en, isdal: id === "isdal" };
+    }));
+  }
+  function useCats(cats) {
+    LINES.length = 1;                                    // «الكل» بس
+    cleanCats(cats).forEach(function (c) { LINES.push(c); });
+    return LINES;
+  }
+  function newCatId() {
+    var a = "abcdefghijklmnopqrstuvwxyz", s = "c";
+    for (var i = 0; i < 6; i++) s += a.charAt(Math.floor(Math.random() * 26));
+    return s;
+  }
+  function catOf(id) { for (var i = 1; i < LINES.length; i++) if (LINES[i].id === id) return LINES[i]; return builtinLine(id); }
   function lineName(id, lang) {
-    for (var i = 0; i < LINES.length; i++) if (LINES[i].id === id) return lang === "en" ? LINES[i].en : LINES[i].ar;
-    return "";
+    var c = catOf(id);
+    return c ? (lang === "en" ? c.en : c.ar) : "";
   }
   function houseCollection(base) {
     var dir = base || "collection/";
@@ -90,7 +129,8 @@
     var items = (doc && Array.isArray(doc.items)) ? doc.items : [];
     return items.filter(function (it) { return it && it.id && it.active !== false; }).map(function (it) {
       var line = String(it.line || "other");
-      var kind = line === "isdal" ? "isdal" : kindOf(it);
+      var cat = catOf(line);
+      var kind = line === "isdal" || (cat && cat.isdal) ? "isdal" : kindOf(it);
       return { id: "at-" + it.id, docId: String(it.id), galleryId: "", barcode: String(it.barcode || ""),
                name: String(it.name || "قطعة").slice(0, 60), price: Number(it.price) || 0,
                // من غير موديل = قطعة لوحدها (مش كل الكريب في كارت واحد)
@@ -399,6 +439,7 @@
     ADMIN_DOC: ADMIN_DOC,
     atelierItemsFrom: atelierItemsFrom,
     lineName: lineName,
+    cleanCats: cleanCats, catsFrom: catsFrom, useCats: useCats, newCatId: newCatId, catOf: catOf, BUILTIN_LINES: BUILTIN_LINES,
     kindOf: kindOf,
     takeBatch: takeBatch,
     ROUND_SIZE: ROUND_SIZE,
