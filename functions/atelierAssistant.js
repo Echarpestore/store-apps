@@ -70,23 +70,32 @@ function cleanHistory(h) {
 }
 
 /* القايمة اللي جاية من الصفحة — بنحتفظ بالحقول المعروفة بس */
-function cleanItems(list) {
+/* 🗂️ الأقسام اللي صاحبة المحل عاملاها (من الصفحة) — id حروف بس */
+function cleanCats(list) {
+  return (Array.isArray(list) ? list : []).slice(0, 30).map((c) => ({
+    id: String(c && c.id || "").replace(/[^a-z]/g, "").slice(0, 12), ar: clean(c && c.ar, 30), en: clean(c && c.en, 30)
+  })).filter((c) => c.id && c.ar);
+}
+function cleanItems(list, lines) {
+  const ok = lines && lines.length ? lines : LINES;
   return (Array.isArray(list) ? list : []).slice(0, 200).map((it) => ({
     id: String(it && it.id || "").replace(/[^\w-]/g, "").slice(0, 60),
     isNew: !!(it && it.isNew),
     name: clean(it.name, 60), nameEn: clean(it.nameEn, 60), colorName: clean(it.colorName, 30), colorEn: clean(it.colorEn, 40),
     family: clean(it.family, 40), familyEn: clean(it.familyEn, 40), price: Math.max(0, Math.round(Number(it.price) || 0)),
-    line: LINES.includes(it.line) ? it.line : "other", active: it.active !== false, barcode: clean(it.barcode, 40)
+    line: ok.includes(it.line) ? it.line : (lines && lines.length ? lines[0] : "other"), active: it.active !== false, barcode: clean(it.barcode, 40)
   })).filter((it) => it.id);
 }
 
-function buildAdminPrompt(items, site, imageIds, mkt) {
+function buildAdminPrompt(items, site, imageIds, mkt, cats) {
   return [
     "You are the in-house assistant of echarpe, an Egyptian hijab store, inside its website admin page.",
     "The owner talks to you in Egyptian Arabic (sometimes English). ALWAYS reply in short, friendly Egyptian Arabic.",
     "You help add and edit products of the try-on website: names, colour names (Arabic + English), prices in EGP, model (family) names, line, visibility, and the website texts.",
     "Products of the same model share the same 'family' (that is how colours of one model are grouped on the site).",
-    "Lines: crepe, plisse, mono, zebre, kinar (Kuwaiti linen with border), chiffon, isdal (prayer dress), other.",
+    (cats && cats.length
+      ? "CATEGORIES (the 'line' field) are defined by the owner — use ONLY these ids: " + JSON.stringify(cats) + ". If she wants a new category, tell her to add it from «الأقسام» in the collection tab."
+      : "Lines: crepe, plisse, mono, zebre, kinar (Kuwaiti linen with border), chiffon, isdal (prayer dress), other."),
     "When the owner asks for a change, return it in 'actions'. Use op 'set' with the item id and ONLY the fields to change; op 'site' for website texts.",
     "Never invent item ids — only use ids from the CURRENT ITEMS list. If something is ambiguous, ask in 'reply' and return no actions.",
     "If photos are attached, they are product photos of NEW items (ids listed below in the same order). Look at each one and suggest colourName (Arabic, the usual Egyptian shop name, e.g. أسود، أوف وايت، بيج، موكا، كحلي، روز، زيتي…), colorEn, and if clear the family and line.",
@@ -133,7 +142,8 @@ const ADMIN_SCHEMA = {
 };
 
 /* التعديلات اللي رجعت من الموديل — بنقبل بس id موجود وحقول معروفة وقيم نضيفة */
-function sanitizeAdminActions(raw, items) {
+function sanitizeAdminActions(raw, items, lines) {
+  const okLines = lines && lines.length ? lines : LINES;
   const ids = new Set(items.map((it) => it.id));
   const out = [];
   (Array.isArray(raw) ? raw : []).slice(0, 120).forEach((a) => {
@@ -146,7 +156,7 @@ function sanitizeAdminActions(raw, items) {
         const v = a.fields[k];
         if (k === "price") { const n = Math.round(Number(v)); if (Number.isFinite(n) && n >= 0 && n <= 100000) f.price = n; }
         else if (k === "active") { if (typeof v === "boolean") f.active = v; }
-        else if (k === "line") { if (LINES.includes(v)) f.line = v; }
+        else if (k === "line") { if (okLines.includes(v)) f.line = v; }
         else if (k === "barcode") { const b = String(v || "").replace(/[^\w-]/g, "").slice(0, 40); f.barcode = b; }
         else f[k] = clean(v, /En$/.test(k) || k === "name" ? 60 : 40);
       });
@@ -176,7 +186,7 @@ function cleanCatalog(list) {
     n: i + 1,
     id: String(p && p.id || "").replace(/[^\w-]/g, "").slice(0, 60),
     model: clean(p.model || p.name, 60), color: clean(p.color, 50), tone: clean(p.tone, 20),
-    fabric: FABRIC[p.line] || FABRIC.other, price: Math.max(0, Math.round(Number(p.price) || 0)),
+    fabric: clean(p.fabric, 160) || FABRIC[p.line] || FABRIC.other, price: Math.max(0, Math.round(Number(p.price) || 0)),
     tried: !!p.tried
   })).filter((p) => p.id && p.model);
 }
@@ -299,7 +309,8 @@ exports.atelierAdminAssistant = onCall(
     const message = clean(data.message, 2000);
     const imgs = productImages(data.images);
     if (!message && !imgs.length) throw new HttpsError("invalid-argument", "اكتبي رسالة");
-    const items = cleanItems(data.items);
+    const cats = cleanCats(data.cats), lineIds = cats.map((c) => c.id);
+    const items = cleanItems(data.items, lineIds);
     const site = {};
     SITE_FIELDS.forEach((k) => { if (data.site && data.site[k]) site[k] = clean(data.site[k], 300); });
     const mkt = {};
@@ -309,11 +320,11 @@ exports.atelierAdminAssistant = onCall(
     try {
       const out = await callGeminiJson({
         apiKey: GEMINI_API_KEY.value(), models: await modelList(db),
-        system: buildAdminPrompt(items, site, imgs.map((i) => i.id), mkt),
+        system: buildAdminPrompt(items, site, imgs.map((i) => i.id), mkt, cats),
         history: cleanHistory(data.history), message: message || "اقترحي أسماء وألوان للصور دي",
         images: imgs, schema: ADMIN_SCHEMA
       });
-      return { reply: clean(out && out.reply, 1200) || "تمام", actions: sanitizeAdminActions(out && out.actions, items) };
+      return { reply: clean(out && out.reply, 1200) || "تمام", actions: sanitizeAdminActions(out && out.actions, items, lineIds) };
     } catch (e) {
       console.error("admin assistant", e && e.message);
       throw new HttpsError("unavailable", "المساعد مش متاح دلوقتي — جرّبي تاني كمان شوية");

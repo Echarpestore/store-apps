@@ -427,3 +427,26 @@ if (O) {
   assert(/await requireAtelierAdmin\(req, db\)/.test(os) && /await requireAtelierAdmin\(req, db\)/.test(as), 'الأوردرات والمساعد بيشيكوا على القايمة');
   assert(/exports\.atelierAdmins = require\("\.\/atelierAdmins"\)\.atelierAdmins/.test(fs.readFileSync(IDX_PATH, 'utf8')), 'atelierAdmins مربوطة في index.js');
 }
+
+// ٢١) 🗂️ الأقسام — صاحبة المحل هي اللي بتحددها
+{
+  const C = require(path.join(ROOT, 'atelier', 'atelier-core.js'));
+  const first = C.catsFrom({ items: [{ line: 'kinar' }, { line: 'chiffon' }, { line: 'kinar' }] });
+  assert(first.map((c) => c.ar).join() === 'الكينار لينن,الشيفون', 'أول مرة: الأقسام اللي القطع فيها بس (من غير الكريب والزيبرا…)');
+  const saved = C.catsFrom({ cats: [{ id: 'cabcdef', ar: 'طرح سادة', en: 'Plain', desc: 'قطن ناعم' }, { id: 'cxyz', ar: 'إسدالات', isdal: true }, { id: 'c"><', ar: 'x' }], items: [{ line: 'kinar' }] });
+  assert(saved.length === 3 && saved[0].id === 'cabcdef' && saved[1].isdal && saved[2].id === 'c', 'المحفوظة بتغلب، والـid حروف بس');
+  C.useCats(saved);
+  assert(C.LINES.map((l) => l.id).join() === 'all,cabcdef,cxyz,c' && C.lineName('cabcdef', 'en') === 'Plain', 'الفلاتر والأسماء من أقسامها');
+  assert(C.lineName('crepe') === 'الكريب', 'قطعة قديمة في قسم اتشال: اسمها لسه ظاهر');
+  assert(C.atelierItemsFrom({ items: [{ id: 'a', line: 'cxyz', name: 'x' }] })[0].kind === 'isdal', 'قسم معلّم «إسدالات» = تجربة إسدال');
+  assert(/^c[a-z]{6}$/.test(C.newCatId()), 'id القسم الجديد');
+  C.useCats(C.catsFrom(null, ['kinar', 'chiffon']));
+  const A3 = loadFn(path.join(ROOT, 'functions', 'atelierAssistant.js'));
+  const its = A3.cleanItems([{ id: 'a1', line: 'cabcdef' }, { id: 'a2', line: 'crepe' }], ['cabcdef', 'kinar']);
+  assert(its[0].line === 'cabcdef' && its[1].line === 'cabcdef', 'المساعد: أقسامها بس');
+  const acts = A3.sanitizeAdminActions([{ op: 'set', id: 'a1', fields: { line: 'kinar' } }, { op: 'set', id: 'a2', fields: { line: 'zebre' } }], its, ['cabcdef', 'kinar']);
+  assert(acts.length === 1 && acts[0].fields.line === 'kinar', 'المساعد ميحطش قطعة في قسم مش موجود');
+  assert(A3.cleanCatalog([{ id: 'p', model: 'm', line: 'cabcdef', fabric: 'قطن ناعم' }])[0].fabric === 'قطن ناعم', 'المنسّقة بتقرا وصف القماش من القسم');
+  const aj = fs.readFileSync(path.join(ROOT, 'atelier', 'admin.js'), 'utf8');
+  assert(/cats: AC\.cleanCats\(cats\)/.test(aj) && /قسم جديد/.test(aj) && !/lineOptions\("crepe"\)/.test(aj), 'صفحة الإدارة: الأقسام بتتحفظ، ومفيش قسم مفروض');
+}

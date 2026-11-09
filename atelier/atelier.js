@@ -192,6 +192,8 @@
   /* ---------------- المنتجات ---------------- */
   function loadProducts() {
     var house = AC.houseCollection("collection/");
+    var houseLines = house.map(function (p) { return p.line; });
+    AC.useCats(AC.catsFrom(null, houseLines));               // لحد ما أقسام صفحة الإدارة توصل
     if (MOCK || !fb) return Promise.resolve(house);
     var db = fb.firestore(), col = db.collection("pos_test_settings");
     return authReady.then(function () {
@@ -202,6 +204,8 @@
     }).then(function (r) {
       var shop = AC.shopItemsFrom(r[0] && r[0].exists ? r[0].data() : null);
       var adminDoc = r[1] && r[1].exists ? r[1].data() : null;
+      // 🗂️ الأقسام اللي صاحبة المحل عاملاها (قبل القطع — النوع إسدال ولا لأ منها)
+      AC.useCats(AC.catsFrom(adminDoc, houseLines));
       var admin = AC.atelierItemsFrom(adminDoc);
       if (!admin.length) return shop.concat(house);
       // قطع دار جديدة اللوحة لسه ما شافتهاش بتظهر برضه (أول الموقع)
@@ -1492,7 +1496,9 @@
     return state.products.filter(function (p) { return p.tryable; }).slice(0, 120).map(function (p) {
       // بالإنجليزي للموديل دايمًا (أدق في الألوان) — اللون العربي مكتوب في colorAr
       var m = modelOf[p.id];
+      var cat = AC.catOf(p.line);
       return { id: p.id, model: (m && m.items.length > 1 ? m.title : displayName(p)), line: p.line,
+        fabric: (cat && cat.desc) || "",
         color: (EN ? colorLabel(p) : (AC.colorToEn(p.colorAr || p.colorName) || colorLabel(p))) || "",
         tone: p.tone || AC.toneFromName(p.colorAr || p.colorName) || "", price: p.price || 0, tried: !!state.looks[p.id] };
     });

@@ -66,6 +66,12 @@
   .linkbox{display:flex; gap:8px; margin-top:8px;} .linkbox input{flex:1; font-size:12px;}
   .checklist{padding-inline-start:18px; display:grid; gap:6px;}
   .err{color:var(--bad); font-size:12px; min-height:1em;}
+  .cats-card{display:grid; gap:10px; margin-bottom:14px;}
+  .cat-row{display:grid; grid-template-columns:1fr 1fr; gap:6px; padding:10px 0; border-bottom:1px solid var(--line);}
+  .cat-row input[type=text]{width:100%; padding:8px 10px; border:1px solid var(--line); background:#fff; font:inherit; font-size:13px;}
+  .cat-row .full{grid-column:1/-1;}
+  .cat-row .bar2{grid-column:1/-1; display:flex; align-items:center; gap:12px; font-size:12px; color:var(--soft);}
+  .cat-row .bar2 .sp{flex:1;} .cat-row .bar2 button{color:var(--bad); font-size:12px;}
   .denied{margin-top:16px; display:grid; gap:8px;}
   .adm-row{display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--line); font-size:13px;}
   .adm-row button{color:var(--bad); font-size:12px;}
@@ -182,9 +188,15 @@
         <input type="file" id="files" accept="image/*" multiple hidden>
         <div class="prog" id="prog"><i id="progBar"></i></div>
       </div>
+      <div class="card cats-card">
+        <b>🗂️ الأقسام</b>
+        <p class="muted">إنتِ اللي بتحددي أقسام المحل. بتظهر للعميلات كفلاتر في الموقع (لو فيه قسمين أو أكتر)، والمنسّقة بتقرا وصف القماش.</p>
+        <div id="cats"></div>
+        <button class="btn ghost" type="button" id="catAdd">➕ قسم جديد</button>
+      </div>
       <div class="card defaults">
         <label>السعر الافتراضي (ج.م)<input type="number" id="defPrice" min="0" step="5" value="350"></label>
-        <label>النوع الافتراضي<select id="defLine"></select></label>
+        <label>القسم الافتراضي<select id="defLine"></select></label>
         <label class="full">الموديل (اختياري)<input type="text" id="defFamily" placeholder="مثلاً: كريب كوري — الصور دي كلها ألوان لنفس الموديل"></label>
         <p class="muted full">بيتحطّوا على الصور الجديدة، وتقدري تعدّلي كل قطعة لوحدها.
           القطع اللي ليها <b>نفس الموديل</b> بتتجرّب مع بعض: العميلة تضغط على لون، تشوف الـ٦ ألوان عليها.</p>
@@ -317,10 +329,10 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
-<script src="../tryon/photo-core.js?v=2611030300"></script>
-<script src="./atelier-core.js?v=2611030300"></script>
-<script src="./admin-core.js?v=2611030300"></script>
-<script src="./marketing.js?v=2611030300"></script>
-<script src="./admin.js?v=2611030300"></script>
+<script src="../tryon/photo-core.js?v=2611090100"></script>
+<script src="./atelier-core.js?v=2611090100"></script>
+<script src="./admin-core.js?v=2611090100"></script>
+<script src="./marketing.js?v=2611090100"></script>
+<script src="./admin.js?v=2611090100"></script>
 </body>
 </html>
