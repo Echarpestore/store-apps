@@ -2822,6 +2822,24 @@ window.capWatchAlive = capWatchAlive;
 
 // ⭐ قيمة نقطة البياعة للفاتورة الواحدة
 // بترجّع صفر لو الفاتورة مش مستوفية الشروط، وإلا 1 + كسور القطع الزيادة.
+/* 🛡️ v774 — ثغرة «4 قطع + نقطة» (بلاغ المالك 10-11):
+   عدد القطع اللي بيدّي نقطة البياعة كان `cart.reduce(qty)` — يعني بيعد **أي سطر** في السلة:
+   سطر استبدال نقط العميلة (اللي بيتضاف لما تمسح كارتها وعندها طلب استبدال) · المكافأة ·
+   خصم الرصيد · كارت الهدية · والقطع المرتجعة في التبديل. فـ 4 قطع + مسح كارت العميلة = 5 = نقطة.
+   دلوقتي: القطع الحقيقية بس (منتجات مباعة) ناقص المرتجع في نفس الفاتورة. */
+function staffPieceCount(lines){
+  let sold = 0, ret = 0;
+  (lines || []).forEach(function(c){
+    if(!c || c.isRedemption || c.isRewardDiscount || c.isGiftCard || c.isCreditSpend) return;
+    const q = Math.max(0, Math.floor(Number(c.qty) || 0));
+    if(c.isReturn){ ret += q; return; }
+    if(String(c.id || '').startsWith('__')) return;          // أي سطر محجوز مش منتج
+    if(!(Number(c.price) > 0)) return;                        // قطعة ببلاش/سالبة مش بيع
+    sold += q;
+  });
+  return Math.max(0, sold - ret);
+}
+if(typeof window !== 'undefined') window.staffPieceCount = staffPieceCount;
 function calcStaffPoint(itemCount, total, minItems, minInvoice, enabled, isRefund){
   if(enabled === false) return 0;
   if(isRefund) return 0;                                   // المرتجع مبياخدش نقط
@@ -4793,7 +4811,8 @@ async function _doConfirmPayment(){
   //   • وكل قطعة زيادة = كسر من نقطة (1 ÷ الحد)
   // كان قبل كده: نقطة واحدة مهما زادت القطع — فالموظفة اللي بتبيع 20 قطعة
   // بتاخد زي اللي بتبيع 5، والزيادة كلها بتضيع.
-  const staffBaseValue = calcStaffPoint(itemCount, total, _spMinItems, _spMinInvoice,
+  const staffPieces = staffPieceCount(cart);   // 🛡️ v774: القطع الحقيقية بس — مش سطور الاستبدال/المكافأة/الرصيد
+  const staffBaseValue = calcStaffPoint(staffPieces, total, _spMinItems, _spMinInvoice,
                                          _spCfg.enabled !== false, isRefundInvoice);
   /* ⭐ نقط الحملة — **فوق** النقطة العادية مش بدلها (شوف calcStaffBonus). */
   const staffBonusValue = calcStaffBonus(cart, staffBoosts, Date.now(), isRefundInvoice);
@@ -5245,7 +5264,7 @@ window.returnPointsDeduction = returnPointsDeduction;
       batch.set(pointsRef, {
         employeeId: sellerEmployeeId, employeeName: sellerEmployeeName,
         invoiceNumber: String(invoiceNo), branch: currentBranch,
-        itemCount, invoiceTotal: total, auto: true, ts: Date.now(),
+        itemCount: staffPieces, cartLines: itemCount, invoiceTotal: total, auto: true, ts: Date.now(),
         value: staffPointValue,            // ⭐ الوزن الحقيقي للنقطة (كسور للقطع الزيادة)
         base: staffBaseValue, bonus: staffBonusValue   // ⭐ التفصيل — الحملة متميّزة
       });
