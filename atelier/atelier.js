@@ -466,6 +466,7 @@
 
   function renderGrid() {
     var g = $("grid"); g.innerHTML = "";
+    g.classList.toggle("few", models.length <= 3);          // موديلات قليلة = كروت كبيرة
     if (!models.length) { g.innerHTML = '<div class="empty">' + tr("تُعَدّ المجموعة الجديدة… قريباً.", "A new collection is on its way… soon.") + '</div>'; return; }
     io = "IntersectionObserver" in window ? new IntersectionObserver(onSeen, { rootMargin: "0px 0px -8% 0px" }) : null;
     models.forEach(function (m, i) {
@@ -1304,7 +1305,7 @@
 
   /* ---------- المشاركة: صورة ستوري بلوجو echarpe ---------- */
   var AR_NUM = EN ? ["1", "2", "3", "4"] : ["١", "٢", "٣", "٤"];
-  var F_SERIF = EN ? '"Cormorant Garamond", serif' : '"Amiri", serif';
+  var F_SERIF = EN ? '"Bodoni Moda", serif' : '"Aref Ruqaa", serif';
   var F_SANS = EN ? '"Jost", sans-serif' : '"IBM Plex Sans Arabic", sans-serif';
   function fontsReady() {
     if (!document.fonts || !document.fonts.load) return Promise.resolve();
@@ -1319,7 +1320,7 @@
   function drawArch(ctx, img, x, y, w, h) {
     ctx.save();
     ctx.shadowColor = "rgba(28,25,22,.28)"; ctx.shadowBlur = 50; ctx.shadowOffsetY = 26;
-    archPath(x, y, w, h, ctx); ctx.fillStyle = "#e4dbcf"; ctx.fill();
+    archPath(x, y, w, h, ctx); ctx.fillStyle = "#ecd5d1"; ctx.fill();
     ctx.restore();
     ctx.save(); archPath(x, y, w, h, ctx); ctx.clip();
     var s = Math.max(w / img.naturalWidth, h / img.naturalHeight), iw = img.naturalWidth * s, ih = img.naturalHeight * s;
@@ -1338,17 +1339,17 @@
       var logo = res[1], imgs = res.slice(2);
       var c = document.createElement("canvas"); c.width = W; c.height = H;
       var x = c.getContext("2d");
-      var g = x.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#fbf8f3"); g.addColorStop(1, "#ede6dc");
+      var g = x.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#fbf7f4"); g.addColorStop(1, "#f5e4e1");
       x.fillStyle = g; x.fillRect(0, 0, W, H);
       if (logo) { var lw = 280, lh = lw * logo.naturalHeight / logo.naturalWidth; x.drawImage(logo, (W - lw) / 2, 96, lw, lh); }
       if (!poll) {
         drawArch(x, imgs[0], 150, 300, 780, 1060);
-        txt(x, displayName(items[0]), W / 2, 1490, "400 76px " + F_SERIF, "#1c1916");
+        txt(x, displayName(items[0]), W / 2, 1490, "400 76px " + F_SERIF, "#4a1226");
         var ln = colorLabel(items[0]) || AC.lineName(items[0].line, LANG);
-        if (ln) txt(x, ln, W / 2, 1556, "400 34px " + F_SANS, "#8a6f4e");
+        if (ln) txt(x, ln, W / 2, 1556, "400 34px " + F_SANS, "#b92f63");
       } else {
-        txt(x, tr("أي واحدة أختار؟", "Which one should I choose?"), W / 2, 330, (EN ? "400 80px " : "400 92px ") + F_SERIF, "#1c1916");
-        txt(x, tr("ساعدوني 🤍", "Help me 🤍"), W / 2, 400, "400 38px " + F_SANS, "#8a6f4e");
+        txt(x, tr("أي واحدة أختار؟", "Which one should I choose?"), W / 2, 330, (EN ? "400 80px " : "400 92px ") + F_SERIF, "#4a1226");
+        txt(x, tr("ساعدوني 🤍", "Help me 🤍"), W / 2, 400, "400 38px " + F_SANS, "#b92f63");
         // الترتيب من اليمين (١ يمين فوق) — زي القراية بالعربي
         var cw = 390, ch = 520, n = imgs.length;
         var pos = n === 2 ? [[630, 640], [120, 640]] :
@@ -1357,14 +1358,14 @@
         imgs.forEach(function (im, i) {
           var px = pos[i][0], py = pos[i][1];
           drawArch(x, im, px, py, cw, ch);
-          x.beginPath(); x.arc(px + cw / 2, py + ch, 40, 0, Math.PI * 2); x.fillStyle = "#1c1916"; x.fill();
-          txt(x, AR_NUM[i], px + cw / 2, py + ch + 16, "400 46px " + F_SERIF, "#f6f2ec");
+          x.beginPath(); x.arc(px + cw / 2, py + ch, 40, 0, Math.PI * 2); x.fillStyle = "#4a1226"; x.fill();
+          txt(x, AR_NUM[i], px + cw / 2, py + ch + 16, "400 46px " + F_SERIF, "#ffffff");
         });
       }
       x.fillStyle = "rgba(138,111,78,.5)"; x.fillRect(W / 2 - 60, 1672, 120, 2);
-      txt(x, tr("جرّبي المجموعة عليكِ", "Try the collection on you"), W / 2, 1760, "400 54px " + F_SERIF, "#1c1916");
+      txt(x, tr("جرّبي المجموعة عليكِ", "Try the collection on you"), W / 2, 1760, "400 54px " + F_SERIF, "#4a1226");
       x.direction = "ltr";
-      x.font = "400 32px " + F_SANS; x.fillStyle = "#8a6f4e"; x.textAlign = "center";
+      x.font = "400 32px " + F_SANS; x.fillStyle = "#b92f63"; x.textAlign = "center";
       x.fillText("echarpe.store/atelier", W / 2, 1828);
       return c;
     });
@@ -1422,7 +1423,7 @@
       applySite(d);
       if (d.hasBanner) col.doc("atelier_site_banner").get().then(function (b) {
         var u = b.exists ? b.data().img : "";
-        if (AC.isImageDataUrl(u)) document.querySelector(".banner-img img").src = u;
+        if (AC.isImageDataUrl(u)) { document.querySelector(".banner-img img").src = u; document.querySelector(".banner").classList.add("custom"); }
       }).catch(function () { });
     }).catch(function () { mktInit({}); });
   }
@@ -1466,7 +1467,7 @@
     renderHero(); renderFilters(); renderGrid(); syncBagCount(); updateDock();
     var saved = LS ? PC.readFace(LS) : "";
     if (saved) { $("salonImg").src = saved; $("salonArch").classList.add("has"); }
-    updateLd();
+    updateLd(); renderWall();
     // 🔗 لينك قطعة بعينها (?p=<id>) — من إعلان أو مشاركة: بتتفتح على طول
     var m = /[?&]p=([^&#]+)/.exec(location.search), dp = m && state.byId[decodeURIComponent(m[1])];
     if (dp) setTimeout(function () { userPicked = true; setMirror(dp, true); openLook(dp); }, 900);
@@ -1543,6 +1544,25 @@
     }).then(function () { $("stySend").disabled = false; });
   }
   $("styForm").addEventListener("submit", function (e) { e.preventDefault(); var t = $("styText").value; $("styText").value = ""; styAsk(t); });
+
+  /* 🎨 حائط الألوان — ٦ قطع من صور المجموعة (لون من كل موديل بالدور)،
+     اللمس بيفتح القطعة. لو صاحبة المحل رفعت بانر، البانر بيظهر مكانه. */
+  function renderWall() {
+    var box = $("wall"); if (!box) return;
+    var pick = [], round = 0, ms = mirrorModels();
+    while (pick.length < 6 && ms.some(function (m) { return m.items.length > round; })) {
+      ms.forEach(function (m) { var p = m.items[round * 2] || (round ? null : m.items[0]); if (p && pick.length < 6 && pick.indexOf(p) < 0) pick.push(p); });
+      round++;
+    }
+    box.innerHTML = "";
+    pick.forEach(function (p) {
+      var b = el("button", "", '<img alt="" loading="lazy"><span></span>'); b.type = "button";
+      b.querySelector("img").src = p.img; b.querySelector("img").alt = p.name;
+      b.querySelector("span").textContent = colorLabel(p) || displayName(p);
+      b.addEventListener("click", function () { userPicked = true; setMirror(p, true); openLook(p); });
+      box.appendChild(b);
+    });
+  }
 
   /* 🔎 بيانات جوجل بالمنتجات الحيّة (اللي في صفحة الإدارة كمان) */
   function updateLd() {

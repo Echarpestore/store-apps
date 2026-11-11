@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title data-en="echarpe — Try the Collection On You">echarpe — جرّبي المجموعة عليكِ</title>
 <meta name="description" content="echarpe — صورةٌ واحدة، وتظهر كل قطعة من المجموعة عليكِ قبل أن تختاري." data-en="echarpe — One photo, and every piece of the collection appears on you before you choose.">
-<meta name="theme-color" content="#f6f2ec">
+<meta name="theme-color" content="#2a0914">
 <meta property="og:title" content="echarpe — Try the Collection On You">
 <meta property="og:description" content="One photo, and every piece of the collection appears on you before you choose.">
 <meta property="og:image" content="https://www.echarpe.store/atelier/collection/hero-comfort.jpg">
@@ -21,9 +21,10 @@
 <link rel="icon" href="../loyalty/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Sans+Arabic:wght@300;400;500&family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
-<script src="./i18n.js?v=2611090100"></script>
-<link rel="stylesheet" href="atelier.css?v=2611090100">
+<link href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@400;700&family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..700;1,6..96,400..700&family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Jost:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="./i18n.js?v=2611110100"></script>
+<link rel="stylesheet" href="atelier.css?v=2611110100">
+<link rel="stylesheet" href="theme.css?v=2611110100">
 </head>
 <body class="intro-on">
 
@@ -90,8 +91,9 @@
     <p data-en-html="Every fold tells a story, every colour a mood.&lt;br&gt;Choose what feels like you… &lt;em&gt;and see it on you first.&lt;/em&gt;">كل طيّةٍ حكاية، وكل لونٍ مزاج.<br>اختاري ما يشبهكِ… <em>وشاهديه عليكِ أولاً.</em></p>
   </section>
 
-  <section class="banner" aria-hidden="true">
-    <div class="banner-img"><img src="collection/hero-comfort.jpg" alt="" loading="lazy"></div>
+  <section class="banner">
+    <div class="wall" id="wall"></div>
+    <div class="banner-img"><img alt="" loading="lazy"></div>
   </section>
 
   <section class="collection" id="collection">
@@ -263,9 +265,9 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
-<script src="../tryon/photo-core.js?v=2611090100"></script>
-<script src="./atelier-core.js?v=2611090100"></script>
-<script src="./marketing.js?v=2611090100"></script>
+<script src="../tryon/photo-core.js?v=2611110100"></script>
+<script src="./atelier-core.js?v=2611110100"></script>
+<script src="./marketing.js?v=2611110100"></script>
 <script src="./atelier.js?v=2610281772"></script>
 </body>
 </html>

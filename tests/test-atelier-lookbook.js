@@ -450,3 +450,14 @@ if (O) {
   const aj = fs.readFileSync(path.join(ROOT, 'atelier', 'admin.js'), 'utf8');
   assert(/cats: AC\.cleanCats\(cats\)/.test(aj) && /قسم جديد/.test(aj) && !/lineOptions\("crepe"\)/.test(aj), 'صفحة الإدارة: الأقسام بتتحفظ، ومفيش قسم مفروض');
 }
+
+// ٢٢) 🎨 الهوية الجديدة (theme.css) + حائط الألوان
+{
+  const html = fs.readFileSync(path.join(ROOT, 'atelier', 'index.html'), 'utf8');
+  assert(/atelier\.css\?v=[\s\S]*theme\.css\?v=/.test(html), 'theme.css بيتحمّل بعد atelier.css (وبرقم نسخة)');
+  assert(/id="wall"/.test(html) && !/src="collection\/hero-comfort\.jpg"/.test(html), 'حائط الألوان مكان البانر القديم');
+  const th = fs.readFileSync(path.join(ROOT, 'atelier', 'theme.css'), 'utf8');
+  assert(/--garnet:/.test(th) && /Aref Ruqaa/.test(th) && /Bodoni Moda/.test(th) && /\.grid\.few/.test(th), 'ألوان وخطوط الهوية + الكروت الكبيرة');
+  const js = fs.readFileSync(path.join(ROOT, 'atelier', 'atelier.js'), 'utf8');
+  assert(/function renderWall/.test(js) && /classList\.add\("custom"\)/.test(js), 'الحائط من صور المجموعة، وبانر صاحبة المحل بيغلبه');
+}
