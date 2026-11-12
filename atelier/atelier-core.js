@@ -296,17 +296,18 @@
     var free = (products || []).filter(function (p) {
       return p && p.tryable && (p.kind || "hijab") === kind && !(looks && looks[p.id]) && !(busy && busy[p.id]);
     });
-    /* 👗 الموديلات الأول: لون واحد من كل موديل (القطعة اللي اختارتها
-       أولهم)، وبعدين نكمّل بألوان موديلها هي، وبعدين الباقي. */
+    /* 👗 التجربة بقت من جوّه صفحة القطعة بس: القطعة اللي فتحتها + باقي
+       ألوان نفس الموديل (لحد n) — ومفيش قطع من موديلات تانية.
+       من غير focus (مش مستخدمة في الصفحة): لون من كل موديل وبعدين الباقي. */
     var out = [], seenFam = {};
     var take = function (p) { if (out.indexOf(p) < 0 && out.length < n) out.push(p); };
-    if (focus && free.indexOf(focus) >= 0) { take(focus); seenFam[familyOf(focus)] = 1; }
-    free.forEach(function (p) { var f = familyOf(p) || p.id; if (!seenFam[f]) { seenFam[f] = 1; take(p); } });
     if (focus) {
-      var fam = familyOf(focus), line = focus.line;
+      var fam = familyOf(focus);
+      if (free.indexOf(focus) >= 0) take(focus);
       free.forEach(function (p) { if (familyOf(p) === fam) take(p); });
-      free.forEach(function (p) { if (p.line === line) take(p); });
+      return out;
     }
+    free.forEach(function (p) { var f = familyOf(p) || p.id; if (!seenFam[f]) { seenFam[f] = 1; take(p); } });
     free.forEach(take);
     return out;
   }

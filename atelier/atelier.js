@@ -185,8 +185,8 @@
     }).join("");
     p.innerHTML = html;
     var host = document.querySelector(".statement");
-    if (revealIO) { revealIO.observe(host); revealIO.observe(document.querySelector(".banner-img")); }
-    else { host.classList.add("in"); document.querySelector(".banner-img").classList.add("in"); }
+    var rv = [host, document.querySelector(".banner-img"), $("wall"), $("spot"), document.querySelector(".sec-head"), $("privacy")];
+    rv.forEach(function (n) { if (!n) return; if (revealIO) revealIO.observe(n); else n.classList.add("in"); });
   })();
 
   /* ---------------- المنتجات ---------------- */
@@ -590,18 +590,10 @@
   }
   function becomeAlive(face) {
     document.body.classList.add("alive"); state.alive = true;
-    $("heroEyebrow").textContent = tr("إطلالاتكِ", "Your looks");
-    var t = $("heroTitle"); t.classList.remove("in");
-    t.innerHTML = '<span class="ln"><span>' + tr("المجموعة،", "The collection,") + '</span></span><span class="ln"><span><em>' + tr("عليكِ", "on you") + '</em></span></span>';
-    requestAnimationFrame(function () { requestAnimationFrame(function () { t.classList.add("in"); }); });
-    $("heroSub").textContent = tr("المسي أي قطعة لتريها عن قرب.", "Tap any piece to see it up close.");
-    $("ctaUpload").querySelector("span").textContent = tr("شاهدي إطلالاتكِ", "See your looks");
-    $("ctaSalon").querySelector("span").textContent = tr("صورة أخرى", "Use another photo");
     setFace(face);
   }
   function setFace(face) {
     $("dockFace").src = face; document.querySelector("#meDot img").src = face;
-    $("salonImg").src = face; $("salonArch").classList.add("has");
   }
 
   function startWithFace(face) {
@@ -611,7 +603,7 @@
     document.querySelectorAll(".card").forEach(function (c) { c.classList.remove("worn", "weaving", "pickable", "selected", "revealing"); });
     resetMirror();
     if (LS) PC.saveFace(LS, face);
-    var ready = state.alive ? Promise.resolve(setFace(face)) : awaken(face);
+    var ready = Promise.resolve(state.alive ? setFace(face) : becomeAlive(face));   // من غير شاشة تجهيز — التجربة جوّه صفحة القطعة
     var gen = state.gen;
     Promise.all(state.products.map(function (p) {
       // ✨ النسخة الموضّحة الأول، وإلا نسخة الشبكة
@@ -636,6 +628,7 @@
       state.focus = null;
       if (first.length && roundsLeft() > 0) runRound(first);
       syncPickable(); updateDock();
+      if (state.lbOpen) setLb(state.lbOpen);
     });
   }
 
@@ -761,9 +754,9 @@
     if (!lookCount()) return;
     setTimeout(function () {
       var st = roundsRec();
-      if (st.left > 0) toast(tr("جاهزة ✨ اختاري أي قطعة وجرّبيها هي وألوانها", "Ready ✨ Choose any piece and try it in every colour"), 6000);
+      if (st.left > 0) toast(tr("جاهزة ✨ بدّلي الألوان وشوفي كل لون عليكِ", "Ready ✨ Switch colours to see each one on you"), 6000);
       else if (!st.bonus) toast(tr("🎁 أضيفي قطعة لحقيبتكِ واحصلي على تجربة كمان", "🎁 Add a piece to your bag to unlock one more try-on"), 6500);
-      else { toast(tr("اختاري مفضّلتكِ واسألي صديقاتكِ 🤍", "Pick your favourite and ask your friends 🤍"), 6000); $("dockPoll").classList.add("glow"); }
+      else toast(tr("اختاري لونكِ المفضّل 🤍", "Pick your favourite colour 🤍"), 6000);
     }, 900);
   }
 
@@ -944,6 +937,7 @@
     b.querySelector("span").textContent = busy ? tr("نُجهّزها لكِ…", "Preparing it for you…") : (!state.face ? tr("جرّبيها عليكِ", "Try it on") :
       (st.left > 0 ? tr("جرّبيها هي وألوانها", "Try it in every colour") : (!st.bonus ? tr("🎁 أضيفيها للحقيبة = تجربة كمان", "🎁 Add to bag = one more try-on") : tr("نكمّل غداً 🤍", "More tomorrow 🤍"))));
     $("lbHint").style.display = look ? "" : "none";
+    pic.classList.toggle("busy", !!busy);
     $("lbBag").querySelector("span").textContent = inBag(p) ? tr("في حقيبتكِ ✓", "In your bag ✓") : tr("أضيفيها للحقيبة", "Add to bag");
     $("lbShare").style.display = look ? "" : "none";
     syncHearts(p);
@@ -957,7 +951,12 @@
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeLb(); });
   $("lbTry").addEventListener("click", function () {
     var p = state.lbOpen; if (!p) return;
-    if (!state.face) { closeLb(); state.focus = p; pickPhoto(); return; }
+    if (!state.face) {
+      state.focus = p;
+      var savedFace = LS ? PC.readFace(LS) : "";
+      if (savedFace) startWithFace(savedFace); else pickPhoto();
+      return;
+    }
     if (!roundsLeft()) {
       if (!roundsRec().bonus) { addToBag(p, $("lbLook")); setLb(p); }
       return;
@@ -975,13 +974,6 @@
 
   /* ---------------- رفع الصورة ---------------- */
   function pickPhoto() { $("file").value = ""; $("file").click(); }
-  function enter() {
-    if (state.alive) { document.getElementById("collection").scrollIntoView({ behavior: "smooth" }); return; }
-    var saved = LS ? PC.readFace(LS) : "";
-    if (saved) startWithFace(saved); else pickPhoto();
-  }
-  $("ctaUpload").addEventListener("click", enter);
-  $("ctaSalon").addEventListener("click", function () { if (state.alive) pickPhoto(); else enter(); });
   $("meDot").addEventListener("click", pickPhoto);
   /* 🔒 حذف الصورة والإطلالات من الجهاز — الوش + الكاش (localStorage + IndexedDB) */
   $("forgetMe").addEventListener("click", function () {
@@ -992,14 +984,7 @@
     document.body.classList.remove("alive"); state.alive = false;
     document.querySelectorAll(".card").forEach(function (c) { c.classList.remove("worn", "weaving", "pickable", "selected", "revealing"); c.querySelector(".look").removeAttribute("src"); });
     resetMirror();
-    ["salonImg", "dockFace"].forEach(function (id) { $(id).removeAttribute("src"); });
-    $("salonArch").classList.remove("has");
-    $("heroEyebrow").textContent = tr("مجموعة الموسم", "The Season’s Collection");
-    $("heroTitle").innerHTML = '<span class="ln"><span>' + tr("المجموعة كاملة،", "The whole collection,") + '</span></span><span class="ln"><span><em>' + tr("عليكِ أنتِ", "on you") + '</em></span></span>';
-    $("heroTitle").classList.add("in");
-    $("heroSub").textContent = tr("صورةٌ واحدة، وتظهر كل قطعة عليكِ قبل أن تختاري.", "One photo, and every piece appears on you before you choose.");
-    $("ctaUpload").querySelector("span").textContent = tr("جرّبي المجموعة", "Try the collection");
-    $("ctaSalon").querySelector("span").textContent = tr("جرّبي المجموعة", "Try the collection");
+    $("dockFace").removeAttribute("src");
     toast(MSG.forgot);
   });
   $("file").addEventListener("change", function () {
@@ -1305,8 +1290,8 @@
 
   /* ---------- المشاركة: صورة ستوري بلوجو echarpe ---------- */
   var AR_NUM = EN ? ["1", "2", "3", "4"] : ["١", "٢", "٣", "٤"];
-  var F_SERIF = EN ? '"Bodoni Moda", serif' : '"Aref Ruqaa", serif';
-  var F_SANS = EN ? '"Jost", sans-serif' : '"IBM Plex Sans Arabic", sans-serif';
+  var F_SERIF = EN ? '"Instrument Serif", serif' : '"Aref Ruqaa", serif';
+  var F_SANS = EN ? '"Manrope", sans-serif' : '"IBM Plex Sans Arabic", sans-serif';
   function fontsReady() {
     if (!document.fonts || !document.fonts.load) return Promise.resolve();
     return Promise.all([document.fonts.load("400 72px " + F_SERIF), document.fonts.load("400 36px " + F_SANS)])
@@ -1339,16 +1324,16 @@
       var logo = res[1], imgs = res.slice(2);
       var c = document.createElement("canvas"); c.width = W; c.height = H;
       var x = c.getContext("2d");
-      var g = x.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#fbf7f4"); g.addColorStop(1, "#f5e4e1");
+      var g = x.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#ffffff"); g.addColorStop(1, "#fdeef2");
       x.fillStyle = g; x.fillRect(0, 0, W, H);
       if (logo) { var lw = 280, lh = lw * logo.naturalHeight / logo.naturalWidth; x.drawImage(logo, (W - lw) / 2, 96, lw, lh); }
       if (!poll) {
         drawArch(x, imgs[0], 150, 300, 780, 1060);
-        txt(x, displayName(items[0]), W / 2, 1490, "400 76px " + F_SERIF, "#4a1226");
+        txt(x, displayName(items[0]), W / 2, 1490, "400 76px " + F_SERIF, "#1f1422");
         var ln = colorLabel(items[0]) || AC.lineName(items[0].line, LANG);
         if (ln) txt(x, ln, W / 2, 1556, "400 34px " + F_SANS, "#b92f63");
       } else {
-        txt(x, tr("أي واحدة أختار؟", "Which one should I choose?"), W / 2, 330, (EN ? "400 80px " : "400 92px ") + F_SERIF, "#4a1226");
+        txt(x, tr("أي واحدة أختار؟", "Which one should I choose?"), W / 2, 330, (EN ? "400 80px " : "400 92px ") + F_SERIF, "#1f1422");
         txt(x, tr("ساعدوني 🤍", "Help me 🤍"), W / 2, 400, "400 38px " + F_SANS, "#b92f63");
         // الترتيب من اليمين (١ يمين فوق) — زي القراية بالعربي
         var cw = 390, ch = 520, n = imgs.length;
@@ -1358,12 +1343,12 @@
         imgs.forEach(function (im, i) {
           var px = pos[i][0], py = pos[i][1];
           drawArch(x, im, px, py, cw, ch);
-          x.beginPath(); x.arc(px + cw / 2, py + ch, 40, 0, Math.PI * 2); x.fillStyle = "#4a1226"; x.fill();
+          x.beginPath(); x.arc(px + cw / 2, py + ch, 40, 0, Math.PI * 2); x.fillStyle = "#1f1422"; x.fill();
           txt(x, AR_NUM[i], px + cw / 2, py + ch + 16, "400 46px " + F_SERIF, "#ffffff");
         });
       }
       x.fillStyle = "rgba(138,111,78,.5)"; x.fillRect(W / 2 - 60, 1672, 120, 2);
-      txt(x, tr("جرّبي المجموعة عليكِ", "Try the collection on you"), W / 2, 1760, "400 54px " + F_SERIF, "#4a1226");
+      txt(x, tr("جرّبي المجموعة عليكِ", "Try the collection on you"), W / 2, 1760, "400 54px " + F_SERIF, "#1f1422");
       x.direction = "ltr";
       x.font = "400 32px " + F_SANS; x.fillStyle = "#b92f63"; x.textAlign = "center";
       x.fillText("echarpe.store/atelier", W / 2, 1828);
@@ -1446,7 +1431,7 @@
       SITE.branches = raw.branches.map(String).slice(0, 12);
       SITE.branchesEn = Array.isArray(raw.branchesEn) ? raw.branchesEn.map(String).slice(0, 12) : [];
     }
-    if (!state.alive) {
+    {
       set("heroEyebrow", d.eyebrow); set("heroSub", d.sub);
       if (d.title1 || d.title2) $("heroTitle").innerHTML = '<span class="ln"><span>' + esc(d.title1 || "") + '</span></span><span class="ln"><span><em>' + esc(d.title2 || "") + "</em></span></span>";
       $("heroTitle").classList.add("in");
@@ -1466,7 +1451,6 @@
     buildModels();
     renderHero(); renderFilters(); renderGrid(); syncBagCount(); updateDock();
     var saved = LS ? PC.readFace(LS) : "";
-    if (saved) { $("salonImg").src = saved; $("salonArch").classList.add("has"); }
     updateLd(); renderWall();
     // 🔗 لينك قطعة بعينها (?p=<id>) — من إعلان أو مشاركة: بتتفتح على طول
     var m = /[?&]p=([^&#]+)/.exec(location.search), dp = m && state.byId[decodeURIComponent(m[1])];

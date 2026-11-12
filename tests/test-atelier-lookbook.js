@@ -122,17 +122,17 @@ const r1 = AC.buildRound(null, prods, {}, {});
 assert(r1.length === AC.ROUND_SIZE && r1.every((p) => p.kind === 'hijab'), 'أول تجربة = ٦ طرح (من غير إسدال)');
 const mono = prods[3];
 const rm = AC.buildRound(mono, prods, {}, {});
-assert(rm.map((p) => p.id).join() === 'm4,c1,z1,m1,m2,m3', '«جرّبيها» = القطعة، ولون من كل موديل تاني، وبعدين ألوانها');
+assert(rm.map((p) => p.id).join() === 'm4,m1,m2,m3,m5,m6', '«جرّبيها» جوّه القطعة = هي + ألوان موديلها');
 assert(r1.map((p) => p.id).slice(0, 3).join() === 'm1,c1,z1', 'أول تجربة = الموديلات الأول (لون من كل موديل)');
 const crepe = prods[7];
 const rc = AC.buildRound(crepe, prods, {}, {});
-assert(rc[0] === crepe && rc.filter((p) => p.line === 'crepe').length === 3 && rc.length === 6, 'لو ألوانها أقل من ٦ بنكمّل من الباقي');
+assert(rc[0] === crepe && rc.length === 3 && rc.every((p) => p.line === 'crepe'), 'ألوانها أقل من ٦ = ألوانها بس (مفيش قطع من موديل تاني)');
 assert(AC.buildRound(mono, prods, { [mono.id]: 'x' }, {}).indexOf(mono) < 0, 'اللي إطلالته جاهزة مش بتتولّد تاني');
 const isd = { id: 'is1', kind: 'isdal', line: 'isdal', tryable: true };
 assert(AC.buildRound(isd, prods.concat([isd, { id: 'is2', kind: 'isdal', line: 'isdal', tryable: true }]), {}, {}).every((p) => p.kind === 'isdal'), 'الإسدال مبيتخلطش مع الطرح');
 const fam = AC.buildRound({ id: 'f', kind: 'hijab', line: 'other', family: 'كوري', tryable: true },
   [{ id: 'f', kind: 'hijab', line: 'other', family: 'كوري', tryable: true }, { id: 'z', kind: 'hijab', line: 'other', family: 'تاني', tryable: true }, { id: 'g', kind: 'hijab', line: 'crepe', family: 'كوري', tryable: true }], {}, {});
-assert(fam.map((p) => p.id).join() === 'f,z,g', 'لون من كل موديل الأول، وبعدها ألوان موديلها');
+assert(fam.map((p) => p.id).join() === 'f,g', 'الموديل من صفحة الإدارة: ألوانه بس');
 const t0 = AC.roundsState(null, '2026-10-24');
 assert(t0.allowed === 1 && t0.left === 1, 'تجربة واحدة ببلاش في اليوم');
 assert(AC.roundsState({ day: '2026-10-24', n: 1 }, '2026-10-24').left === 0, 'بعد التجربة الأولى مفيش غير لو حطّت حاجة في الحقيبة');
@@ -457,7 +457,11 @@ if (O) {
   assert(/atelier\.css\?v=[\s\S]*theme\.css\?v=/.test(html), 'theme.css بيتحمّل بعد atelier.css (وبرقم نسخة)');
   assert(/id="wall"/.test(html) && !/src="collection\/hero-comfort\.jpg"/.test(html), 'حائط الألوان مكان البانر القديم');
   const th = fs.readFileSync(path.join(ROOT, 'atelier', 'theme.css'), 'utf8');
-  assert(/--garnet:/.test(th) && /Aref Ruqaa/.test(th) && /Bodoni Moda/.test(th) && /\.grid\.few/.test(th), 'ألوان وخطوط الهوية + الكروت الكبيرة');
+  assert(/--rose:/.test(th) && /Aref Ruqaa/.test(th) && /Instrument Serif/.test(th) && /\.grid\.few/.test(th), 'ألوان وخطوط الهوية + الكروت الكبيرة');
+  // التجربة من جوّه صفحة القطعة بس
+  assert(!/id="ctaUpload"|id="ctaSalon"|class="salon"|id="awaken"/.test(html) && /id="lbTry"/.test(html), 'مفيش تجربة في الواجهة — زرار جوّه القطعة بس');
+  assert(/\.try-btn\{display:none/.test(th) && /\.dock\{display:none/.test(th), 'زراير التجربة على الكروت والشريط السفلي مقفولين');
+  assert(/id="silk"/.test(html) && /silk\.js\?v=/.test(html) && /prefers-reduced-motion/.test(fs.readFileSync(path.join(ROOT, 'atelier', 'silk.js'), 'utf8')), 'حركة القماش في الواجهة وبتحترم تقليل الحركة');
   const js = fs.readFileSync(path.join(ROOT, 'atelier', 'atelier.js'), 'utf8');
   assert(/function renderWall/.test(js) && /classList\.add\("custom"\)/.test(js), 'الحائط من صور المجموعة، وبانر صاحبة المحل بيغلبه');
 }
