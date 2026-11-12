@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title data-en="echarpe — Try the Collection On You">echarpe — جرّبي المجموعة عليكِ</title>
 <meta name="description" content="echarpe — صورةٌ واحدة، وتظهر كل قطعة من المجموعة عليكِ قبل أن تختاري." data-en="echarpe — One photo, and every piece of the collection appears on you before you choose.">
-<meta name="theme-color" content="#2a0914">
+<meta name="theme-color" content="#ffffff">
 <meta property="og:title" content="echarpe — Try the Collection On You">
 <meta property="og:description" content="One photo, and every piece of the collection appears on you before you choose.">
 <meta property="og:image" content="https://www.echarpe.store/atelier/collection/hero-comfort.jpg">
@@ -21,10 +21,10 @@
 <link rel="icon" href="../loyalty/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@400;700&family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..700;1,6..96,400..700&family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Jost:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="./i18n.js?v=2611110100"></script>
-<link rel="stylesheet" href="atelier.css?v=2611110100">
-<link rel="stylesheet" href="theme.css?v=2611110100">
+<link href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@400;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="./i18n.js?v=2611120100"></script>
+<link rel="stylesheet" href="atelier.css?v=2611120100">
+<link rel="stylesheet" href="theme.css?v=2611120100">
 </head>
 <body class="intro-on">
 
@@ -50,20 +50,24 @@
   </nav>
 </header>
 
-<!-- ✦ الواجهة: المرآة -->
-<section class="hero" id="top" aria-label="المجموعة" data-en-aria="Collection">
+<!-- ✦ الواجهة: حرير بيتحرك + عنوان -->
+<section class="hero" id="top" aria-label="echarpe">
+  <canvas class="silk" id="silk" aria-hidden="true"></canvas>
   <div class="hero-copy">
-    <div class="eyebrow" id="heroEyebrow" data-en="The Season’s Collection">مجموعة الموسم</div>
-    <h1 class="split" id="heroTitle" data-en-html="&lt;span class=&quot;ln&quot;&gt;&lt;span&gt;The whole collection,&lt;/span&gt;&lt;/span&gt;&lt;span class=&quot;ln&quot;&gt;&lt;span&gt;&lt;em&gt;on you&lt;/em&gt;&lt;/span&gt;&lt;/span&gt;"><span class="ln"><span>المجموعة كاملة،</span></span><span class="ln"><span><em>عليكِ أنتِ</em></span></span></h1>
-    <p class="hero-sub" id="heroSub" data-en="One photo, and every piece appears on you before you choose.">صورةٌ واحدة، وتظهر كل قطعة عليكِ قبل أن تختاري.</p>
-  </div>
-  <div class="hero-cta">
+    <div class="eyebrow" id="heroEyebrow" data-en="New collection">المجموعة الجديدة</div>
+    <h1 class="split" id="heroTitle"><span class="ln"><span data-en="Light as air,">خفيفة كالنسمة،</span></span><span class="ln"><span data-en="made for every day">لكل يوم</span></span></h1>
+    <p class="hero-sub" id="heroSub" data-en="Kuwaiti linen and chiffon hijabs in the shades you reach for. Delivered to your door or picked up in store.">طرح لينن وشيفون كويتي بالألوان اللي بتلبسيها كل يوم. توصيل لحد البيت أو استلام من الفرع.</p>
     <div class="hero-acts">
-      <button class="btn btn-dark" id="ctaUpload" type="button"><span data-en="Try the collection">جرّبي المجموعة</span></button>
-      <a class="btn-link" href="#collection" data-en="Browse the collection">تصفّحي المجموعة</a>
+      <a class="btn btn-dark" href="#collection"><span data-en="Shop the collection">تسوّقي المجموعة</span></a>
+      <a class="btn-link" href="#spot" data-en="See the colours">شوفي الألوان</a>
     </div>
-    <a class="hero-privacy" href="#privacy" data-en="🔒 Your photo stays on your phone — we never keep it">🔒 صورتكِ تبقى على هاتفكِ — لا نحتفظ بها</a>
   </div>
+  <a class="scroll-hint" href="#spot" aria-hidden="true" tabindex="-1"><i></i></a>
+</section>
+
+<!-- ✦ القطعة تحت الضوء: المرآة + ألوانها -->
+<section class="spot" id="spot">
+  <h2 data-en="Every colour, up close">كل لون عن قرب</h2>
   <div class="mirror-wrap">
     <div class="mirror" id="mirror" role="button" tabindex="0" aria-label="عرض القطعة" data-en-aria="View piece">
       <img class="m-layer" alt=""><img class="m-layer" alt="">
@@ -72,7 +76,7 @@
     </div>
     <div class="m-cap"><b id="mName"></b><span id="mLine"></span>
       <div class="m-colors hidden" id="mColors" aria-label="الألوان" data-en-aria="Colours"></div>
-      <button class="m-pick" id="mPick" type="button" data-en="Choose it to try">اختاريها للتجربة</button></div>
+      <button class="m-pick" id="mPick" type="button" hidden></button></div>
     <div class="m-acts">
       <button class="ic heart" id="mHeart" type="button" aria-label="أضيفي للمفضّلة" data-en-aria="Add to favourites" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" stroke="currentColor" stroke-width="1.3"/></svg></button>
       <button class="btn btn-dark sm" id="mBag" type="button"><span data-en="Add to bag">أضيفيها للحقيبة</span></button>
@@ -88,7 +92,7 @@
 
 <main>
   <section class="statement reveal-words" aria-label="عن echarpe" data-en-aria="About echarpe">
-    <p data-en-html="Every fold tells a story, every colour a mood.&lt;br&gt;Choose what feels like you… &lt;em&gt;and see it on you first.&lt;/em&gt;">كل طيّةٍ حكاية، وكل لونٍ مزاج.<br>اختاري ما يشبهكِ… <em>وشاهديه عليكِ أولاً.</em></p>
+    <p data-en="Every fold tells a story, every colour a mood. Choose the one that feels like you.">كل طيّةٍ حكاية، وكل لونٍ مزاج. اختاري اللي يشبهكِ.</p>
   </section>
 
   <section class="banner">
@@ -104,25 +108,6 @@
     <div class="tones hidden" id="tones" aria-label="رف الألوان" data-en-aria="Colour shelf"></div>
     <div class="filters" id="filters" role="tablist"></div>
     <div class="grid" id="grid"></div>
-  </section>
-
-  <section class="salon" id="salon">
-    <div class="salon-frame">
-      <div class="arch" id="salonArch">
-        <img id="salonImg" alt="">
-        <svg class="arch-figure" viewBox="0 0 200 260" aria-hidden="true"><path d="M100 52c18 0 30 14 30 32 0 14-6 26-14 31 26 8 46 30 54 62H30c8-32 28-54 54-62-8-5-14-17-14-31 0-18 12-32 30-32z" fill="none" stroke="currentColor" stroke-width=".8"/></svg>
-      </div>
-    </div>
-    <div class="salon-copy">
-      <h2 data-en="Try before you choose">جرّبي قبل أن تختاري</h2>
-      <p data-en="One photo of you, and in moments every piece of the collection appears on you.">صورةٌ واحدة منكِ، وفي لحظات تظهر كل قطعة من المجموعة عليكِ.</p>
-      <ol class="steps">
-        <li><b data-en="1">١</b><span data-en="One photo">صورةٌ واحدة</span></li>
-        <li><b data-en="2">٢</b><span data-en="A few moments">لحظات</span></li>
-        <li><b data-en="3">٣</b><span data-en="The collection, on you">المجموعة عليكِ</span></li>
-      </ol>
-      <button class="btn btn-dark" id="ctaSalon" type="button"><span data-en="Try the collection">جرّبي المجموعة</span></button>
-    </div>
   </section>
 
   <section class="privacy" id="privacy">
@@ -147,17 +132,6 @@
 </footer>
 
 <input type="file" id="file" accept="image/*" hidden>
-
-<!-- ✦ لحظة التجهيز -->
-<div class="awaken" id="awaken" aria-live="polite">
-  <div class="dust" id="dust"></div>
-  <div class="aw-arch"><img id="awakenFace" alt=""><i class="scan"></i></div>
-  <div class="aw-words">
-    <p id="w1" class="letters" data-en="Welcome">أهلاً بكِ</p>
-    <p id="w2" class="letters" data-en="Preparing the collection for you">نُجهّز المجموعة لكِ</p>
-    <small id="w3" data-en="In moments, every piece appears on you">لحظات، وتظهر كل قطعة عليكِ</small>
-  </div>
-</div>
 
 <div class="dock" id="dock">
   <div class="me"><img id="dockFace" alt=""></div>
@@ -265,9 +239,10 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
-<script src="../tryon/photo-core.js?v=2611110100"></script>
-<script src="./atelier-core.js?v=2611110100"></script>
-<script src="./marketing.js?v=2611110100"></script>
+<script src="../tryon/photo-core.js?v=2611120100"></script>
+<script src="./atelier-core.js?v=2611120100"></script>
+<script src="./silk.js?v=2611120100"></script>
+<script src="./marketing.js?v=2611120100"></script>
 <script src="./atelier.js?v=2610281772"></script>
 </body>
 </html>
