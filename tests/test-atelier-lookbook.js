@@ -457,11 +457,11 @@ if (O) {
   assert(/atelier\.css\?v=[\s\S]*theme\.css\?v=/.test(html), 'theme.css بيتحمّل بعد atelier.css (وبرقم نسخة)');
   assert(/id="wall"/.test(html) && !/src="collection\/hero-comfort\.jpg"/.test(html), 'حائط الألوان مكان البانر القديم');
   const th = fs.readFileSync(path.join(ROOT, 'atelier', 'theme.css'), 'utf8');
-  assert(/--rose:/.test(th) && /Aref Ruqaa/.test(th) && /Instrument Serif/.test(th) && /\.grid\.few/.test(th), 'ألوان وخطوط الهوية + الكروت الكبيرة');
+  assert(/--rose:/.test(th) && /Alexandria/.test(th) && /Hanken Grotesk/.test(th) && /\.grid,\.grid\.few/.test(th), 'ألوان وخطوط الهوية + شبكة منتجات المتجر');
   // التجربة من جوّه صفحة القطعة بس
   assert(!/id="ctaUpload"|id="ctaSalon"|class="salon"|id="awaken"/.test(html) && /id="lbTry"/.test(html), 'مفيش تجربة في الواجهة — زرار جوّه القطعة بس');
-  assert(/\.try-btn\{display:none/.test(th) && /\.dock\{display:none/.test(th), 'زراير التجربة على الكروت والشريط السفلي مقفولين');
-  assert(/id="silk"/.test(html) && /silk\.js\?v=/.test(html) && /prefers-reduced-motion/.test(fs.readFileSync(path.join(ROOT, 'atelier', 'silk.js'), 'utf8')), 'حركة القماش في الواجهة وبتحترم تقليل الحركة');
+  assert(/\.dock,\.try-btn,\.m-pick\{display:none !important;\}/.test(th), 'زراير التجربة على الكروت والشريط السفلي مقفولين');
+  assert(!/id="silk"|silk\.js/.test(html) && /class="services"/.test(html) && /Alexandria/.test(html), 'شكل المتجر: من غير قماش متحرك، فيه شريط الخدمات وخط Alexandria');
   const js = fs.readFileSync(path.join(ROOT, 'atelier', 'atelier.js'), 'utf8');
   assert(/function renderWall/.test(js) && /classList\.add\("custom"\)/.test(js), 'الحائط من صور المجموعة، وبانر صاحبة المحل بيغلبه');
 }

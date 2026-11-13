@@ -1534,8 +1534,9 @@
   function renderWall() {
     var box = $("wall"); if (!box) return;
     var pick = [], round = 0, ms = mirrorModels();
-    while (pick.length < 6 && ms.some(function (m) { return m.items.length > round; })) {
-      ms.forEach(function (m) { var p = m.items[round * 2] || (round ? null : m.items[0]); if (p && pick.length < 6 && pick.indexOf(p) < 0) pick.push(p); });
+    var N = 4;                                           // ٢×٢ في الواجهة
+    while (pick.length < N && ms.some(function (m) { return m.items.length > round; })) {
+      ms.forEach(function (m) { var p = m.items[round * 2] || (round ? null : m.items[0]); if (p && pick.length < N && pick.indexOf(p) < 0) pick.push(p); });
       round++;
     }
     box.innerHTML = "";
