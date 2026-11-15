@@ -22,9 +22,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@300;400;500;600;700&family=Hanken+Grotesk:ital,wght@0,400;0,500;0,600;0,700;1,500&display=swap" rel="stylesheet">
-<script src="./i18n.js?v=2611130100"></script>
-<link rel="stylesheet" href="atelier.css?v=2611130100">
-<link rel="stylesheet" href="theme.css?v=2611130100">
+<script src="./i18n.js?v=2611150100"></script>
+<link rel="stylesheet" href="atelier.css?v=2611150100">
+<link rel="stylesheet" href="theme.css?v=2611150100">
 </head>
 <body class="intro-on">
 
@@ -51,7 +51,17 @@
 </header>
 
 <!-- ✦ الواجهة: حرير بيتحرك + عنوان -->
-<section class="hero" id="top" aria-label="echarpe">
+<section class="hero mo" id="top" aria-label="echarpe">
+  <div class="mo-orbs" aria-hidden="true"><i></i><i></i></div>
+  <div class="mo-type" aria-hidden="true">
+    <div class="mo-row"><span>echarpe ✦ light as air ✦ echarpe ✦ light as air ✦&nbsp;</span><span>echarpe ✦ light as air ✦ echarpe ✦ light as air ✦&nbsp;</span></div>
+    <div class="mo-row r2"><span>linen ✦ chiffon ✦ every day ✦ linen ✦ chiffon ✦ every day ✦&nbsp;</span><span>linen ✦ chiffon ✦ every day ✦ linen ✦ chiffon ✦ every day ✦&nbsp;</span></div>
+  </div>
+  <div class="mo-stage" id="moSlides"></div>
+  <div class="mo-foot">
+    <button class="mo-tag" id="moTag" type="button"><i class="mo-sw" id="moSw"></i><span class="mo-tx"><b id="moName"></b><small id="moPrice"></small></span><em data-en="Shop">تسوّقي</em></button>
+    <div class="mo-bars" id="moBars" aria-hidden="true"></div>
+  </div>
   <div class="hero-copy">
     <div class="eyebrow" id="heroEyebrow" data-en="New collection">المجموعة الجديدة</div>
     <h1 class="split" id="heroTitle"><span class="ln"><span data-en="Light as air,">خفيفة كالنسمة،</span></span><span class="ln"><span data-en="made for every day">لكل يوم</span></span></h1>
@@ -63,6 +73,11 @@
   </div>
   <div class="wall" id="wall"></div>
 </section>
+
+<!-- ✦ شريط متحرك تحت البانر -->
+<div class="ticker" aria-hidden="true"><div class="ticker-track" id="ticker">
+  <span data-en="Free pickup in store">استلام مجاني من الفرع</span><span data-en="Try any piece on you">جرّبي أي قطعة عليكِ</span><span data-en="Kuwaiti linen &amp; chiffon">لينن وشيفون كويتي</span><span data-en="Live courier tracking">تتبّع المندوب لايف</span>
+</div></div>
 
 <!-- ✦ القطعة تحت الضوء: المرآة + ألوانها -->
 <section class="spot" id="spot">
@@ -176,13 +191,17 @@
 <!-- ✦ الحقيبة -->
 <div class="sheet" id="bag" role="dialog" aria-modal="true" aria-label="حقيبتكِ" data-en-aria="Your bag">
   <div class="sheet-bg" data-close></div>
-  <div class="sheet-panel">
-    <div class="sheet-head"><h3 data-en="Your bag">حقيبتكِ</h3><button class="lb-x small" data-close aria-label="إغلاق" data-en-aria="Close"><i></i><i></i></button></div>
+  <div class="sheet-panel drawer">
+    <div class="sheet-head dr-head"><h3 id="bagTitle"><i class="dr-ok" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></i><span id="bagTitleTx"></span></h3><button class="dr-x" data-close aria-label="إغلاق" data-en-aria="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button></div>
+    <div class="dr-body" id="bagBody">
     <div class="bag-list" id="bagList"></div>
-    <div class="bag-foot" id="bagFoot">
-      <div class="bag-total" id="bagTotal"></div>
-      <button class="btn btn-dark wide" id="bagCheckout" type="button"><span data-en="Complete your order">أكملي الطلب</span></button>
-      <a class="bag-wa" id="bagWa" href="#" target="_blank" rel="noopener" data-en="or order on WhatsApp">أو اطلبي عبر واتساب</a>
+    <div class="dr-sum" id="bagSum">
+      <div class="dr-row"><span data-en="Subtotal">الإجمالي</span><b id="bagTotal"></b></div>
+      <div class="dr-ship" id="bagShip"></div>
+    </div>
+    <div class="xsell" id="xsell">
+      <h4 data-en="Complete the set">كمّلي الطقم</h4>
+      <div class="xsell-list" id="xsellList"></div>
     </div>
     <form class="checkout hidden" id="checkout" novalidate>
       <label><span data-en="Name">الاسم</span><input type="text" id="coName" autocomplete="name" required></label>
@@ -212,6 +231,12 @@
       <p id="doneText"></p>
       <button class="btn btn-dark" type="button" data-close><span data-en="Back to the collection">رجوع للمجموعة</span></button>
     </div>
+    </div>
+    <div class="bag-foot" id="bagFoot">
+      <button class="btn btn-dark wide" id="bagCheckout" type="button"><span data-en="Checkout">إتمام الطلب</span></button>
+      <button class="btn btn-line wide" type="button" data-close><span data-en="Keep shopping">كمّلي التسوّق</span></button>
+      <a class="bag-wa" id="bagWa" href="#" target="_blank" rel="noopener" data-en="or order on WhatsApp">أو اطلبي عبر واتساب</a>
+    </div>
   </div>
 </div>
 
@@ -228,6 +253,16 @@
     <small class="fine" data-en="The image is made on your phone and is only posted if you choose to share it.">الصورة تُصنع على هاتفكِ، ولا تُنشر إلا إذا شاركتِها أنتِ.</small>
   </div>
 </div>
+
+<!-- ✦ الشريط السفلي: دايرة بتنط من أيقونة للتانية -->
+<nav class="tabbar" id="tabbar" aria-label="التنقّل" data-en-aria="Navigation">
+  <i class="tb-blob" id="tbBlob" aria-hidden="true"></i>
+  <a class="tb on" data-tab="home" href="#top"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11l8-6.5 8 6.5V20h-5.5v-5h-5v5H4z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg><span data-en="Home">الرئيسية</span></a>
+  <a class="tb" data-tab="shop" href="#collection"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg><span data-en="Shop">المجموعة</span></a>
+  <button class="tb" data-tab="sty" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l1.9 4.9 4.9 1.9-4.9 1.9-1.9 4.9-1.9-4.9-4.9-1.9 4.9-1.9z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M18.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" fill="currentColor"/></svg><span data-en="Stylist">المنسّقة</span></button>
+  <button class="tb bag-btn" data-tab="bag" type="button" aria-label="حقيبتكِ" data-en-aria="Your bag"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12l-1 12H7L6 8z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 8V6a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.6"/></svg><b class="bagCount">0</b><span data-en="Bag">الحقيبة</span></button>
+  <a class="tb" data-tab="track" href="track.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="7" cy="17.5" r="1.8" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="17" cy="17.5" r="1.8" fill="none" stroke="currentColor" stroke-width="1.6"/></svg><span data-en="Orders">طلباتي</span></a>
+</nav>
 
 <div class="toast" id="toast" role="status"></div>
 
@@ -246,9 +281,9 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
-<script src="../tryon/photo-core.js?v=2611130100"></script>
-<script src="./atelier-core.js?v=2611130100"></script>
-<script src="./marketing.js?v=2611130100"></script>
-<script src="./atelier.js?v=2610281772"></script>
+<script src="../tryon/photo-core.js?v=2611150100"></script>
+<script src="./atelier-core.js?v=2611150100"></script>
+<script src="./marketing.js?v=2611150100"></script>
+<script src="./atelier.js?v=2611150100"></script>
 </body>
 </html>
