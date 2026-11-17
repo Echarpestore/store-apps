@@ -136,6 +136,8 @@ details p{color:var(--ink-2); padding-bottom:24px; max-width:38rem}
 .final h2{font-size:clamp(40px,5.6vw,84px); max-width:14ch; margin-inline:auto}
 .final p{color:var(--ink-2); margin-top:24px; font-size:19px}
 .final .actions{justify-content:center; margin-top:40px}
+.final .insta{font-size:17px; margin-top:32px}
+.final .insta a{color:var(--ink); text-decoration-color:var(--gold); text-underline-offset:4px}
 
 .foot{border-top:1px solid var(--line); padding:32px var(--gut) 40px; display:flex; flex-wrap:wrap; gap:16px 40px; align-items:center; justify-content:space-between; font-size:15px; color:var(--ink-2)}
 .foot nav{display:flex; flex-wrap:wrap; gap:8px 28px}
