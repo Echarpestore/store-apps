@@ -1911,7 +1911,7 @@ function lazyLoadTab(tab){
         shopCatalog = Array.isArray(data.items) ? data.items : [];
       }).catch(function(){ shopCatalog = []; })
         .then(function(){ return ensureShopCfg(); })
-        .then(function(){ showTopLoad(false); if(currentTab==='shop') renderShop(); });
+        .then(function(){ showTopLoad(false); if(currentTab==='shop') renderShop(); loadAtelierShop(); });
     }
     tabStarted[tab] = true; return;
   }
@@ -2648,10 +2648,67 @@ function shopBranches(){
       (خلص؟) · `barcode` (من غيره فحص الكمية مستحيل والأوردر بيترفض
       قدام العميلة). */
 function shopItems(){
-  return (shopCatalog || []).filter(function(p){
+  var base = (shopCatalog || []).filter(function(p){
     return p && p.active === true && Number(p.onlineQty) > 0
         && p.barcode && Number(p.price) > 0;
   });
+  if(!_atelierItems.length) return base;
+  var seen = {};
+  base.forEach(function(p){ seen[String(p.barcode)] = 1; });
+  return base.concat(_atelierItems.filter(function(p){ return !seen[String(p.barcode)]; }));
+}
+
+/* 🪞 v720 — منتجات «الأتيليه» جوّه «اطلبي» نفسها (بدل البانر).
+   المصدر: pos_test_settings/atelier_echarpe (لوحة إدارة الأتيليه) — القطع
+   اللي ليها باركود بس. ⚠️ السعر والإتاحة من **المخزون الحقيقي**
+   (pos_test_inventory)، مش من لوحة الأتيليه: السيرفر (onlineOrderPlace)
+   بيسعّر الصنف اللي برّه كتالوج الأونلاين من المخزون، فلو عرضنا سعر
+   الأتيليه والمخزون مختلف، العميلة تشوف رقم وتدفع رقم تاني.
+   القطعة المخفية / من غير سعر / مخزونها صفر في كل الفروع = مبتظهرش.
+   الصورة المصغّرة من atelier_echarpe_t_<id> — والكاملة والجاليري وقت
+   ما المنتج يتفتح بس (نفس قاعدة صور الكتالوج). */
+var _atelierItems = [];
+var _atelierStarted = false;
+function loadAtelierShop(){
+  if(_atelierStarted || CATALOG_BRAND !== 'echarpe') return;
+  _atelierStarted = true;
+  var col = db.collection(COL_SETTINGS);
+  col.doc('atelier_echarpe').get().then(function(d){
+    var raw = (d.exists && Array.isArray(d.data().items)) ? d.data().items : [];
+    var seen = {};
+    (shopCatalog || []).forEach(function(p){ if(p && p.barcode) seen[String(p.barcode)] = 1; });
+    var list = raw.filter(function(it){
+      var bc = String(it && it.barcode || '').trim();
+      if(!it || !it.id || it.active === false || !bc || seen[bc]) return false;
+      seen[bc] = 1; return true;
+    }).slice(0, 60);
+    if(!list.length) return;
+    return Promise.all(list.map(function(it){
+      var bc = String(it.barcode).trim();
+      return db.collection(COL_INVENTORY).doc(bc).get().then(function(inv){
+        if(!inv.exists) return null;
+        var v = inv.data() || {};
+        var price = Number(v.price) || 0;
+        if(v.status === 'hidden' || price <= 0) return null;
+        if(shopCfg.ignoreBranchStock !== true){
+          var q = 0, byB = v.qtyByBranch || {};
+          Object.keys(byB).forEach(function(k){ q += Math.max(0, Number(byB[k]) || 0); });
+          if(q <= 0) return null;
+        }
+        var name = String(it.name || v.name || 'قطعة').slice(0, 60);
+        var color = String(it.colorName || '').slice(0, 30);
+        return col.doc('atelier_echarpe_t_' + it.id).get().then(function(t){
+          var img = t.exists ? String(t.data().img || '') : '';
+          return { id: 'at-' + it.id, atelierId: String(it.id), atelier: true, barcode: bc,
+                   name: color && name.indexOf(color) < 0 ? name + ' — ' + color : name,
+                   price: price, img: /^data:image\//.test(img) ? img : '', active: true };
+        });
+      }).catch(function(){ return null; });
+    })).then(function(arr){
+      _atelierItems = arr.filter(Boolean);
+      if(_atelierItems.length && currentTab === 'shop') renderShop();
+    });
+  }).catch(function(){ /* الأتيليه مش متاح — «اطلبي» بيفضل بمنتجاته العادية */ });
 }
 
 function shopQty(bc){ return Math.max(0, Math.floor(Number(_shopCart[bc]) || 0)); }
@@ -2853,6 +2910,20 @@ function shopOpenItem(bc){
   renderShopDetail();
   var key = String(p.id || p.barcode);
   if(_shopImgCache[key]){ renderShopDetail(); return; }
+  if(p.atelier){
+    // 🪞 قطعة أتيليه: الصورة الكاملة (_f_) + صور اللون الزيادة (_x_)
+    var ac = db.collection(COL_SETTINGS), aid = p.atelierId;
+    Promise.all([
+      ac.doc('atelier_echarpe_f_' + aid).get().catch(function(){ return null; }),
+      ac.doc('atelier_echarpe_x_' + aid).get().catch(function(){ return null; })
+    ]).then(function(r){
+      var full = r[0] && r[0].exists ? String(r[0].data().img || '') : '';
+      var gal = r[1] && r[1].exists && Array.isArray(r[1].data().imgs) ? r[1].data().imgs : [];
+      _shopImgCache[key] = [full].concat(gal).filter(function(u){ return /^data:image\//.test(String(u || '')); });
+      if(_shopOpenItem && String(_shopOpenItem.barcode) === String(bc)) renderShopDetail();
+    });
+    return;
+  }
   db.collection(COL_SETTINGS).doc('online_shop_' + CATALOG_BRAND + '_img_' + (p.id || ''))
     .get().then(function(d){
       var arr = (d.exists && Array.isArray(d.data().images)) ? d.data().images : [];
@@ -2879,6 +2950,8 @@ window.shopImgGo = shopImgGo;
 function shopDetailImages(){
   var p = _shopOpenItem; if(!p) return [];
   var extra = _shopImgCache[String(p.id || p.barcode)] || [];
+  // 🪞 الأتيليه: الكاملة بتحل محل المصغّرة (نفس الصورة بجودة أعلى — مش نسختين)
+  if(p.atelier && extra.length) return extra;
   /* 🖼️ الغلاف الأول دايمًا — العميلة دوست عليه، فلازم تلاقيه. */
   return (p.img ? [p.img] : []).concat(extra);
 }
@@ -3097,7 +3170,7 @@ function renderShop(){
     // 🛍️ السلة **مش** بتتعرض في شاشة التصفّح — مكانها الوحيد أيقونة
     //    السلة فوق (وضع cartOnly). أي أصناف في السلة بتبان في الشارة
     //    على الأيقونة، والعميلة بتفتحها من هناك تكمّل الطلب.
-    box.innerHTML = head + atelierBannerHTML() + '<div class="empty"><span class="big">🛍️</span>لسه مفيش منتجات معروضة للتصفّح.</div>';
+    box.innerHTML = head + '<div class="empty"><span class="big">🛍️</span>لسه مفيش منتجات معروضة للتصفّح.</div>';
     return;
   }
 
@@ -3120,7 +3193,7 @@ function renderShop(){
   }).join('') + '</div>';
 
   // 🛍️ التصفّح بس — السلة مكانها أيقونة السلة فوق (وضع cartOnly).
-  box.innerHTML = head + atelierBannerHTML() + grid;
+  box.innerHTML = head + grid;
   /* 🔗 Deep-link لمنتج واحد فقط — بعد رسم الكتالوج، مش أثناء تحميله.
      كده مفيش تحميل صور جماعي ولا shopOpenItem لكل المنتجات. */
   if(!_shopDeepOpened){

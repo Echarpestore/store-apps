@@ -200,7 +200,9 @@ assert(ci.id === 'ab' && ci.price === 350 && ci.line === 'other' && ci.barcode =
 const ai = AC.atelierItemsFrom({ items: [{ id: 'k1', name: 'إسدال', price: 600, line: 'isdal', barcode: '55' }, { id: 'k2', active: false }] });
 assert(ai.length === 1 && ai[0].kind === 'isdal' && ai[0].admin && ai[0].barcode === '55', 'الأتيليه بيقرا قطع صفحة الإدارة الظاهرة بس');
 const LOY = fs.readFileSync(path.join(ROOT, 'loyalty', 'index.html'), 'utf8');
-assert(/atelierBannerHTML\(\) \+ grid/.test(LOY) && /d\.type === 'atelier-order'/.test(LOY), 'غرفة القياس مربوطة بـ«اطلبي» وسلة التطبيق');
+assert(/function loadAtelierShop\(/.test(LOY) && /_atelierItems\.filter/.test(LOY) && /d\.type === 'atelier-order'/.test(LOY), 'منتجات الأتيليه جوّه «اطلبي» نفسها + جسر سلة غرفة القياس لسه شغال');
+assert(!/atelierBannerHTML\(\) \+/.test(LOY), 'بانر غرفة القياس اتشال من «اطلبي» (المنتجات نفسها بدل البانر)');
+assert(/COL_INVENTORY\)\.doc\(bc\)[\s\S]{0,200}price/.test(LOY.slice(LOY.indexOf('function loadAtelierShop'))), 'سعر قطع الأتيليه في التطبيق من المخزون (نفس اللي السيرفر بيسعّر بيه)');
 assert(AD.cleanItem({ family: ' كريب "كوري" ' }).family === 'كريب كوري', 'الموديل بيتحفظ نضيف');
 assert(AC.atelierItemsFrom({ items: [{ id: 'm', line: 'crepe', family: 'كوري' }] })[0].family === 'كوري', 'الأتيليه بيقرا الموديل');
 
