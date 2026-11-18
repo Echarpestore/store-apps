@@ -35,6 +35,8 @@
 <script src="../pos/i18n-core.js"></script>
 <!-- 🛍️ محرك الأوردرات — **نفس الملف** اللي POS والموقع بيقروه -->
 <script src="../pos/orders-core.js?v=2"></script>
+<!-- 🪞 v722: نفس منطق المجموعة بتاع الأتيليه (الموديلات والأقسام وقطع الدار) -->
+<script src="../atelier/atelier-core.js?v=722"></script>
 <script>try{ if(window.i18nInit) i18nInit(); }catch(e){}</script>
 
 <style>
@@ -684,6 +686,109 @@
     margin-top:10px; color:var(--ink); overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;}
   .shop-card .sc-price{margin-top:3px; font-weight:600; font-size:13.5px; color:var(--ink); letter-spacing:.02em;}
   .shop-card .sc-price small{font-weight:400; font-size:11px; color:var(--muted); margin-inline-start:3px;}
+  /* ✦ v722 — «اطلبي» بقت «المجموعة»: موديلات بألوانها، كارت عريض كل ٧ (إيقاع
+     مجلة)، نقط الألوان صور القماش نفسه، وصفحة منتج كاملة (جاليري بالسحب،
+     الألوان، «جرّبيها عليكِ»، ممكن يعجبكِ). الحبر أسود والبينك هادي —
+     نفس لغة Maison. */
+  .bq-head{padding:6px 2px 4px;}
+  .bq-kick{font-family:var(--mx-f-mark,serif); direction:ltr; text-align:right; font-size:11px; letter-spacing:.32em; color:var(--muted);}
+  .bq-title{font-family:var(--mx-f-display,serif); font-weight:600; font-size:30px; line-height:1.2; margin:4px 0 6px; color:var(--ink); text-wrap:balance;}
+  .bq-sub{margin:0; font-size:12.5px; line-height:1.85; color:var(--muted); max-width:36ch;}
+  .bq-lines{display:flex; gap:22px; overflow-x:auto; scrollbar-width:none; margin:18px -16px 16px; padding:0 16px;
+    border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5; background:var(--bg);}
+  .bq-lines::-webkit-scrollbar{display:none;}
+  .bq-lines button{flex:none; border:0; background:none; padding:12px 0 11px; font-size:13.5px; color:var(--muted);
+    border-bottom:1.5px solid transparent; margin-bottom:-1px; white-space:nowrap; transition:color .25s, border-color .25s;}
+  .bq-lines button.on{color:var(--ink); border-bottom-color:var(--ink); font-weight:600;}
+  .prod-grid{gap:26px 12px;}
+  .prod-grid > .shop-card.wide{grid-column:1 / -1;}
+  .shop-card.wide .sc-media{aspect-ratio:4/5; border-radius:20px;}
+  .shop-card.wide .sc-name{font-size:19px;}
+  .shop-card .sc-media{background:#F3E9EC;}
+  .shop-card .sc-try{position:absolute; top:10px; inset-inline-end:10px; display:flex; align-items:center; gap:5px;
+    height:30px; padding:0 11px 0 10px; border-radius:99px; border:0; background:rgba(255,255,255,.88);
+    -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); color:var(--ink); font-size:11.5px; font-family:inherit; cursor:pointer;
+    box-shadow:0 4px 14px -6px rgba(0,0,0,.25); transition:transform .25s var(--mx-ease,ease);}
+  .shop-card .sc-try:active{transform:scale(.94);}
+  .shop-card .sc-try svg,.pd-try svg{width:14px; height:14px; stroke:currentColor; stroke-width:1.5; fill:none;}
+  .sc-dots{display:flex; align-items:center; gap:6px; margin-top:10px; min-height:20px;}
+  .sc-dot{width:20px; height:20px; padding:0; border-radius:50%; border:1px solid rgba(30,20,23,.14); overflow:hidden;
+    background:var(--pink-soft); cursor:pointer; flex:none; transition:box-shadow .2s;}
+  .sc-dot img{width:100%; height:100%; object-fit:cover; display:block; transform:scale(1.8);}
+  .sc-dot.on{box-shadow:0 0 0 2px var(--bg), 0 0 0 3.2px var(--ink);}
+  .sc-more{font-size:11px; color:var(--muted);}
+  .shop-card .sc-name{margin-top:8px;}
+  .sc-sub{font-size:11.5px; color:var(--muted); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .shop-card.sk{pointer-events:none;}
+  .shop-card.sk .sc-media,.shop-card.sk i{background:linear-gradient(90deg,#F3E9EC 0%,#FBF4F6 50%,#F3E9EC 100%); background-size:200% 100%; animation:skL 1.3s ease-in-out infinite;}
+  .shop-card.sk i{display:block; height:11px; border-radius:6px; margin-top:12px; width:70%;}
+  .shop-card.sk i + i{width:40%; margin-top:8px;}
+  @keyframes skL{0%{background-position:100% 0}100%{background-position:-100% 0}}
+
+  /* صفحة المنتج */
+  body.pd-open{overflow:hidden;}
+  #shopDetail{display:none; flex-direction:column; overflow-y:auto; overscroll-behavior:contain; background:var(--bg);}
+  #shopDetail.on{display:block;}
+  .pd-media{position:relative; background:#F3E9EC;}
+  .pd-gal{display:flex; width:100%; overflow-x:auto; scroll-snap-type:x mandatory; scrollbar-width:none; height:min(125vw, 600px, 72vh);}
+  .pd-gal::-webkit-scrollbar{display:none;}
+  .pd-gal img{flex:0 0 100%; width:100%; height:100%; object-fit:cover; scroll-snap-align:center; display:block;}
+  .pd-ph{flex:0 0 100%; display:grid; place-items:center; font-family:var(--mx-f-mark,serif); letter-spacing:.3em; color:var(--muted); direction:ltr;}
+  .pd-x{position:absolute; top:calc(env(safe-area-inset-top,0px) + 12px); right:12px; width:40px; height:40px; border-radius:50%;
+    border:0; background:rgba(255,255,255,.9); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); color:var(--ink);
+    display:grid; place-items:center; box-shadow:0 4px 14px -6px rgba(0,0,0,.3); padding:0;}
+  .pd-x svg{width:18px; height:18px; stroke:currentColor; stroke-width:1.6; fill:none;}
+  .pd-count{position:absolute; top:calc(env(safe-area-inset-top,0px) + 20px); left:14px; font-size:11.5px; letter-spacing:.08em;
+    color:var(--ink); background:rgba(255,255,255,.85); padding:4px 10px; border-radius:99px; direction:ltr; font-variant-numeric:tabular-nums;}
+  .pd-bar{position:absolute; bottom:14px; left:16px; right:16px; display:flex; gap:4px; direction:ltr;}
+  .pd-bar i{flex:1; height:2px; border-radius:2px; background:rgba(255,255,255,.55);}
+  .pd-bar i.on{background:#fff;}
+  .pd-ld{position:absolute; bottom:0; left:0; right:0; height:2px; overflow:hidden;}
+  .pd-ld i{display:block; width:40%; height:100%; background:var(--ink); opacity:.5; animation:pdLd 1s ease-in-out infinite;}
+  @keyframes pdLd{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
+  .pd-body{padding:22px 18px 8px;}
+  .pd-kick{font-size:11.5px; letter-spacing:.06em; color:var(--muted);}
+  .pd-title{font-family:var(--mx-f-display,serif); font-weight:600; font-size:25px; line-height:1.35; margin:4px 0 6px; color:var(--ink); text-wrap:balance;}
+  .pd-price{font-size:19px; font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums;}
+  .pd-price small{font-size:12px; font-weight:400; color:var(--muted); margin-inline-start:4px;}
+  .pd-desc{font-size:13.5px; line-height:1.95; color:var(--ink); opacity:.85; margin-top:12px; white-space:pre-wrap;}
+  .pd-sec{display:flex; align-items:baseline; gap:8px; margin:22px 0 10px; font-size:12.5px; color:var(--muted);}
+  .pd-sec b{color:var(--ink); font-weight:600; font-size:13.5px;}
+  .pd-sec em{font-style:normal; margin-inline-start:auto; font-size:11.5px;}
+  .pd-sw{display:flex; gap:9px; overflow-x:auto; scrollbar-width:none; margin:0 -18px; padding:3px 18px 4px;}
+  .pd-sw::-webkit-scrollbar{display:none;}
+  .pd-sw button{flex:none; width:58px; height:72px; padding:0; border-radius:12px; overflow:hidden; border:1px solid var(--line);
+    background:#F3E9EC; cursor:pointer; transition:box-shadow .2s, transform .2s;}
+  .pd-sw button img{width:100%; height:100%; object-fit:cover; display:block;}
+  .pd-sw button.on{box-shadow:0 0 0 2px var(--bg), 0 0 0 3.5px var(--ink);}
+  .pd-serv{list-style:none; margin:24px 0 0; padding:14px 0 0; border-top:1px solid var(--line); display:grid; gap:10px;}
+  .pd-serv li{display:flex; gap:10px; align-items:baseline; font-size:12.5px; line-height:1.7; color:var(--ink);}
+  .pd-serv li span{width:14px; flex:none; text-align:center; color:var(--pink-deep); font-size:11px;}
+  .pd-rail-h{font-family:var(--mx-f-display,serif); font-size:17px; font-weight:600; margin:28px 0 12px; color:var(--ink);}
+  .pd-rail{display:flex; gap:12px; overflow-x:auto; scrollbar-width:none; margin:0 -18px; padding:0 18px 6px;}
+  .pd-rail::-webkit-scrollbar{display:none;}
+  .pd-rail button{flex:0 0 128px; border:0; background:none; padding:0; text-align:start; color:var(--ink); font-family:inherit; cursor:pointer;}
+  .pd-rail img,.pd-rail .pd-ph{width:128px; aspect-ratio:3/4; object-fit:cover; border-radius:14px; display:block; background:#F3E9EC;}
+  .pd-rail b{display:block; font-family:var(--mx-f-display,serif); font-weight:500; font-size:13px; line-height:1.4; margin-top:7px;
+    overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;}
+  .pd-rail small{font-size:12px; color:var(--muted);}
+  .pd-cta{position:sticky; bottom:0; z-index:3; display:flex; gap:10px; align-items:center;
+    padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 12px); margin-top:22px;
+    background:rgba(252,246,248,.92); -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px); border-top:1px solid var(--line);}
+  .pd-try{flex:none; display:flex; align-items:center; gap:7px; height:50px; padding:0 16px; border-radius:99px;
+    border:1px solid var(--ink); background:transparent; color:var(--ink); font-size:13.5px; font-family:inherit; cursor:pointer;}
+  .pd-add{flex:1; min-width:0; height:50px; border-radius:99px; border:0; background:var(--ink); color:#fff;
+    font-size:14px; font-weight:600; font-family:inherit; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding:0 14px;
+    transition:transform .2s var(--mx-ease,ease);}
+  .pd-add:active,.pd-try:active{transform:scale(.97);}
+  .pd-q{flex:none; display:flex; align-items:center; height:50px; border-radius:99px; border:1px solid var(--line); background:#fff;}
+  .pd-q button{width:40px; height:48px; border:0; background:none; font-size:18px; color:var(--ink); cursor:pointer; font-family:inherit;}
+  .pd-q b{min-width:18px; text-align:center; font-weight:600;}
+  .atl-done{text-align:center; padding:8px 6px 4px; line-height:1.9;}
+  .atl-done .ad-ic{font-size:22px; color:var(--pink-deep);}
+  .atl-done b{display:block; font-family:var(--mx-f-display,serif); font-size:21px; font-weight:600;}
+  .atl-done .ad-code{direction:ltr; letter-spacing:.18em; font-weight:600; margin:4px 0 8px;}
+  .atl-done p{font-size:13px; color:var(--muted); margin:0 0 14px;}
   .prod .pd{font-size:11.5px; color:var(--muted); line-height:1.6; margin-top:3px;
     display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
   .prod .padd{width:100%; margin-top:8px; border:none; border-radius:99px; background:var(--pink);
@@ -2682,62 +2787,127 @@ function shopItems(){
         && p.barcode && Number(p.price) > 0;
   });
   if(!_atelierItems.length) return base;
-  var seen = {};
-  base.forEach(function(p){ seen[String(p.barcode)] = 1; });
-  return base.concat(_atelierItems.filter(function(p){ return !seen[String(p.barcode)]; }));
+  // 🪞 نفس الباركود في الأتيليه (بصوره وألوانه) = القطعة دي بتتعرض من هناك
+  var used = {};
+  _atelierItems.forEach(function(p){ used[String(p.barcode)] = 1; });
+  return base.filter(function(p){ return !used[String(p.barcode)]; }).concat(_atelierItems);
 }
 
-/* 🪞 v720 — منتجات «الأتيليه» جوّه «اطلبي» نفسها (بدل البانر).
-   المصدر: pos_test_settings/atelier_echarpe (لوحة إدارة الأتيليه) — القطع
-   اللي ليها باركود بس. ⚠️ السعر والإتاحة من **المخزون الحقيقي**
-   (pos_test_inventory)، مش من لوحة الأتيليه: السيرفر (onlineOrderPlace)
-   بيسعّر الصنف اللي برّه كتالوج الأونلاين من المخزون، فلو عرضنا سعر
-   الأتيليه والمخزون مختلف، العميلة تشوف رقم وتدفع رقم تاني.
-   القطعة المخفية / من غير سعر / مخزونها صفر في كل الفروع = مبتظهرش.
-   الصورة المصغّرة من atelier_echarpe_t_<id> — والكاملة والجاليري وقت
-   ما المنتج يتفتح بس (نفس قاعدة صور الكتالوج). */
-var _atelierItems = [];
+/* 🪞 v722 — «اطلبي» = المجموعة كلها، نفس اللي في الأتيليه بالظبط.
+   المصدر نفس loadProducts في atelier/atelier.js وبنفس الدوال
+   (../atelier/atelier-core.js): قطع لوحة الإدارة (atelier_echarpe) +
+   قطع الدار الجديدة اللي اللوحة لسه ما شافتهاش + منتجات البيع أونلاين.
+   القطع بتتجمّع موديلات (كارت واحد + ألوان) زي الأتيليه.
+   ✨ أي قطعة تتضاف من لوحة الأتيليه بتظهر هنا لوحدها أول ما التطبيق يتفتح.
+
+   💳 طريقين للطلب (العميلة مبتحسّش بالفرق — سلة واحدة):
+   · قطعة ليها باركود متاح في المخزون (أو في كتالوج الأونلاين) → سلة POS
+     العادية (onlineOrderPlace) والسعر من المخزون/الكتالوج — نفس اللي
+     السيرفر بيسعّر بيه.
+   · غير كده (قطع الدار، أو من غير باركود، أو خلصت من الفروع) → طلب
+     أتيليه (atelierOrderPlace) — نفس طلب الموقع بالظبط، والسعر من السيرفر.
+     مفتاحها في السلة «atl:…». */
+var _atelierItems = [];      // كل لون = قطعة · barcode = مفتاح السلة
+var _atlModels = [];         // الموديلات بالترتيب
+var _atlByKey = {};
 var _atelierStarted = false;
+var _atelierReady = false;
+var ATL_DIR = '../atelier/';
+function atlCore(){ return window.AtelierCore || null; }
+function atlSafe(s){ return String(s == null ? '' : s).replace(/[^\w-]/g, '').slice(0, 40); }
+function atlPiece(p, bc, ci, inv){
+  var pos = false, price = Number(p.price) || 0;
+  if(bc && ci){ pos = true; price = Number(ci.price) || price; }
+  else if(bc && inv && inv.status !== 'hidden' && Number(inv.price) > 0){
+    var q = 0, byB = inv.qtyByBranch || {};
+    Object.keys(byB).forEach(function(k){ q += Math.max(0, Number(byB[k]) || 0); });
+    if(q > 0 || shopCfg.ignoreBranchStock === true){ pos = true; price = Number(inv.price); }
+  }
+  var key = pos ? bc : 'atl:' + (p.house ? 'h-' + atlSafe(p.houseKey) : atlSafe(p.docId));
+  return { key: key, barcode: key, id: key, pos: pos, realBarcode: bc || '', atelier: true,
+           house: !!p.house, houseKey: p.houseKey || '', atelierId: p.docId || '', docId: p.docId || '',
+           name: String(p.name || 'قطعة').slice(0, 80), baseName: String(p.name || 'قطعة').slice(0, 80),
+           colorName: String(p.colorName || '').slice(0, 30), family: p.family, line: p.line || 'other',
+           kind: p.kind || 'hijab', price: price, img: p.img || '', gallery: p.gallery || [], active: true };
+}
 function loadAtelierShop(){
   if(_atelierStarted || CATALOG_BRAND !== 'echarpe') return;
   _atelierStarted = true;
+  var AC = atlCore();
   var col = db.collection(COL_SETTINGS);
-  col.doc('atelier_echarpe').get().then(function(d){
-    var raw = (d.exists && Array.isArray(d.data().items)) ? d.data().items : [];
-    var seen = {};
-    (shopCatalog || []).forEach(function(p){ if(p && p.barcode) seen[String(p.barcode)] = 1; });
-    var list = raw.filter(function(it){
-      var bc = String(it && it.barcode || '').trim();
-      if(!it || !it.id || it.active === false || !bc || seen[bc]) return false;
-      seen[bc] = 1; return true;
-    }).slice(0, 60);
-    if(!list.length) return;
-    return Promise.all(list.map(function(it){
-      var bc = String(it.barcode).trim();
-      return db.collection(COL_INVENTORY).doc(bc).get().then(function(inv){
-        if(!inv.exists) return null;
-        var v = inv.data() || {};
-        var price = Number(v.price) || 0;
-        if(v.status === 'hidden' || price <= 0) return null;
-        if(shopCfg.ignoreBranchStock !== true){
-          var q = 0, byB = v.qtyByBranch || {};
-          Object.keys(byB).forEach(function(k){ q += Math.max(0, Number(byB[k]) || 0); });
-          if(q <= 0) return null;
-        }
-        var name = String(it.name || v.name || 'قطعة').slice(0, 60);
-        var color = String(it.colorName || '').slice(0, 30);
-        return col.doc('atelier_echarpe_t_' + it.id).get().then(function(t){
-          var img = t.exists ? String(t.data().img || '') : '';
-          return { id: 'at-' + it.id, atelierId: String(it.id), atelier: true, barcode: bc,
-                   name: color && name.indexOf(color) < 0 ? name + ' — ' + color : name,
-                   price: price, img: /^data:image\//.test(img) ? img : '', active: true };
-        });
-      }).catch(function(){ return null; });
-    })).then(function(arr){
-      _atelierItems = arr.filter(Boolean);
-      if(_atelierItems.length && currentTab === 'shop') renderShop();
+  var houseBase = ATL_DIR + 'collection/';
+  Promise.all([col.doc('atelier_echarpe').get(), ensureShopCfg()]).then(function(r){
+    var d = r[0];
+    var doc = d.exists ? d.data() : null;
+    var admin = AC ? AC.atelierItemsFrom(doc) : [];
+    var house = !AC ? [] : (admin.length ? AC.houseUnseen(doc, houseBase) : AC.houseCollection(houseBase));
+    if(AC) AC.useCats(AC.catsFrom(doc, house.map(function(h){ return h.line; })));
+    var cat = {};
+    (shopCatalog || []).forEach(function(p){
+      if(p && p.barcode && p.active === true && Number(p.onlineQty) > 0 && Number(p.price) > 0) cat[String(p.barcode)] = p;
     });
-  }).catch(function(){ /* الأتيليه مش متاح — «اطلبي» بيفضل بمنتجاته العادية */ });
+    return Promise.all(admin.slice(0, 160).map(function(p){
+      var bc = String(p.barcode || '').trim();
+      var thumb = col.doc('atelier_echarpe_t_' + p.docId).get().then(function(t){
+        var v = t.exists ? String(t.data().img || '') : '';
+        return /^data:image\//.test(v) ? v : '';
+      }).catch(function(){ return ''; });
+      var inv = (!bc || cat[bc]) ? Promise.resolve(null)
+        : db.collection(COL_INVENTORY).doc(bc).get().then(function(x){ return x.exists ? x.data() : null; }).catch(function(){ return null; });
+      return Promise.all([thumb, inv]).then(function(x){
+        if(!x[0]) return null;            // زي الأتيليه: قطعة من غير صورة مبتظهرش
+        p.img = x[0];
+        return atlPiece(p, bc, cat[bc], x[1]);
+      });
+    })).then(function(list){
+      var seen = {}, pieces = [];
+      house.map(function(h){ return atlPiece(h, '', null, null); }).concat(list.filter(Boolean)).forEach(function(p){
+        if(seen[p.key]) return; seen[p.key] = 1; pieces.push(p);
+      });
+      var models = AC ? AC.groupModels(pieces)
+        : pieces.map(function(p){ return { key: p.key, items: [p], title: p.name, line: p.line }; });
+      _atlByKey = {};
+      models.forEach(function(m){
+        m.items.forEach(function(p, i){
+          p.mkey = m.key; p.mTitle = m.title; p.colorNo = i + 1;
+          if(m.items.length > 1) p.name = m.title + (p.colorName ? ' — ' + p.colorName : ' — لون ' + (i + 1));
+          _atlByKey[p.key] = p;
+        });
+      });
+      _atelierItems = pieces; _atlModels = models; _atelierReady = true;
+      if(currentTab === 'shop' || _shopOpenItem) renderShop();
+      if(_shopOpenItem && _atlByKey[_shopOpenItem.key]) renderShopDetail();
+    });
+  }).catch(function(e){
+    console.warn('atelier shop', e && e.code);
+    _atelierReady = true;
+    if(currentTab === 'shop') renderShop();
+  });
+}
+
+/* 🗂️ الموديلات اللي بتتعرض: منتجات الأونلاين (كل منتج موديل لوحده) +
+   موديلات الأتيليه. */
+function shopModels(){
+  var out = [];
+  shopItems().forEach(function(p){
+    if(p.atelier) return;
+    out.push({ key: 'b:' + p.barcode, items: [p], title: p.name || 'منتج', line: 'shop' });
+  });
+  return out.concat(_atlModels);
+}
+function shopModelOf(p){
+  if(!p) return null;
+  if(p.atelier && p.mkey){ for(var i = 0; i < _atlModels.length; i++) if(_atlModels[i].key === p.mkey) return _atlModels[i]; }
+  return { key: 'b:' + p.barcode, items: [p], title: p.name || 'منتج', line: p.atelier ? p.line : 'shop' };
+}
+function shopPieceByKey(k){
+  k = String(k);
+  return _atlByKey[k] || shopItems().filter(function(x){ return String(x.barcode) === k; })[0] || null;
+}
+function shopLineName(id){
+  if(id === 'shop') return 'جديد';
+  var AC = atlCore(), n = AC && AC.lineName ? AC.lineName(id, 'ar') : '';
+  return n || (AC && AC.LINE_TITLE && AC.LINE_TITLE[id]) || 'قطع مختارة';
 }
 
 function shopQty(bc){ return Math.max(0, Math.floor(Number(_shopCart[bc]) || 0)); }
@@ -2784,6 +2954,13 @@ function shopAdd(bc, d){
   bc = String(bc);
   var n = shopQty(bc) + (Number(d) || 0);
   if(n <= 0) delete _shopCart[bc]; else _shopCart[bc] = n;
+  /* 🪞 قطعة أتيليه: بياناتها بتتحفظ مع السلة — السلة تفضل سليمة لو
+     التطبيق اتفتح تاني قبل ما المجموعة تخلص تحميل. */
+  var _ap = _atlByKey[bc];
+  if(_ap && n > 0) _extraCartProducts[bc] = { name: _ap.name, price: _ap.price, img: _ap.img,
+    atl: _ap.pos ? null : { docId: _ap.house ? '' : _ap.docId, house: _ap.house ? 'collection/' + _ap.houseKey + '.jpg' : '',
+      model: _ap.mTitle || '', color: _ap.colorNo || 0, barcode: _ap.realBarcode || '' } };
+  if(n <= 0 && /^atl:/.test(bc)) delete _extraCartProducts[bc];
   if(Number(d)>0) shopFunnelTrack('cart',shopFunnelProduct(bc),{funnelCartQty:n});
   cartSave();
   renderShop();
@@ -2865,161 +3042,317 @@ window.shopSetGov = shopSetGov;
 window.shopInfoSet = shopInfoSet;
 
 
-/* ============================================================
-   🖼️ صفحة المنتج — الصور والوصف
-   ------------------------------------------------------------
-   ⚠️ الصور الإضافية في **مستند منفصل** وبتتحمّل عند الفتح بس.
-      حطّها في مستند الكتالوج معناه إن كل عميلة بتحمّل صور كل
-      المنتجات عشان تشوف الشبكة — وحد المستند ١ ميجا بيتكسر بعد
-      ٣ منتجات.
-   ⚠️ والتحميل **مرة واحدة لكل منتج في الجلسة** (`_shopImgCache`):
-      من غير الكاش، كل فتحة للمنتج = قراءة جديدة.
-   ============================================================ */
-var _shopImgCache = {};
-var _shopOpenItem = null;
-
-function shopOpenItem(bc){
-  var p = shopItems().filter(function(x){ return String(x.barcode) === String(bc); })[0];
-  if(!p) return;
-  _shopOpenItem = p;
-  shopRenderItemSheet([p.img].filter(Boolean));      // الصورة المصغّرة فورًا
-  var key = String(p.id || p.barcode);
-  if(_shopImgCache[key]){ shopRenderItemSheet(_shopImgCache[key]); return; }
-  db.collection(COL_SETTINGS).doc(SHOP_DOC + '_img_' + key).get()
-    .then(function(d){
-      var imgs = (d.exists && Array.isArray(d.data().images)) ? d.data().images : [];
-      if(!imgs.length) imgs = [p.img].filter(Boolean);
-      _shopImgCache[key] = imgs;
-      if(_shopOpenItem && String(_shopOpenItem.barcode) === String(bc)) shopRenderItemSheet(imgs);
-    })
-    .catch(function(){ /* مفيش صور زيادة — المصغّرة كفاية */ });
-}
-window.shopOpenItem = shopOpenItem;
-
-function shopRenderItemSheet(imgs){
-  var p = _shopOpenItem; if(!p) return;
-  var bc = String(p.barcode), q = shopQty(bc);
-  var body = '<div class="pv-gal">'
-    + (imgs || []).map(function(u){ return '<img src="' + esc(u) + '" alt="">'; }).join('')
-    + '</div>'
-    + ((imgs || []).length > 1
-        ? '<div class="pv-dots">' + imgs.map(function(){ return '<span></span>'; }).join('') + '</div>'
-        : '')
-    + '<div class="pv-name">' + esc(p.name || 'منتج') + '</div>'
-    + '<div class="pv-price">' + fmt(p.price) + ' ج.م</div>'
-    + (p.desc ? '<div class="pv-desc">' + esc(p.desc) + '</div>' : '')
-    + (q
-      ? '<div class="qbar" style="margin-top:14px;">'
-        + '<button onclick="shopAdd(\'' + esc(bc) + '\',-1)">−</button><b>' + q + '</b>'
-        + '<button onclick="shopAdd(\'' + esc(bc) + '\',1)">+</button></div>'
-      : '<button class="btn-primary" style="margin-top:14px;" onclick="shopAdd(\'' + esc(bc) + '\',1)">➕ ضيفيه للسلة</button>');
-  showSheet('', body);
-}
-window.shopRenderItemSheet = shopRenderItemSheet;
-
-
-/* ============================================================
-   🖼️ صفحة المنتج — الصور والوصف
-   ------------------------------------------------------------
-   ⚠️ الصور الإضافية في **مستند منفصل** بتتحمّل بس لما العميلة
-      تفتح المنتج. لو كانت في مستند الكتالوج، كل عميلة بتفتح
-      «اطلبي» كانت هتنزّل صور كل المنتجات — بيانات موبايل بتتحرق
-      على حاجات محدش بصّ عليها.
-   ⚠️ والتحميل **مرة واحدة لكل منتج في الجلسة** (`_shopImgCache`).
-   ============================================================ */
 var _shopImgCache = {};
 var _shopOpenItem = null;
 var _shopImgIdx = 0;
 
-function shopOpenItem(bc){
-  var p = shopItems().filter(function(x){ return String(x.barcode) === String(bc); })[0];
+/* ============================================================
+   🛍️ v722 — شاشة «اطلبي»: موديلات + ألوان + صفحة منتج كاملة + تجربة
+   ============================================================ */
+var _shopLine = 'all';
+var _mSel = {};                 // { مفتاح الموديل: مفتاح اللون المختار }
+var _shopView = [];             // الموديلات المعروضة دلوقتي (بالرقم في onclick)
+var _shopOpenModel = null;
+var SVG_PLUS = '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>';
+var SVG_SPARK = '<svg viewBox="0 0 24 24"><path d="M12 3.5l1.7 4.8 4.8 1.7-4.8 1.7L12 16.5l-1.7-4.8L5.5 10l4.8-1.7z" stroke-linejoin="round"/><path d="M18.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" stroke-linejoin="round"/></svg>';
+var SVG_BACK = '<svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+function shopModelActive(m){
+  var k = _mSel[m.key];
+  for(var i = 0; i < m.items.length; i++) if(m.items[i].key === k || String(m.items[i].barcode) === k) return m.items[i];
+  return m.items[0];
+}
+function shopSetLine(id){ _shopLine = id || 'all'; renderShop(); try{ window.scrollTo({ top: 0, behavior: 'smooth' }); }catch(e){} }
+window.shopSetLine = shopSetLine;
+function shopPickColor(mi, ii){
+  var m = _shopView[mi]; if(!m || !m.items[ii]) return;
+  _mSel[m.key] = m.items[ii].barcode;
+  var card = document.querySelector('.shop-card[data-mi="' + mi + '"]');
+  if(!card){ renderShop(); return; }
+  var p = m.items[ii];
+  var img = card.querySelector('.sc-media img'); if(img && p.img) img.src = p.img;
+  card.querySelectorAll('.sc-dot').forEach(function(d, i){ d.classList.toggle('on', i === ii); });
+  var pr = card.querySelector('.sc-price'); if(pr) pr.innerHTML = shopPriceHTML(p.price);
+  var cl = card.querySelector('.sc-color'); if(cl) cl.textContent = p.colorName || '';
+  var act = card.querySelector('.sc-act'); if(act) act.outerHTML = shopCardActHTML(p);
+}
+window.shopPickColor = shopPickColor;
+function shopPriceHTML(n){ return Number(n) > 0 ? fmt(n) + '<small>ج.م</small>' : '<small>السعر بنأكّده معاكِ</small>'; }
+function shopCardActHTML(p){
+  var bc = esc(String(p.barcode)), q = shopQty(String(p.barcode));
+  return q
+    ? '<div class="sc-act sc-qty" onclick="event.stopPropagation()"><button aria-label="أقل" onclick="shopAdd(\'' + bc + '\',-1)">−</button>'
+      + '<b>' + q + '</b><button aria-label="أكتر" onclick="shopAdd(\'' + bc + '\',1)">+</button></div>'
+    : '<button class="sc-act sc-add" aria-label="أضيفي للسلة" onclick="event.stopPropagation(); shopAdd(\'' + bc + '\',1)">' + SVG_PLUS + '</button>';
+}
+function shopCardHTML(m, mi, wide){
+  var p = shopModelActive(m), n = m.items.length;
+  var dots = '';
+  if(n > 1){
+    var max = wide ? 7 : 5;
+    dots = '<div class="sc-dots" onclick="event.stopPropagation()">' + m.items.slice(0, max).map(function(v, i){
+      return '<button class="sc-dot' + (v === p ? ' on' : '') + '" aria-label="' + esc(v.colorName || ('لون ' + (i + 1))) + '" onclick="shopPickColor(' + mi + ',' + i + ')">'
+        + (v.img ? '<img src="' + esc(v.img) + '" alt="" loading="lazy">' : '') + '</button>';
+    }).join('') + (n > max ? '<span class="sc-more">+' + (n - max) + '</span>' : '') + '</div>';
+  }
+  return '<div class="shop-card' + (wide ? ' wide' : '') + '" data-mi="' + mi + '" onclick="shopOpenModel(' + mi + ')">'
+    + '<div class="sc-media">'
+      + (p.img ? '<img src="' + esc(p.img) + '" alt="' + esc(m.title) + '"' + (wide ? '' : ' loading="lazy"') + '>' : '<div class="sc-ph">echarpe</div>')
+      + (p.img ? '<button class="sc-try" onclick="event.stopPropagation(); shopTryOn(\'' + esc(String(p.barcode)) + '\')">' + SVG_SPARK + '<span>جرّبيها</span></button>' : '')
+      + shopCardActHTML(p)
+    + '</div>'
+    + dots
+    + '<div class="sc-name">' + esc(m.title) + '</div>'
+    + (n > 1 ? '<div class="sc-sub"><span class="sc-color">' + esc(p.colorName || '') + '</span>' + (p.colorName ? ' · ' : '') + n + ' ألوان</div>' : '')
+    + '<div class="sc-price">' + shopPriceHTML(p.price) + '</div>'
+    + '</div>';
+}
+function shopBrowseHTML(){
+  var all = shopModels();
+  var lines = [], seenL = {};
+  all.forEach(function(m){ var l = m.line || 'other'; if(!seenL[l]){ seenL[l] = 1; lines.push(l); } });
+  if(_shopLine !== 'all' && !seenL[_shopLine]) _shopLine = 'all';
+  _shopView = all.filter(function(m){ return _shopLine === 'all' || (m.line || 'other') === _shopLine; });
+  var colors = all.reduce(function(s, m){ return s + m.items.length; }, 0);
+  var loading = CATALOG_BRAND === 'echarpe' && !_atelierReady;
+  var head = '<div class="bq-head">'
+    + '<div class="bq-kick">ECHARPE · THE COLLECTION</div>'
+    + '<h2 class="bq-title">المجموعة</h2>'
+    + '<p class="bq-sub">' + (all.length ? all.length + ' موديل · ' + colors + ' لون — ' : '') + 'جرّبي أي قطعة عليكِ قبل ما تطلبي، واستلمي من الفرع أو توصلك لحد البيت.</p>'
+    + '</div>';
+  var chips = lines.length > 1 ? '<div class="bq-lines" role="tablist">'
+    + '<button class="' + (_shopLine === 'all' ? 'on' : '') + '" onclick="shopSetLine(\'all\')">الكل</button>'
+    + lines.map(function(l){
+        return '<button class="' + (_shopLine === l ? 'on' : '') + '" onclick="shopSetLine(\'' + esc(atlSafe(l)) + '\')">' + esc(shopLineName(l)) + '</button>';
+      }).join('') + '</div>' : '';
+  if(!_shopView.length && !loading)
+    return head + '<div class="empty"><span class="big">🛍️</span>لسه مفيش منتجات معروضة للتصفّح.</div>';
+  var grid = '<div class="prod-grid">' + _shopView.map(function(m, i){
+    // كل ٧ كروت: كارت عريض (إيقاع مجلة) — الأول دايمًا
+    return shopCardHTML(m, i, i % 7 === 0);
+  }).join('')
+    + (loading ? [0, 1, 2, 3].map(function(){ return '<div class="shop-card sk"><div class="sc-media"></div><i></i><i></i></div>'; }).join('') : '')
+    + '</div>';
+  return head + chips + grid;
+}
+
+/* ---------------- صفحة المنتج ---------------- */
+function shopOpenModel(mi, itemKey){
+  var m = typeof mi === 'number' ? _shopView[mi] : mi;
+  if(!m) return;
+  var p = itemKey ? (m.items.filter(function(x){ return String(x.barcode) === String(itemKey); })[0] || shopModelActive(m)) : shopModelActive(m);
+  shopOpenPiece(p, m);
+}
+window.shopOpenModel = shopOpenModel;
+function shopOpenPiece(p, m){
   if(!p) return;
-  shopFunnelTrack('view',p);
-  _shopOpenItem = p; _shopImgIdx = 0;
+  shopFunnelTrack('view', p);
+  _shopOpenItem = p; _shopOpenModel = m || shopModelOf(p); _shopImgIdx = 0;
+  _mSel[_shopOpenModel.key] = p.barcode;
+  document.body.classList.add('pd-open');
   renderShopDetail();
-  var key = String(p.id || p.barcode);
-  if(_shopImgCache[key]){ renderShopDetail(); return; }
-  if(p.atelier){
-    // 🪞 قطعة أتيليه: الصورة الكاملة (_f_) + صور اللون الزيادة (_x_)
-    var ac = db.collection(COL_SETTINGS), aid = p.atelierId;
-    Promise.all([
-      ac.doc('atelier_echarpe_f_' + aid).get().catch(function(){ return null; }),
-      ac.doc('atelier_echarpe_x_' + aid).get().catch(function(){ return null; })
+  var el = $('shopDetail'); if(el) el.scrollTop = 0;
+  shopLoadImages(p).then(function(){ if(_shopOpenItem === p) renderShopDetail(); });
+}
+function shopOpenItem(bc){
+  var p = shopPieceByKey(bc);
+  if(p) shopOpenPiece(p);
+}
+window.shopOpenItem = shopOpenItem;
+function shopPickDetailColor(i){
+  var m = _shopOpenModel; if(!m || !m.items[i]) return;
+  var keepScroll = ($('shopDetail') || {}).scrollTop || 0;
+  _shopOpenItem = m.items[i]; _shopImgIdx = 0; _mSel[m.key] = m.items[i].barcode;
+  renderShopDetail();
+  var el = $('shopDetail'); if(el) el.scrollTop = keepScroll;
+  var p = m.items[i];
+  shopLoadImages(p).then(function(){ if(_shopOpenItem === p){ renderShopDetail(); var e2 = $('shopDetail'); if(e2) e2.scrollTop = keepScroll; } });
+}
+window.shopPickDetailColor = shopPickDetailColor;
+
+/* 🖼️ صور القطعة بأعلى جودة — مرة واحدة لكل قطعة في الجلسة:
+   · لوحة الأتيليه: الكاملة (١١٠٠px) + صور اللون الزيادة
+   · الدار: صورة الملف + صوره الزيادة
+   · الأونلاين: مستند الصور بتاعه */
+var _shopImgP = {};
+function shopLoadImages(p){
+  var key = String(p.barcode);
+  if(_shopImgCache[key]) return Promise.resolve(_shopImgCache[key]);
+  if(_shopImgP[key]) return _shopImgP[key];
+  var col = db.collection(COL_SETTINGS), pr;
+  if(p.atelier && p.house){
+    pr = Promise.resolve([p.img].concat(p.gallery || []).filter(Boolean));
+  } else if(p.atelier){
+    pr = Promise.all([
+      col.doc('atelier_echarpe_f_' + p.docId).get().catch(function(){ return null; }),
+      col.doc('atelier_echarpe_x_' + p.docId).get().catch(function(){ return null; })
     ]).then(function(r){
       var full = r[0] && r[0].exists ? String(r[0].data().img || '') : '';
       var gal = r[1] && r[1].exists && Array.isArray(r[1].data().imgs) ? r[1].data().imgs : [];
-      _shopImgCache[key] = [full].concat(gal).filter(function(u){ return /^data:image\//.test(String(u || '')); });
-      if(_shopOpenItem && String(_shopOpenItem.barcode) === String(bc)) renderShopDetail();
+      var arr = [full || p.img].concat(gal).filter(function(u){ return /^data:image\//.test(String(u || '')); });
+      return arr.length ? arr : [p.img].filter(Boolean);
     });
-    return;
-  }
-  db.collection(COL_SETTINGS).doc('online_shop_' + CATALOG_BRAND + '_img_' + (p.id || ''))
-    .get().then(function(d){
+  } else {
+    pr = col.doc('online_shop_' + CATALOG_BRAND + '_img_' + (p.id || '')).get().then(function(d){
       var arr = (d.exists && Array.isArray(d.data().images)) ? d.data().images : [];
-      _shopImgCache[key] = arr;
-      if(_shopOpenItem && String(_shopOpenItem.barcode) === String(bc)) renderShopDetail();
-    }).catch(function(){ _shopImgCache[key] = []; });
+      var extra = arr.filter(function(u){ return u && u !== p.img; });
+      return (p.img ? [p.img] : []).concat(extra);   // الغلاف أول صورة — العميلة دوست عليه
+    }).catch(function(){ return [p.img].filter(Boolean); });
+  }
+  _shopImgP[key] = pr.then(function(arr){ _shopImgCache[key] = arr; delete _shopImgP[key]; return arr; });
+  return _shopImgP[key];
 }
-window.shopOpenItem = shopOpenItem;
-
+function shopDetailImages(){
+  var p = _shopOpenItem; if(!p) return [];
+  return _shopImgCache[String(p.barcode)] || (p.img ? [p.img] : []);
+}
 function shopCloseItem(){
-  _shopOpenItem = null;
+  _shopOpenItem = null; _shopOpenModel = null;
+  document.body.classList.remove('pd-open');
   var el = $('shopDetail'); if(el){ el.classList.remove('on'); el.innerHTML = ''; }
 }
 window.shopCloseItem = shopCloseItem;
-
 function shopImgGo(d){
-  var imgs = shopDetailImages();
-  if(!imgs.length) return;
+  var g = $('pdGal'), imgs = shopDetailImages(); if(!g || !imgs.length) return;
   _shopImgIdx = (_shopImgIdx + d + imgs.length) % imgs.length;
-  renderShopDetail();
+  g.scrollTo({ left: _shopImgIdx * g.clientWidth, behavior: 'smooth' });
 }
 window.shopImgGo = shopImgGo;
-
-function shopDetailImages(){
-  var p = _shopOpenItem; if(!p) return [];
-  var extra = _shopImgCache[String(p.id || p.barcode)] || [];
-  // 🪞 الأتيليه: الكاملة بتحل محل المصغّرة (نفس الصورة بجودة أعلى — مش نسختين)
-  if(p.atelier && extra.length) return extra;
-  /* 🖼️ الغلاف الأول دايمًا — العميلة دوست عليه، فلازم تلاقيه. */
-  return (p.img ? [p.img] : []).concat(extra);
+function pdGalScroll(g){
+  var i = Math.round(g.scrollLeft / Math.max(1, g.clientWidth));
+  if(i === _shopImgIdx) return;
+  _shopImgIdx = i;
+  var c = $('pdIdx'); if(c) c.textContent = String(i + 1);
+  document.querySelectorAll('#shopDetail .pd-bar i').forEach(function(s, k){ s.classList.toggle('on', k === i); });
 }
+window.pdGalScroll = pdGalScroll;
+function shopZoom(){ var imgs = shopDetailImages(); if(imgs[_shopImgIdx]) chatImgZoom(imgs[_shopImgIdx]); }
+window.shopZoom = shopZoom;
 
 function renderShopDetail(){
   var el = $('shopDetail'); if(!el) return;
   var p = _shopOpenItem;
   if(!p){ el.classList.remove('on'); el.innerHTML = ''; return; }
-  var imgs = shopDetailImages();
-  var q = shopQty(String(p.barcode));
-  var loading = !_shopImgCache[String(p.id || p.barcode)];
+  var m = _shopOpenModel || shopModelOf(p);
+  // القطعة اتحدّثت (المجموعة خلصت تحميل) — ناخد النسخة الجديدة
+  if(p.atelier && _atlByKey[p.key] && _atlByKey[p.key] !== p){ p = _shopOpenItem = _atlByKey[p.key]; m = _shopOpenModel = shopModelOf(p); }
+  var imgs = shopDetailImages(), bc = String(p.barcode), q = shopQty(bc), n = m.items.length;
+  var loading = !_shopImgCache[bc];
+  var gal = imgs.length
+    ? imgs.map(function(u){ return '<img src="' + esc(u) + '" alt="" onclick="shopZoom()">'; }).join('')
+    : '<div class="pd-ph">echarpe</div>';
+  var bar = imgs.length > 1 ? '<div class="pd-bar">' + imgs.map(function(_, i){ return '<i class="' + (i === 0 ? 'on' : '') + '"></i>'; }).join('') + '</div>' : '';
+  var colors = n > 1 ? '<div class="pd-sec"><span>اللون</span><b>' + esc(p.colorName || ('لون ' + (p.colorNo || 1))) + '</b><em>' + n + ' ألوان</em></div>'
+    + '<div class="pd-sw">' + m.items.map(function(v, i){
+        return '<button class="' + (v === p ? 'on' : '') + '" aria-label="' + esc(v.colorName || ('لون ' + (i + 1))) + '" onclick="shopPickDetailColor(' + i + ')">'
+          + (v.img ? '<img src="' + esc(v.img) + '" alt="">' : '') + '</button>';
+      }).join('') + '</div>' : '';
+  var rail = shopModels().filter(function(x){ return x.key !== m.key && (x.line || 'other') === (m.line || 'other'); });
+  if(rail.length < 3) rail = rail.concat(shopModels().filter(function(x){ return x.key !== m.key && rail.indexOf(x) < 0; })).slice(0, 10);
+  rail = rail.slice(0, 10);
+  _pdRail = rail;
+  var railHTML = rail.length ? '<div class="pd-rail-h">ممكن يعجبكِ كمان</div><div class="pd-rail">' + rail.map(function(x, i){
+      var a = shopModelActive(x);
+      return '<button onclick="shopOpenRail(' + i + ')">' + (a.img ? '<img src="' + esc(a.img) + '" alt="" loading="lazy">' : '<span class="pd-ph">echarpe</span>')
+        + '<b>' + esc(x.title) + '</b><small>' + (Number(a.price) > 0 ? fmt(a.price) + ' ج.م' : '') + '</small></button>';
+    }).join('') + '</div>' : '';
+  var tryBtn = p.img ? '<button class="pd-try" onclick="shopTryOn(\'' + esc(bc) + '\')">' + SVG_SPARK + '<span>جرّبيها عليكِ</span></button>' : '';
+  var buy = q
+    ? '<div class="pd-q"><button aria-label="أقل" onclick="shopAdd(\'' + esc(bc) + '\',-1)">−</button><b>' + q + '</b><button aria-label="أكتر" onclick="shopAdd(\'' + esc(bc) + '\',1)">+</button></div>'
+      + '<button class="pd-add" onclick="shopCloseItem(); openQuickCheckout()">كمّلي الطلب</button>'
+    : '<button class="pd-add" onclick="shopAdd(\'' + esc(bc) + '\',1); showToast(\'اتضافت للسلة 🛍️\')">أضيفي للسلة' + (Number(p.price) > 0 ? ' · ' + fmt(p.price) + ' ج.م' : '') + '</button>';
 
   el.innerHTML =
-    '<div class="sd-head"><button class="sd-x" onclick="shopCloseItem()">✕</button>'
-      + '<b>' + esc(p.name || 'منتج') + '</b></div>'
-    + '<div class="sd-imgwrap">'
-      + (imgs.length
-          ? '<img class="sd-img" src="' + esc(imgs[_shopImgIdx]) + '" alt="">'
-          : '<div class="sd-ph">🧕</div>')
-      + (imgs.length > 1
-          ? '<button class="sd-nav prev" onclick="shopImgGo(-1)">‹</button>'
-            + '<button class="sd-nav next" onclick="shopImgGo(1)">›</button>' : '')
+    '<div class="pd-media">'
+      + '<div class="pd-gal" id="pdGal" dir="ltr" onscroll="pdGalScroll(this)">' + gal + '</div>'
+      + '<button class="pd-x" onclick="shopCloseItem()" aria-label="رجوع">' + SVG_BACK + '</button>'
+      + (imgs.length > 1 ? '<div class="pd-count"><b id="pdIdx">1</b> / ' + imgs.length + '</div>' : '')
+      + (loading ? '<div class="pd-ld"><i></i></div>' : '')
+      + bar
     + '</div>'
-    + (imgs.length > 1
-        ? '<div class="sd-dots">' + imgs.map(function(_, i){
-            return '<span class="' + (i === _shopImgIdx ? 'on' : '') + '"></span>';
-          }).join('') + '</div>'
-        : (loading ? '<div class="sd-dots"><span class="ld">…</span></div>' : ''))
-    + '<div class="sd-body">'
-      + '<div class="sd-price">' + fmt(p.price) + ' ج.م</div>'
-      + (p.desc ? '<div class="sd-desc">' + esc(p.desc) + '</div>' : '')
-      + (q
-        ? '<div class="qbar sd-q"><button onclick="shopAdd(\'' + esc(String(p.barcode)) + '\',-1)">−</button>'
-          + '<b>' + q + '</b><button onclick="shopAdd(\'' + esc(String(p.barcode)) + '\',1)">+</button></div>'
-        : '<button class="btn-primary" onclick="shopAdd(\'' + esc(String(p.barcode)) + '\',1)">أضيفي للسلة</button>')
-    + '</div>';
+    + '<div class="pd-body">'
+      + '<div class="pd-kick">' + esc(shopLineName(m.line || (p.atelier ? p.line : 'shop'))) + '</div>'
+      + '<h1 class="pd-title">' + esc(m.title) + '</h1>'
+      + '<div class="pd-price">' + shopPriceHTML(p.price) + '</div>'
+      + (p.desc ? '<div class="pd-desc">' + esc(p.desc) + '</div>' : '')
+      + colors
+      + '<ul class="pd-serv">'
+        + '<li><span>✦</span>جرّبيها بصورتكِ قبل ما تطلبي — النتيجة في ثواني</li>'
+        + '<li><span>◇</span>استلام من الفرع (الرحاب · مدينتي · سيتي سنتر)</li>'
+        + '<li><span>○</span>شحن لحد البيت · الدفع عند الاستلام</li>'
+      + '</ul>'
+      + railHTML
+    + '</div>'
+    + '<div class="pd-cta">' + tryBtn + buy + '</div>';
   el.classList.add('on');
 }
 window.renderShopDetail = renderShopDetail;
+var _pdRail = [];
+function shopOpenRail(i){ var m = _pdRail[i]; if(m){ shopOpenPiece(shopModelActive(m), m); } }
+window.shopOpenRail = shopOpenRail;
+
+/* 🪞 «جرّبيها عليكِ» — نفس تجربة الشات (tryon/photo.html جوّه overlay)
+   بأعلى صورة للقطعة. «أضيفيها للسلة» من هناك بترجع بالمفتاح ده نفسه. */
+function shopTryImage(p){
+  return shopLoadImages(p).then(function(arr){
+    var src = arr[0] || p.img;
+    if(/^data:image\//.test(String(src || ''))) return src;
+    if(!src) return '';
+    return new Promise(function(res){
+      var im = new Image();
+      im.onload = function(){
+        try{
+          var k = Math.min(1, 1100 / Math.max(im.naturalWidth, im.naturalHeight));
+          var c = document.createElement('canvas');
+          c.width = Math.round(im.naturalWidth * k); c.height = Math.round(im.naturalHeight * k);
+          c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+          res(c.toDataURL('image/jpeg', 0.88));
+        }catch(e){ res(''); }
+      };
+      im.onerror = function(){ res(''); };
+      im.src = src;
+    });
+  });
+}
+function shopTryOn(key){
+  var p = shopPieceByKey(key); if(!p) return;
+  try{ shopFunnelTrack('tryon', p, { funnelFromShop:true }); }catch(e){}
+  shopTryImage(p).then(function(img){
+    if(!img){ showToast('الصورة دي مش جاهزة للتجربة — جرّبي لون تاني', true); return; }
+    try{
+      sessionStorage.setItem('echarpe_tryon_img', img);
+      sessionStorage.setItem('echarpe_tryon_phone', (currentCustomer && currentCustomer.phone) || '');
+      sessionStorage.setItem('echarpe_tryon_pid', String(p.barcode));
+      sessionStorage.removeItem('echarpe_tryon_bandana_colors');
+      sessionStorage.removeItem('echarpe_tryon_bandana_pid');
+    }catch(e){ showToast('مساحة التخزين مليانة — اقفلي التطبيق وافتحيه تاني', true); return; }
+    tryonOverlayOpen('loyalty');
+  });
+}
+window.shopTryOn = shopTryOn;
+
+/* 🧾 طلب أتيليه للقطع «atl:…» — نفس atelierOrderPlace بتاع الموقع
+   (السعر والصورة من السيرفر). */
+function shopAtlLine(l){ return /^atl:/.test(String(l && l.barcode || '')); }
+var ATL_ERR = { NAME: 'اكتبي اسمكِ', PHONE: 'رقم الموبايل مش مظبوط (01xxxxxxxxx)', ADDRESS: 'اكتبي المحافظة والعنوان بالتفصيل', BRANCH: 'اختاري الفرع', ITEMS: 'القطع دي مش متاحة دلوقتي' };
+function placeAtelierOrder(atlLines, info){
+  var items = [];
+  atlLines.forEach(function(l){
+    var x = _extraCartProducts[l.barcode] || {}, a = x.atl || {}, p = _atlByKey[l.barcode];
+    if(p) a = { docId: p.house ? '' : p.docId, house: p.house ? 'collection/' + p.houseKey + '.jpg' : '', model: p.mTitle || '', color: p.colorNo || 0, barcode: p.realBarcode || '' };
+    for(var i = 0; i < l.qty; i++) items.push({ docId: a.docId || '', barcode: a.barcode || '', name: l.name, model: a.model || '', color: a.color || 0, img: a.house || '' });
+  });
+  var payload = { name: info.name, phone: info.phone, fulfillment: _shopFulfill === 'delivery' ? 'delivery' : 'pickup',
+    governorate: info.governorate, address: info.address, branch: _shopBranch,
+    notes: ('من «اطلبي» في التطبيق' + (_shopFulfill !== 'delivery' ? ' · الدفع في الفرع: ' + (_shopPay === 'visa' ? 'فيزا' : 'كاش') : '') + (info.notes ? ' · ' + info.notes : '')).slice(0, 300),
+    source: 'app', items: items.slice(0, 10) };
+  return firebase.app('loyalty').functions('us-central1').httpsCallable('atelierOrderPlace')(payload)
+    .then(function(r){ return (r && r.data) || {}; })
+    .catch(function(e){
+      var msg = ATL_ERR[String(e && e.message || '')] || (e && e.code && /resource-exhausted/.test(e.code) ? e.message : '');
+      if(msg){ showToast(msg, true); e = new Error('validate'); }
+      throw e;
+    });
+}
 
 /* 🪞 غرفة القياس (الأتيليه) جوّه «اطلبي» — نفس overlay تجربة الطرحة
    (tryonOverlay)، والطلب بيرجع هنا للسلة الحقيقية (atelier-order). */
@@ -3190,40 +3523,8 @@ function renderShop(){
     return;
   }
 
-  var items = shopItems();
-  var head = '<div class="sec-h">اطلبي <span class="em">أونلاين</span></div>'
-    + '<div style="font-size:12.5px; line-height:1.9; opacity:.85; margin-bottom:12px;">'
-    + 'اختاري اللي عايزاه، وحدّدي الفرع اللي هتستلمي منه. بنحجزلك ٢٤ ساعة.</div>';
-
-  if(!items.length){
-    // 🛍️ السلة **مش** بتتعرض في شاشة التصفّح — مكانها الوحيد أيقونة
-    //    السلة فوق (وضع cartOnly). أي أصناف في السلة بتبان في الشارة
-    //    على الأيقونة، والعميلة بتفتحها من هناك تكمّل الطلب.
-    box.innerHTML = head + '<div class="empty"><span class="big">🛍️</span>لسه مفيش منتجات معروضة للتصفّح.</div>';
-    return;
-  }
-
-  var grid = '<div class="prod-grid">' + items.map(function(p){
-    var bc = String(p.barcode), q = shopQty(bc);
-    /* 👆 الكارت كله بيفتح صفحة المنتج — الصور والوصف.
-       ⚠️ زراير الكمية جوّه بتوقف الانتشار، وإلا كل زيادة كمية
-          بتفتح الصفحة كمان. */
-    return '<div class="shop-card" onclick="shopOpenItem(\'' + esc(bc) + '\')" style="cursor:pointer;">'
-      + '<div class="sc-media">'
-        + (p.img ? '<img src="' + esc(p.img) + '" alt="" loading="lazy">' : '<div class="sc-ph">echarpe</div>')
-        + (q
-          ? '<div class="sc-qty" onclick="event.stopPropagation()"><button aria-label="أقل" onclick="shopAdd(\'' + esc(bc) + '\',-1)">−</button>'
-            + '<b>' + q + '</b><button aria-label="أكتر" onclick="shopAdd(\'' + esc(bc) + '\',1)">+</button></div>'
-          : '<button class="sc-add" aria-label="أضيفي للسلة" onclick="event.stopPropagation(); shopAdd(\'' + esc(bc) + '\',1)">'
-            + '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg></button>')
-      + '</div>'
-      + '<div class="sc-name">' + esc(p.name || 'منتج') + '</div>'
-      + '<div class="sc-price">' + fmt(p.price) + '<small>ج.م</small></div>'
-      + '</div>';
-  }).join('') + '</div>';
-
   // 🛍️ التصفّح بس — السلة مكانها أيقونة السلة فوق (وضع cartOnly).
-  box.innerHTML = head + grid;
+  box.innerHTML = shopBrowseHTML();
   /* 🔗 Deep-link لمنتج واحد فقط — بعد رسم الكتالوج، مش أثناء تحميله.
      كده مفيش تحميل صور جماعي ولا shopOpenItem لكل المنتجات. */
   if(!_shopDeepOpened){
@@ -3245,8 +3546,11 @@ window.renderShop = renderShop;
 function shopSubmit(){
   if(_shopSending) return;
   if(!currentCustomer){ showToast('سجّلي دخولك الأول', true); return; }
-  var lines = shopCartLines();
-  if(!lines.length){ showToast('السلة فاضية', true); return; }
+  var allLines = shopCartLines();
+  if(!allLines.length){ showToast('السلة فاضية', true); return; }
+  // 🪞 v722: قطع الأتيليه «atl:…» بتتطلب بـatelierOrderPlace، والباقي سلة POS العادية
+  var atlLines = allLines.filter(shopAtlLine);
+  var lines = allLines.filter(function(l){ return !shopAtlLine(l); });
   if(!_shopBranch){ showToast(_shopFulfill === 'delivery' ? 'اختاري الفرع اللي هيتشحن منه' : 'اختاري الفرع اللي هتستلمي منه', true); return; }
 
   /* 👤 بيانات التوصيل — الاسم والرقم بييجوا من الحساب، وهي بتكمّل
@@ -3262,7 +3566,7 @@ function shopSubmit(){
   var vc = orderValidateContact(info, _shopFulfill);
   if(!vc.ok){ showToast(vc.errors[0], true); return; }
 
-  shopFunnelTrack('checkout',lines[0]||null,{funnelCartValue:orderTotal(lines),funnelCartItems:lines.reduce(function(a,x){return a+(Number(x.qty)||0);},0)});
+  shopFunnelTrack('checkout',allLines[0]||null,{funnelCartValue:orderTotal(allLines),funnelCartItems:allLines.reduce(function(a,x){return a+(Number(x.qty)||0);},0)});
   _shopSending = true;
   var btn = $('shopSendBtn');
   if(btn){ btn.disabled = true; btn.textContent = 'بيتبعت…'; }
@@ -3277,6 +3581,7 @@ function shopSubmit(){
       .then(function(d){ return d.exists ? Object.assign({ barcode:String(l.barcode) }, d.data()) : null; })
       .catch(function(){ return null; });
   })); }).then(function(prods){
+    if(!lines.length) return null;         // السلة كلها أتيليه
     var chk = orderValidateCart(
       lines.map(function(l){ return { barcode:l.barcode, qty:l.qty }; }),
       prods.filter(Boolean), _shopBranch, Date.now(),
@@ -3346,14 +3651,35 @@ function shopSubmit(){
       return db.collection(ORD_COL).add(doc).then(function(){ return doc; });
     }
   }).then(function(doc){
-    shopFunnelTrack('order',lines[0]||null,{funnelOrderCode:doc.code||'',funnelOrderAt:Date.now(),followUpDueAt:0});
-    _shopCart = {};
+    if(doc){
+      shopFunnelTrack('order',lines[0]||null,{funnelOrderCode:doc.code||'',funnelOrderAt:Date.now(),followUpDueAt:0});
+      lines.forEach(function(l){ delete _shopCart[l.barcode]; });
+      cartSave();
+    }
+    if(!atlLines.length) return { doc: doc };
+    return placeAtelierOrder(atlLines, info).then(function(a){
+      try{ shopFunnelTrack('order', atlLines[0], { funnelFromAtelier:true, funnelOrderCode:String(a.code||'').slice(0,20), funnelOrderAt:Date.now(), funnelOrderTotal:Number(a.total)||0, funnelOrderCol:'atelier_orders', followUpDueAt:0 }); }catch(e){}
+      atlLines.forEach(function(l){ delete _shopCart[l.barcode]; delete _extraCartProducts[l.barcode]; });
+      cartSave();
+      return { doc: doc, atl: a };
+    }, function(e){
+      // الجزء الأول (POS) اتسجّل — منضيّعهوش، والباقي يفضل في السلة
+      if(doc){ renderShop(); showToast('اتسجّل أوردر ' + doc.code + ' — باقي القطع ماتبعتتش، جرّبي تاني', true); e = new Error('validate'); }
+      throw e;
+    });
+  }).then(function(r){
+    var doc = r.doc, a = r.atl;
     _shopInfo.address = ''; _shopInfo.notes = '';
     cartSave();              // 💾 السلة المحفوظة اتفضّت هي كمان — مش هترجع بعد أوردر ناجح
     closeQuickCheckout();    // لو الطلب اتفتح كـoverlay فوق الشات، نقفله بعد النجاح
     renderShop();
-    showToast('تمام ✅ أوردر رقم ' + doc.code);
-    openMyOrders();
+    var codes = [doc && doc.code, a && a.code].filter(Boolean).join(' و ');
+    if(!a) showToast('تمام ✅ أوردر رقم ' + codes);
+    if(doc && !a) openMyOrders();
+    else if(a) showSheet('', '<div class="atl-done"><div class="ad-ic">✦</div><b>طلبكِ اتسجّل</b>'
+      + '<div class="ad-code">' + esc(codes) + '</div>'
+      + '<p>' + (_shopFulfill === 'delivery' ? 'هنكلّمكِ على رقمكِ نأكّد الطلب والشحن' : 'هنكلّمكِ نأكّد ونجهّزهالكِ في فرع ' + esc(_shopBranch)) + '. الإجمالي ' + fmt(a.total || 0) + ' ج.م.</p>'
+      + (doc ? '<button class="btn-outline" onclick="openMyOrders()">أوردراتي</button>' : '') + '</div>');
   }).catch(function(e){
     if(e && e.message !== 'validate'){
       console.warn('order send', e);
@@ -4565,6 +4891,8 @@ window.closeQuickCheckout = closeQuickCheckout;
    بالظبط. لو الصنف أصلاً في الكتالوج المنسّق (byBc)، منستخدمش قراءة
    شبكة زيادة عن الحاجة. */
 function tryonVerifyCartItem(bc){
+  // 🪞 قطعة أتيليه من غير باركود — بياناتها معانا، مفيش مخزون نسأله
+  if(/^atl:/.test(String(bc)) && (_atlByKey[bc] || _extraCartProducts[bc])){ cartSave(); renderShop(); showToast('اتضافت للسلة 🛍️'); return; }
   var already = shopItems().filter(function(p){ return String(p.barcode) === bc; })[0];
   if(already){ showToast('اتضافت للسلة 🛍️'); return; }
   db.collection(COL_INVENTORY).doc(bc).get().then(function(d){
