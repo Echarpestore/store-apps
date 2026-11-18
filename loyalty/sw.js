@@ -1,4 +1,4 @@
-const CACHE_NAME = 'loyalty-shell-v721';
+const CACHE_NAME = 'loyalty-shell-v722';
 
 // ============ استقبال إشعارات Push (حتى والتطبيق مقفول) ============
 self.addEventListener('push', (event) => {
