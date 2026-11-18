@@ -72,6 +72,9 @@
   .app-btn{display:block; text-decoration:none; background:var(--accent); color:#fff; font-weight:900; font-size:16.5px; padding:15px; border-radius:14px; box-shadow:0 9px 20px rgba(214,93,139,.28); transition:transform .15s;}
   .app-btn:active{transform:scale(.98);}
   .app-sec small{display:block; margin-top:9px; color:var(--muted); font-size:12px;}
+  /* شارة Google Play الرسمية (من صفحة الشارات بتاعة جوجل — ممنوع نعدّل شكلها) */
+  .play-badge{display:inline-block; margin-top:12px; line-height:0;}
+  .play-badge img{height:62px; width:auto;}
   #offersSec{display:none;}
   .offers{display:grid; grid-template-columns:repeat(2,1fr); gap:11px;}
   .offer{background:var(--panel); border:1px solid var(--line); border-radius:15px; overflow:hidden; position:relative;}
@@ -306,8 +309,9 @@
       <div class="perk"><span>🎁</span>هدية ترحيب أول تسجيل</div>
       <div class="perk"><span>🏷️</span>عروض حصرية لأعضائنا</div>
     </div>
-    <a class="app-btn" href="loyalty/?src=site-home">حمّلي التطبيق دلوقتي</a>
-    <small>بيتفتح من المتصفح على طول — من غير متاجر ولا تحميل تقيل</small>
+    <a class="play-badge" href="https://play.google.com/store/apps/details?id=store.echarpe.loyalty&amp;utm_source=echarpe.store&amp;utm_medium=site-home" target="_blank" rel="noopener" aria-label="حمّلي تطبيق echarpe من Google Play"><img src="https://play.google.com/intl/en_us/badges/static/images/badges/ar_badge_web_generic.png" alt="احصل عليه من Google Play" width="210" height="62" loading="lazy"></a>
+    <small>على أندرويد من Google Play — أو افتحيه من المتصفح على طول:</small>
+    <a class="app-btn" href="loyalty/?src=site-home" style="margin-top:10px">افتحي التطبيق من المتصفح</a>
   </section>
   <section id="offersSec">
     <h2 class="sec-title">✨ أحدث عروضنا</h2>
