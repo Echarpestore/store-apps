@@ -789,6 +789,41 @@
   .atl-done b{display:block; font-family:var(--mx-f-display,serif); font-size:21px; font-weight:600;}
   .atl-done .ad-code{direction:ltr; letter-spacing:.18em; font-weight:600; margin:4px 0 8px;}
   .atl-done p{font-size:13px; color:var(--muted); margin:0 0 14px;}
+  /* 🛍️ v723 — الرئيسية: «من المجموعة» + زرار الشات */
+  .home-shop{margin:26px 0 8px;}
+  .hs-head{display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin-bottom:12px;}
+  .hs-kick{display:block; font-family:var(--mx-f-mark,serif); direction:ltr; text-align:right; font-size:10px; letter-spacing:.3em; color:var(--muted);}
+  .hs-head h3{margin:2px 0 0; font-family:var(--mx-f-display,serif); font-weight:600; font-size:21px; color:var(--ink);}
+  .hs-all{flex:none; border:0; background:none; padding:4px 0; font:inherit; font-size:13px; color:var(--ink); border-bottom:1px solid var(--ink); cursor:pointer;}
+  .hr-rail{display:flex; gap:12px; overflow-x:auto; scrollbar-width:none; margin:0 -16px; padding:0 16px 4px; scroll-snap-type:x proximity;}
+  .hr-rail::-webkit-scrollbar{display:none;}
+  .hr-card{flex:0 0 142px; scroll-snap-align:start; border:0; background:none; padding:0; text-align:start; font:inherit; color:var(--ink); cursor:pointer;}
+  .hr-img{position:relative; display:block; width:142px; aspect-ratio:3/4; border-radius:16px; overflow:hidden; background:#F3E9EC;}
+  .hr-img img{width:100%; height:100%; object-fit:cover; display:block; transition:transform .5s var(--mx-ease,ease);}
+  .hr-card:active .hr-img img{transform:scale(1.04);}
+  .hr-img em{position:absolute; bottom:8px; inset-inline-start:8px; font-style:normal; font-size:10.5px; padding:3px 8px; border-radius:99px; background:rgba(255,255,255,.88); color:var(--ink);}
+  .hr-card b{display:block; margin-top:8px; font-family:var(--mx-f-display,serif); font-weight:500; font-size:13.5px; line-height:1.4; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;}
+  .hr-card small{display:block; font-size:12px; color:var(--muted); margin-top:2px; font-variant-numeric:tabular-nums;}
+  .hr-sk{pointer-events:none;}
+  .hr-sk .hr-img,.hr-sk i{background:linear-gradient(90deg,#F3E9EC 0%,#FBF4F6 50%,#F3E9EC 100%); background-size:200% 100%; animation:skL 1.3s ease-in-out infinite;}
+  .hr-sk i{display:block; height:10px; border-radius:6px; margin-top:10px; width:75%;}
+  .hr-sk i + i{width:40%; margin-top:6px;}
+  .hs-cta{display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; margin-top:16px; height:52px; padding:0 20px;
+    border-radius:26px; border:1px solid var(--ink); background:transparent; color:var(--ink); font:inherit; font-size:14.5px; font-weight:500; cursor:pointer;}
+  .hs-cta em{font-style:normal; font-size:12px; color:var(--muted);}
+  .hs-cta:active{transform:scale(.98);}
+  .home-chat{position:fixed; z-index:39; bottom:calc(82px + env(safe-area-inset-bottom,0px)); inset-inline-start:max(16px, calc(50% - 224px));
+    display:flex; align-items:center; gap:9px; height:48px; padding:0 18px 0 6px; border-radius:24px; border:0; cursor:pointer;
+    background:#1E1417; color:#fff; font:inherit; font-size:13.5px; box-shadow:0 12px 28px -10px rgba(30,20,23,.55);
+    animation:hcIn .5s var(--mx-ease,ease) both .3s;}
+  .home-chat .hc-ic{position:relative; width:36px; height:36px; border-radius:50%; display:grid; place-items:center;
+    background:linear-gradient(140deg,#F6D9E2,#E7B6C6); color:#1E1417;}
+  .home-chat svg{width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round;}
+  .home-chat .hc-ic i{position:absolute; top:1px; inset-inline-end:1px; width:9px; height:9px; border-radius:50%; background:#D6456B; box-shadow:0 0 0 2px #1E1417;}
+  .home-chat:active{transform:scale(.96);}
+  @keyframes hcIn{from{opacity:0; transform:translateY(10px)}to{opacity:1; transform:none}}
+  body.qc-open .home-chat, body.pd-open .home-chat{display:none;}
+  #tab-card{padding-bottom:64px;}
   .prod .pd{font-size:11.5px; color:var(--muted); line-height:1.6; margin-top:3px;
     display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
   .prod .padd{width:100%; margin-top:8px; border:none; border-radius:99px; background:var(--pink);
@@ -2045,7 +2080,7 @@ function lazyLoadTab(tab){
         shopCatalog = Array.isArray(data.items) ? data.items : [];
       }).catch(function(){ shopCatalog = []; })
         .then(function(){ return ensureShopCfg(); })
-        .then(function(){ showTopLoad(false); if(currentTab==='shop') renderShop(); loadAtelierShop(); });
+        .then(function(){ showTopLoad(false); if(currentTab==='shop') renderShop(); if(currentTab==='card') renderCard(); loadAtelierShop(); });
     }
     tabStarted[tab] = true; return;
   }
@@ -2347,6 +2382,47 @@ function mxTiersHtml(pts){
 }
 function mxPerk(t){ mxPerkSel = (mxPerkSel === t) ? null : t; var el = $('tiersSection'); if(el){ var pts = Tiers.pointsFor(currentCustomer, 'echarpe', Date.now(), loyaltyCfg.tiers); el.innerHTML = mxTiersHtml(pts); } }
 window.mxPerk = mxPerk;
+/* 🛍️ v723 — «من المجموعة» في الرئيسية: شريط موديلات (نفس «اطلبي»
+   بالظبط — shopModels) + زرار للمجموعة كلها. البيانات بتتحمّل مرة
+   واحدة في الجلسة مع فتح الرئيسية (نفس قراءات «اطلبي»، مش زيادة). */
+var _homeRail = [];
+function homeShopEnsure(){
+  if(typeof lazyLoadTab === 'function' && !tabStarted['shop']) lazyLoadTab('shop');
+}
+function homeShopHtml(){
+  if(typeof shopModels !== 'function') return '';
+  var all = shopModels().filter(function(m){ var a = shopModelActive(m); return a && a.img; });
+  var loading = shopCatalog === null || (CATALOG_BRAND === 'echarpe' && !_atelierReady);
+  if(!all.length && !loading) return '';
+  _homeRail = all.slice(0, 10);
+  var cards = _homeRail.length
+    ? _homeRail.map(function(m, i){
+        var a = shopModelActive(m), n = m.items.length;
+        return '<button class="hr-card" onclick="homeOpenModel(' + i + ')">'
+          + '<span class="hr-img"><img src="' + esc(a.img) + '" alt="" loading="lazy">'
+          + (n > 1 ? '<em>' + n + ' ألوان</em>' : '') + '</span>'
+          + '<b>' + esc(m.title) + '</b>'
+          + '<small>' + (Number(a.price) > 0 ? fmt(a.price) + ' ج.م' : '') + '</small></button>';
+      }).join('')
+    : [0, 1, 2].map(function(){ return '<span class="hr-card hr-sk"><span class="hr-img"></span><i></i><i></i></span>'; }).join('');
+  return '<section class="home-shop">'
+    + '<div class="hs-head"><div><span class="hs-kick">ECHARPE · THE COLLECTION</span><h3>من المجموعة</h3></div>'
+    + '<button class="hs-all" onclick="switchTab(\'shop\')">شوفي الكل</button></div>'
+    + '<div class="hr-rail">' + cards + '</div>'
+    + '<button class="hs-cta" onclick="switchTab(\'shop\')"><span>تصفّحي المجموعة كلها</span>'
+    + (all.length ? '<em>' + all.length + ' موديل</em>' : '') + '</button>'
+    + '</section>';
+}
+function homeOpenModel(i){ var m = _homeRail[i]; if(m) shopOpenModel(m); }
+window.homeOpenModel = homeOpenModel;
+/* 💬 زرار الشات العايم في الرئيسية — بيفتح نفس الشات (openChat). */
+function homeChatFabHtml(){
+  var b = $('badge-contact'), unread = b && String(b.textContent || '').trim();
+  return '<button class="home-chat" onclick="openChat()" aria-label="كلّمينا في الشات">'
+    + '<span class="hc-ic"><svg viewBox="0 0 24 24"><path d="M20 11.7a7.3 7.3 0 0 1-10.6 6.5L4.8 19.5l1.25-4.3A7.3 7.3 0 1 1 20 11.7z"/><path d="M8.6 11.8h.01M12 11.8h.01M15.4 11.8h.01"/></svg>'
+    + (unread ? '<i></i>' : '') + '</span><span class="hc-t">اسألي إيشارب</span></button>';
+}
+
 function renderCard(){
   if(!currentCustomer) return;
   var pts = Number(currentCustomer.points)||0;
@@ -2397,8 +2473,11 @@ function renderCard(){
       redeemBlockHtml()+
     '</div></div>'+
     tiersSectionHtml()+
+    homeShopHtml()+
     (window.StoriesApp ? StoriesApp.storiesHtml() : '')+
-    (window.StoriesApp ? StoriesApp.homeHtml() : '');
+    (window.StoriesApp ? StoriesApp.homeHtml() : '')+
+    homeChatFabHtml();
+  homeShopEnsure();
 
   // نرسم الباركود على ضهر البطاقة (مولّد داخلي — بيشتغل حتى أوفلاين)
   if(code){
@@ -2877,6 +2956,7 @@ function loadAtelierShop(){
       _atelierItems = pieces; _atlModels = models; _atelierReady = true;
       if(currentTab === 'shop' || _shopOpenItem) renderShop();
       if(_shopOpenItem && _atlByKey[_shopOpenItem.key]) renderShopDetail();
+      if(currentTab === 'card') renderCard();
     });
   }).catch(function(e){
     console.warn('atelier shop', e && e.code);
