@@ -2418,9 +2418,9 @@ window.homeOpenModel = homeOpenModel;
 /* 💬 زرار الشات العايم في الرئيسية — بيفتح نفس الشات (openChat). */
 function homeChatFabHtml(){
   var b = $('badge-contact'), unread = b && String(b.textContent || '').trim();
-  return '<button class="home-chat" onclick="openChat()" aria-label="كلّمينا في الشات">'
+  return '<button class="home-chat" onclick="openChat()" aria-label="اطلبي طرحتك في الشات">'
     + '<span class="hc-ic"><svg viewBox="0 0 24 24"><path d="M20 11.7a7.3 7.3 0 0 1-10.6 6.5L4.8 19.5l1.25-4.3A7.3 7.3 0 1 1 20 11.7z"/><path d="M8.6 11.8h.01M12 11.8h.01M15.4 11.8h.01"/></svg>'
-    + (unread ? '<i></i>' : '') + '</span><span class="hc-t">اسألي إيشارب</span></button>';
+    + (unread ? '<i></i>' : '') + '</span><span class="hc-t">اطلبي طرحتك</span></button>';
 }
 
 function renderCard(){
