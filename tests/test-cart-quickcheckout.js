@@ -90,7 +90,7 @@ checkApp('loyalty', path.join(ROOT, 'loyalty', 'index.html'));
 checkApp('glow', path.join(ROOT, 'glow', 'index.html'));
 
 // ================= ٦) الموقع الرئيسي =================
-const SITE = path.join(ROOT, 'index.html');
+const SITE = path.join(ROOT, 'home.html');
 if (!fs.existsSync(SITE)) { assert(false, 'index.html لازم يكون موجود'); }
 else {
   const S = fs.readFileSync(SITE, 'utf8');

@@ -541,6 +541,7 @@
   function openChatCta() {
     mkt("Lead");
     if (EMBED) { toParent({ type: "atelier-chat" }); return; }
+    if (window.EcharpeChat) { window.EcharpeChat.open(); return; }
     location.href = "../loyalty/?chat=1";
   }
 
@@ -1483,7 +1484,9 @@
         return u && u.protocol === "https:" && s[1].test(u.hostname.toLowerCase()) ? { url: u.href, name: s[2] } : null;
       }).filter(Boolean);
     var soc = $("social");
-    if (soc) { soc.innerHTML = SITE.social.map(function (s) { return '<a href="' + esc(s.url) + '" target="_blank" rel="noopener">' + esc(s.name) + "</a>"; }).join(""); soc.classList.toggle("hidden", !SITE.social.length); }
+    // لينكات السوشيال من الإعدادات بتبدّل الافتراضية اللي في الصفحة — لو مفيش، الافتراضية تفضل
+    var socIc = { Instagram: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="17.2" cy="6.8" r="1.1" fill="currentColor"/></svg>', Facebook: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M13.5 21v-7.5h2.5l.400-3h-2.9V8.6c0-.9.3-1.5 1.5-1.5h1.5V4.4c-.3 0-1.2-.1-2.2-.1-2.2 0-3.7 1.3-3.7 3.8v2.4H8.1v3h2.5V21z"/></svg>' };
+    if (soc && SITE.social.length) soc.innerHTML = SITE.social.map(function (s) { return '<a href="' + esc(s.url) + '" target="_blank" rel="noopener">' + (socIc[s.name] || "") + "<span>" + esc(s.name) + "</span></a>"; }).join("");
     if (d.chatText) SITE.chatText = String(d.chatText).slice(0, 300);
     if (Array.isArray(raw.branches) && raw.branches.length) {
       SITE.branches = raw.branches.map(String).slice(0, 12);
