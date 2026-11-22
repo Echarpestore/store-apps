@@ -65,7 +65,7 @@ assert(!cMissing.ok && /مش موجود في الكتالوج/.test(cMissing.err
 const cNoBranch = OC.orderValidateCart([{ barcode: '111', qty: 1 }], [prodZero], '', Date.now(), { ignoreBranchStock: true });
 assert(!cNoBranch.ok, 'سلبي: الفرع لسه مطلوب بالعلم');
 const fsx = require('fs');
-for(const [f, cfgVar] of [['loyalty/index.html', 'shopCfg'], ['glow/index.html', 'shopCfg'], ['index.html', 'wsCfg']]){
+for(const [f, cfgVar] of [['loyalty/index.html', 'shopCfg'], ['glow/index.html', 'shopCfg'], ['home.html', 'wsCfg']]){
   const h = fsx.readFileSync(path.join(__dirname, '..', f), 'utf8');
   assert(h.includes('{ ignoreBranchStock: ' + cfgVar + '.ignoreBranchStock === true }'), f + ': بيبعت العلم من إعدادات المتجر لفحص العميل');
   assert(h.includes('orders-core.js?v=2'), f + ': orders-core بإصدار جديد');

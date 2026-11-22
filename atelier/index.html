@@ -24,7 +24,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@300;400;500;600;700&family=Hanken+Grotesk:ital,wght@0,400;0,500;0,600;0,700;1,500&display=swap" rel="stylesheet">
 <script src="./i18n.js?v=2611150100"></script>
 <link rel="stylesheet" href="atelier.css?v=2611150100">
-<link rel="stylesheet" href="theme.css?v=2611150100">
+<link rel="stylesheet" href="theme.css?v=2611220100">
 </head>
 <body class="intro-on">
 
@@ -68,7 +68,7 @@
     <p class="hero-sub" id="heroSub" data-en="Kuwaiti linen and chiffon hijabs in the shades you reach for. Delivered to your door or picked up in store.">طرح لينن وشيفون كويتي بالألوان اللي بتلبسيها كل يوم. توصيل لحد البيت أو استلام من الفرع.</p>
     <div class="hero-acts">
       <a class="btn btn-dark" href="#collection"><span data-en="Shop the collection">تسوّقي المجموعة</span></a>
-      <a class="btn btn-line" href="../loyalty/?chat=1"><span data-en="Order from the chat">اطلبي من الشات</span></a>
+      <a class="btn btn-line" href="../loyalty/?chat=1" data-chat><span data-en="Order from the chat">اطلبي من الشات</span></a>
     </div>
   </div>
   <div class="wall" id="wall"></div>
@@ -148,8 +148,30 @@
 <footer>
   <img class="foot-logo" src="../logo.png" alt="echarpe">
   <div class="foot-tag" data-en="Hijabs · Scarves">طُرَح · إسدالات</div>
-  <nav class="social hidden" id="social"></nav>
-  <nav><a href="#collection" data-en="Collection">المجموعة</a><a href="#privacy" data-en="Privacy">الخصوصية</a><a href="../loyalty/" data-en="Shop">المتجر</a></nav>
+  <a class="foot-chat" href="../loyalty/?chat=1" data-chat><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2C6.48 2 2 5.94 2 10.8c0 2.76 1.44 5.22 3.7 6.82-.12 1.06-.5 2.4-1.5 3.68a.5.5 0 0 0 .5.8c2.02-.4 3.6-1.28 4.6-1.98.87.22 1.78.34 2.7.34 5.52 0 10-3.94 10-8.8S17.52 2 12 2z"/></svg><span data-en="Order in chat">اطلبي من الشات</span></a>
+  <div class="foot-grid">
+    <section class="foot-col" id="footBranches">
+      <h4 data-en="Our stores">فروعنا</h4>
+      <ul class="foot-branches">
+        <li><div class="fb-tx"><b data-en="Al Rehab">الرحاب</b><span data-en="Mall 2">مول ٢</span><a class="fb-num" dir="ltr" href="https://wa.me/201148664485" target="_blank" rel="noopener">0114 866 4485</a></div><div class="fb-acts"><a href="https://wa.me/201148664485" target="_blank" rel="noopener" aria-label="واتساب الرحاب" data-en-aria="WhatsApp Al Rehab"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 1.8a8.2 8.2 0 1 1-4.2 15.3l-.3-.2-2.9.8.8-2.8-.2-.3A8.2 8.2 0 0 1 12 3.8zm-3 4c-.2 0-.5 0-.7.3-.3.3-1 1-1 2.3 0 1.3 1 2.6 1.1 2.8.1.2 1.9 3 4.7 4.1 2.3.900 2.8.700 3.3.700.5-.1 1.6-.7 1.8-1.3.2-.6.2-1.2.2-1.3-.1-.1-.3-.2-.6-.3l-1.9-.9c-.3-.1-.5-.1-.7.2l-.8 1c-.2.2-.3.2-.6.1-.3-.2-1.2-.5-2.3-1.4-.8-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6l.5-.5.3-.5c.1-.2 0-.4 0-.5l-.9-2.1c-.2-.5-.4-.5-.6-.5z"/></svg></a><a href="https://maps.google.com/?q=%D9%85%D9%88%D9%84+2+%D8%A7%D9%84%D8%B1%D8%AD%D8%A7%D8%A8" target="_blank" rel="noopener" aria-label="خريطة الرحاب" data-en-aria="Map — Al Rehab"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" d="M12 21s-6.5-5.7-6.5-11a6.5 6.5 0 0 1 13 0c0 5.3-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></a></div></li>
+        <li><div class="fb-tx"><b data-en="Madinaty">مدينتي</b><span data-en="East Hub Mall — Gate 6, first floor">مول EAST HUB — بوابة ٦، الدور الأول</span></div><div class="fb-acts"><a href="https://maps.google.com/?q=EAST+HUB+%D9%85%D8%AF%D9%8A%D9%86%D8%AA%D9%8A" target="_blank" rel="noopener" aria-label="خريطة مدينتي" data-en-aria="Map — Madinaty"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" d="M12 21s-6.5-5.7-6.5-11a6.5 6.5 0 0 1 13 0c0 5.3-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></a></div></li>
+        <li><div class="fb-tx"><b data-en="City Centre">سيتي سنتر</b><span data-en="City Centre Mall — Makram Ebeid">مول سيتي سنتر — مكرم عبيد</span></div><div class="fb-acts"><a href="https://maps.google.com/?q=%D8%B3%D9%8A%D8%AA%D9%8A+%D8%B3%D9%86%D8%AA%D8%B1+%D9%85%D9%83%D8%B1%D9%85+%D8%B9%D8%A8%D9%8A%D8%AF" target="_blank" rel="noopener" aria-label="خريطة سيتي سنتر" data-en-aria="Map — City Centre"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" d="M12 21s-6.5-5.7-6.5-11a6.5 6.5 0 0 1 13 0c0 5.3-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></a></div></li>
+      </ul>
+    </section>
+    <section class="foot-col">
+      <h4 data-en="Follow us">تابعينا</h4>
+      <nav class="social" id="social">
+        <a href="https://www.instagram.com/echarpestore2" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="17.2" cy="6.8" r="1.1" fill="currentColor"/></svg><span>Instagram</span></a>
+        <a href="https://www.facebook.com/echarpestore" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M13.5 21v-7.5h2.5l.400-3h-2.9V8.6c0-.9.3-1.5 1.5-1.5h1.5V4.4c-.3 0-1.2-.1-2.2-.1-2.2 0-3.7 1.3-3.7 3.8v2.4H8.1v3h2.5V21z"/></svg><span>Facebook</span></a>
+      </nav>
+      <div class="foot-app">
+        <h4 data-en="The echarpe app">تطبيق echarpe</h4>
+        <p data-en="Points on every order, member-only offers, and your try-ons in one place.">نقاط على كل طلب، عروض للأعضاء بس، وتجاربكِ كلها في مكان واحد.</p>
+        <a class="store-badge" href="https://play.google.com/store/apps/details?id=store.echarpe.loyalty&amp;utm_source=echarpe.store&amp;utm_medium=site-footer" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4.5 3.3v17.4c0 .5.5.8.9.5l15-8.7c.400-.200.4-.800 0-1L5.4 2.8c-.400-.300-.900 0-.900.5z"/></svg><span><small data-en="GET IT ON">حمّليه من</small><b>Google Play</b></span></a>
+      </div>
+    </section>
+  </div>
+  <nav class="foot-nav"><a href="#collection" data-en="Collection">المجموعة</a><a href="#privacy" data-en="Privacy">الخصوصية</a><a href="track.html" data-en="Track order">تتبّع طلبكِ</a><a href="../loyalty/" data-en="Shop">المتجر</a></nav>
   <p class="fine" data-en="Looks are AI-generated as a preview; fabric details may vary slightly.">الإطلالات مُنشأة بالذكاء الاصطناعي للتقريب، وقد تختلف تفاصيل الخامة قليلاً.</p>
 </footer>
 
@@ -284,6 +306,7 @@
 <script src="../tryon/photo-core.js?v=2611150100"></script>
 <script src="./atelier-core.js?v=2611150100"></script>
 <script src="./marketing.js?v=2611150100"></script>
-<script src="./atelier.js?v=2611150100"></script>
+<script src="./atelier.js?v=2611220100"></script>
+<script src="./chat.js?v=2611220100"></script>
 </body>
 </html>

@@ -19,7 +19,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const ROOT = path.join(__dirname, '..');
-const P = path.join(ROOT, 'index.html');
+const P = path.join(ROOT, 'home.html');
 
 if (!fs.existsSync(P)) {
   assert(false, 'index.html لازم يكون موجود');

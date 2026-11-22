@@ -377,3 +377,34 @@ body.intro-on .tabbar{transform:translateY(140%);}
 }
 
 @media (prefers-reduced-motion:reduce){ .wall button{opacity:1; transform:none;} .mo-row,.ticker-track,.mo-orbs i{animation:none;} }
+
+/* ✦ الفوتر: الفروع + السوشيال + التطبيق + زرار الشات */
+footer .social.hidden{display:flex;}
+.foot-chat{display:inline-flex; align-items:center; gap:10px; margin:6px auto 44px; padding:16px 30px; border-radius:999px; background:var(--rose); color:#fff; font-size:15px; font-weight:600; text-decoration:none; box-shadow:0 14px 30px -12px rgba(214,51,108,.8);}
+.foot-chat svg{width:21px; height:21px;}
+.foot-grid{display:grid; gap:36px; max-width:880px; margin:0 auto 44px; text-align:start;}
+@media (min-width:760px){ .foot-grid{grid-template-columns:1.25fr 1fr; gap:64px;} }
+.foot-col h4{font-size:12px; font-weight:500; letter-spacing:.14em; color:rgba(255,255,255,.5); margin:0 0 14px; text-transform:uppercase;}
+.foot-branches{list-style:none; margin:0; padding:0; border-top:1px solid rgba(255,255,255,.14);}
+.foot-branches li{display:flex; align-items:center; justify-content:space-between; gap:14px; padding:16px 0; border-bottom:1px solid rgba(255,255,255,.14);}
+.fb-tx{min-width:0; display:grid; gap:4px;}
+.fb-tx b{font-size:16px; font-weight:600;}
+.fb-tx span{font-size:13px; color:rgba(255,255,255,.6); line-height:1.6;}
+.fb-num{font-size:14px; color:#fff; text-decoration:none; letter-spacing:.04em; justify-self:start; font-variant-numeric:tabular-nums;}
+.fb-acts{display:flex; gap:8px; flex:none;}
+.fb-acts a,footer .social a{display:inline-flex; align-items:center; justify-content:center; color:#fff; border:1px solid rgba(255,255,255,.28); border-radius:999px; text-decoration:none; transition:background .25s, color .25s;}
+.fb-acts a{width:42px; height:42px;}
+.fb-acts svg{width:19px; height:19px;}
+footer .social{display:flex; flex-wrap:wrap; gap:10px; justify-content:flex-start; margin:0;}
+footer .social a{gap:9px; height:44px; padding:0 18px 0 16px; font-size:13.5px;}
+footer .social svg{width:19px; height:19px;}
+.fb-acts a:hover,footer .social a:hover{background:#fff; color:var(--ink);}
+.foot-app{margin-top:34px;}
+.foot-app p{font-size:13.5px; line-height:1.8; color:rgba(255,255,255,.6); margin:0 0 16px; max-width:36ch;}
+.store-badge{display:inline-flex; align-items:center; gap:12px; padding:10px 20px 10px 16px; border-radius:12px; background:#fff; color:var(--ink); text-decoration:none; direction:ltr;}
+.store-badge svg{width:24px; height:24px;}
+.store-badge span{display:grid; gap:3px; text-align:left;}
+.store-badge small{font-size:10px; letter-spacing:.08em; color:var(--muted);}
+.store-badge b{font-size:17px; font-weight:600; line-height:1;}
+footer nav.foot-nav{flex-wrap:wrap; gap:14px 26px; padding-top:28px; border-top:1px solid rgba(255,255,255,.14); max-width:880px; margin-inline:auto;}
+body.embed .foot-chat,body.embed .foot-app{display:none;}

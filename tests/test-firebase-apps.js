@@ -31,7 +31,7 @@ const APPS = [
   { dir: 'loyalty',  file: 'loyalty/index.html',  appName: 'loyalty',  needsDefault: true,  sw: '(?:echarpe-loyalty|loyalty-shell)-v', minVer: 43 },
   { dir: 'glow',     file: 'glow/index.html',     appName: 'glow',     needsDefault: true,  sw: 'glow-loyalty-v',    minVer: 36 },
   // ⬇️ الأربعة بتوع §20 المعلّقين — مفيش واحد فيهم بيستخدم FCM
-  { dir: 'root',     file: 'index.html',          appName: 'site',     needsDefault: false, sw: '(?:store-apps|pos|loyalty)-shell-v', minVer: 96, swFile: 'sw.js' },
+  { dir: 'root',     file: 'home.html',           appName: 'site',     needsDefault: false, sw: '(?:store-apps|pos|loyalty)-shell-v', minVer: 96, swFile: 'sw.js' },
   { dir: 'feedback', file: 'feedback/index.html', appName: 'feedback', needsDefault: false, sw: '(?:store-apps|pos|loyalty)-shell-v', minVer: 20, modular: true },
   { dir: 'apply',    file: 'apply/index.html',    appName: 'apply',    needsDefault: false },
   { dir: 'join',     file: 'join/index.html',     appName: 'join',     needsDefault: false },

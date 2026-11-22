@@ -95,11 +95,11 @@ function checkCustomerApp(brand, filePath, tryonOpenPattern) {
 checkCustomerApp('loyalty', path.join(ROOT, 'loyalty', 'index.html'), /photo\.html\?brand=loyalty|tryonOverlayOpen\('loyalty'\)/);
 // 🔄 التطبيقين بقوا بيفتحوا التجربة جوّه overlay: tryonOverlayOpen('<براند>') هي اللي بتبني photo.html?brand=…
 checkCustomerApp('glow', path.join(ROOT, 'glow', 'index.html'), /photo\.html\?brand=glow|tryonOverlayOpen\('glow'\)/);
-checkCustomerApp('site', path.join(ROOT, 'index.html'), /photo\.html\?brand=site/);
+checkCustomerApp('site', path.join(ROOT, 'home.html'), /photo\.html\?brand=site/);
 
 // ================= ٥) تعقيم كروت الطقم =================
 [['loyalty', path.join(ROOT, 'loyalty', 'index.html')], ['glow', path.join(ROOT, 'glow', 'index.html')],
- ['site', path.join(ROOT, 'index.html')]].forEach(function (t) {
+ ['site', path.join(ROOT, 'home.html')]].forEach(function (t) {
   const H = fs.readFileSync(t[1], 'utf8');
   const m = H.match(/outfit-(card|wrap)[\s\S]{0,900}/);
   // 🔴 اسم المنتج بيتعقّم قبل الطباعة (esc)
@@ -159,7 +159,7 @@ assert(verAtLeast(read('tryon/tryon-app.js'), /TRYON_VER = 'v(\d+)'/, 40), 'TRYO
 // ================= ٧) الفحص النحوي الفعلي =================
 syntaxCheckBlocks(fs.readFileSync(path.join(ROOT, 'loyalty', 'index.html'), 'utf8'), 'loyalty');
 syntaxCheckBlocks(fs.readFileSync(path.join(ROOT, 'glow', 'index.html'), 'utf8'), 'glow');
-syntaxCheckBlocks(fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8'), 'site');
+syntaxCheckBlocks(fs.readFileSync(path.join(ROOT, 'home.html'), 'utf8'), 'site');
 syntaxCheckBlocks(fs.readFileSync(path.join(ROOT, 'tryon', 'photo.html'), 'utf8'), 'photo.html');
 try { execFileSync(process.execPath, ['--check', POS_PATH], { stdio: 'pipe' }); }
 catch (e) { assert(false, 'chat-staff-ui.js فحص نحوي أخير: ' + e.stderr.toString().split('\n')[0]); }
