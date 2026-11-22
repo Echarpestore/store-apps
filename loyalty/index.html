@@ -2868,7 +2868,7 @@ function shopItems(){
   if(!_atelierItems.length) return base;
   // 🪞 نفس الباركود في الأتيليه (بصوره وألوانه) = القطعة دي بتتعرض من هناك
   var used = {};
-  _atelierItems.forEach(function(p){ used[String(p.barcode)] = 1; });
+  _atelierItems.forEach(function(p){ used[String(p.barcode)] = 1; if(p.realBarcode) used[String(p.realBarcode)] = 1; });
   return base.filter(function(p){ return !used[String(p.barcode)]; }).concat(_atelierItems);
 }
 
@@ -2925,7 +2925,7 @@ function loadAtelierShop(){
     (shopCatalog || []).forEach(function(p){
       if(p && p.barcode && p.active === true && Number(p.onlineQty) > 0 && Number(p.price) > 0) cat[String(p.barcode)] = p;
     });
-    return Promise.all(admin.slice(0, 160).map(function(p){
+    return Promise.all(admin.map(function(p){   // v725: كل القطع زي الموقع بالظبط — من غير حد أقصى
       var bc = String(p.barcode || '').trim();
       var thumb = col.doc('atelier_echarpe_t_' + p.docId).get().then(function(t){
         var v = t.exists ? String(t.data().img || '') : '';
