@@ -64,6 +64,8 @@ function evalTerm(t, ctx){
     const neg = t.trim().charAt(0) === '!';
     return neg ? !ctx.lockedDoc : !!ctx.lockedDoc;
   }
+  // 🌍 كتالوج الموقع مقروء من غير دخول (بالاسم بالظبط)
+  if(t.indexOf('catalogPublic(id)') >= 0) return !!ctx.catalogDoc;
   // 🛍️🔐 مستندات غرفة القياس: الكتابة لقايمة الإدارة بس
   if(t.indexOf('atelierWriteOk(id)') >= 0) return !ctx.atelierDoc || (ctx.auth === 'staff' && !!ctx.atelierAdmin);
   if(t.indexOf('request.query.limit') >= 0){
@@ -273,6 +275,12 @@ OPS.forEach(function(o){
 // ٢) اللي **لازم** يترفض — الثغرات اللي الرول ده اتعمل عشانها
 // ============================================================
 const DENY = [
+  ['pos_test_settings', 'get',  { secretDoc:true },
+    '🌍 زائرة من غير دخول ماتقراش الأسرار'],
+  ['pos_test_settings', 'get',  { },
+    '🌍 زائرة من غير دخول ماتقراش أي إعدادات غير الكتالوج'],
+  ['pos_test_settings', 'update', { catalogDoc:true, atelierDoc:true },
+    '🌍 زائرة من غير دخول ماتكتبش في الكتالوج'],
   ['pos_test_settings', 'get',  { auth:'anon', secretDoc:true },
     '🔒 عميل مجهول ميقراش owner_admin / sales_roles / dayclose_*'],
   ['pos_test_customers','list', { auth:'anon', limit:1000 },
@@ -305,6 +313,14 @@ const DENY = [
 DENY.forEach(function(d){
   assert(can(d[0], d[1], d[2]) === false, d[3]);
 });
+
+// 🌍 الكتالوج بيتقري من غير دخول — وبالاسم بالظبط
+assert(can('pos_test_settings', 'get', { catalogDoc:true }) === true, '🌍 زائرة من غير دخول بتقرا كتالوج الموقع');
+(function(){
+  const fn = (rules.match(/function catalogPublic\(id\) \{[\s\S]*?\n    \}/) || [''])[0];
+  const pats = (fn.match(/id\.matches\('([^']+)'\)/g) || []).map(function(x){ return x.slice(12, -2); }).sort().join(',');
+  assert(pats === 'atelier_echarpe.*,atelier_site.*,online_shop_echarpe.*', '🌍 catalogPublic مفتوحة للتلات أسماء دول بس (لقينا: ' + pats + ')');
+})();
 
 // ============================================================
 // ٣) مسح التطبيقات: أي مجموعة يلمسها تطبيق عميل لازم تكون في الجدول

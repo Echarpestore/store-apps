@@ -101,6 +101,15 @@ service cloud.firestore {
         || request.auth.token.email.lower() in get(/databases/$(database)/documents/atelier_admins/config).data.get('emails', []);
     }
     function atelierWriteOk(id) { return !atelierDoc(id) || (isStaff() && atelierAdmin()); }
+    // 🌍 كتالوج الموقع (المنتجات والصور ونصوص الصفحة) — **مقروء من غير دخول**.
+    //    الموقع العام مابيقدرش يعمل دخول مجهول (التسجيل الجديد مقفول عن قصد)،
+    //    فمن غير السطر ده الزائرة بتشوف ٣ موديلات بس. دي بيانات معروضة للكل
+    //    أصلًا (اسم/سعر/صورة) — ومفيش فيها أي حاجة من الأسرار اللي فوق.
+    //    ⚠️ بالاسم بالظبط — ممنوع توسيعها لـ atelier_.* (atelier_admins/orders مجموعات تانية).
+    function catalogPublic(id) {
+      return id.matches('atelier_echarpe.*') || id.matches('atelier_site.*')
+          || id.matches('online_shop_echarpe.*');
+    }
 
     // ---------- Office (محاسبة المكتب) ----------
     match /office_recurring/{id}      { allow read, write: if isStaff(); }
@@ -214,7 +223,7 @@ service cloud.firestore {
     // ---------- الإعدادات (وجواها أسرار) ----------
     match /pos_test_settings/{id} {
       // 🔒 قراءة عامة لكل حاجة **ماعدا** المستندات السرية فوق
-      allow read: if isStaff() || (signedIn() && !settingsSecret(id));
+      allow read: if isStaff() || (signedIn() && !settingsSecret(id)) || catalogPublic(id);
       // 💳🔒 والكتابة ممنوعة على المستندات المقفولة **حتى على الموظفين**
       // ⚠️ `!settingsLocked(id)` لازم يتكرر على **كل** فرع من الشرط.
       //    حطّيته على فرع الموظفين بس في الأول، والاختبار مسك إن الفرع
