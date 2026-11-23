@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>بيانات خامات الطرح — echarpe</title>
+<!--
+  ============================================================
+  🧵 fabrics/index.html — تطبيق بسيط لتجميع بيانات خامات الطرح (للتطوير)
+  ------------------------------------------------------------
+  · الدخول بحساب الموظفين (email/password) — نفس حسابات POS / Office.
+  · البيانات:
+      pos_test_settings/fabdev            { items:[{id,name,grip,weight,opacity,wrinkle,
+                                            season,occasions[],price,colors[],notes,
+                                            hint,check,reviewed,th}], updatedAt, by }
+      pos_test_settings/fabdev_p_<id>     { img: الصورة الكاملة ١٠٠٠px , at }
+    ⚠️ الصور في مستندات منفصلة: حد المستند ١ ميجا. المصغّرة (th) ٩٦px جوّه القايمة.
+    ⚠️ المسح ممنوع في القواعد (delete: false) — الخامة المحذوفة بتتشال من
+       القايمة وصورتها بتتفضّى.
+  · مفيش تغيير في قواعد Firestore: الموظفين بيكتبوا في pos_test_settings أصلًا.
+  · كل تعديل بيتحفظ لوحده بـ transaction على الخامة نفسها (موظفتين يشتغلوا مع بعض).
+  ============================================================
+-->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@400;500;700&display=swap">
+<style>
+:root{
+  color-scheme: light;
+  --ground:#F4F4F6; --card:#FFFFFF; --panel:#E9E8EE;
+  --ink:#16161D; --ink-2:#3A3A46; --muted:#5C5C6B; --line:rgba(22,22,29,.16);
+  --ok:#0F6B4F; --warn:#8A4B00; --bad:#A3182A;
+  --font:'Readex Pro','Segoe UI',Tahoma,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--ground);color:var(--ink);font-family:var(--font);font-size:16px;line-height:1.7}
+main{max-width:520px;margin:0 auto;padding:20px 16px 48px;display:flex;flex-direction:column;gap:16px}
+header{display:flex;flex-direction:column;gap:6px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.brand{font-weight:700;font-size:18px;letter-spacing:1px}
+h1{margin:0;font-size:26px;line-height:1.35;font-weight:700}
+p{margin:0}
+.lead{font-size:15px;color:var(--ink-2)}
+.small{font-size:13px;color:var(--muted)}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.status{font-size:13px;font-weight:500;color:var(--muted)}
+.status.ok{color:var(--ok)} .status.bad{color:var(--bad)}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 18px;border-radius:14px;border:0;background:var(--ink);color:#fff;font:700 16px var(--font);cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid rgba(22,22,29,.34);font-weight:500}
+.btn.danger{background:transparent;color:var(--bad);border:1px solid var(--bad);font-weight:500}
+.btn.link{min-height:44px;padding:0 10px;background:transparent;color:var(--ink-2);font-weight:500;font-size:14px;text-decoration:underline}
+.btn:focus-visible,.chip:focus-visible,.cw:focus-visible,.head:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid #2445B8;outline-offset:2px}
+.note{font-size:14px;color:var(--warn);border:1px solid var(--warn);border-radius:12px;padding:10px 12px}
+.stack{display:flex;flex-direction:column;gap:12px}
+#list{display:flex;flex-direction:column;gap:10px}
+.card{background:var(--card);border-radius:18px;box-shadow:0 0 0 1px var(--line);overflow:hidden}
+.head{width:100%;display:flex;align-items:center;gap:12px;padding:12px;border:0;background:transparent;font-family:var(--font);color:var(--ink);cursor:pointer;text-align:start}
+.thumb{flex:none;width:56px;height:56px;border-radius:12px;background:var(--panel);object-fit:cover;display:block}
+.hname{flex:1;min-width:0;display:flex;flex-direction:column}
+.hname strong{font-size:17px;overflow-wrap:anywhere}
+.pill{flex:none;font-size:12px;font-weight:700;padding:3px 10px;border-radius:12px;border:1px solid var(--warn);color:var(--warn)}
+.pill.done{border-color:var(--ok);background:var(--ok);color:#fff}
+.body{padding:4px 12px 16px;display:flex;flex-direction:column;gap:16px;border-top:1px solid var(--line)}
+.field{display:flex;flex-direction:column;gap:8px}
+.field label,.field .lbl{font-size:14px;font-weight:700}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{min-height:44px;padding:0 14px;border-radius:22px;border:1px solid rgba(22,22,29,.34);background:transparent;color:var(--ink);font:500 15px var(--font);cursor:pointer}
+.chip[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
+.colors{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px 4px}
+.cw{border:0;background:transparent;padding:4px 0;display:flex;flex-direction:column;align-items:center;gap:4px;font:500 11px var(--font);color:var(--ink-2);cursor:pointer;border-radius:10px}
+.cw i{display:block;width:38px;height:38px;border-radius:50%;box-shadow:0 0 0 1px rgba(22,22,29,.22)}
+.cw[aria-pressed=true] i{box-shadow:0 0 0 3px #fff,0 0 0 5px var(--ink)}
+.cw[aria-pressed=true]{color:var(--ink);font-weight:700}
+input[type=text],input[type=email],input[type=password],textarea{width:100%;font:400 16px var(--font);color:var(--ink);background:#fff;border:1px solid rgba(22,22,29,.34);border-radius:12px;padding:10px 12px}
+textarea{min-height:84px;resize:vertical;line-height:1.6}
+.photo{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.photo img{width:120px;height:120px;border-radius:14px;object-fit:cover;background:var(--panel)}
+.file{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden}
+.hint{font-size:13px;color:var(--ink-2);background:var(--ground);border-radius:12px;padding:10px 12px}
+.hint b{color:var(--warn)}
+.rowbtn{display:flex;gap:10px;flex-wrap:wrap}
+.check{display:flex;align-items:center;gap:10px;min-height:48px;font-weight:700}
+.check input{width:24px;height:24px;accent-color:var(--ok)}
+.err{font-size:14px;color:var(--bad);min-height:1.4em}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div class="top"><div class="brand" dir="ltr">echarpe</div><button class="btn link" type="button" id="logout" hidden>خروج</button></div>
+  <h1>بيانات خامات الطرح</h1>
+  <p class="lead" id="lead">افتحي كل خامة، ارفعي صورتها، واختاري صفاتها بالضغط. كل حاجة بتتحفظ لوحدها.</p>
+</header>
+
+<!-- الدخول -->
+<form class="stack" id="login" hidden>
+  <p class="small">ادخلي بحساب الموظفين (نفس حساب الكاشير).</p>
+  <div class="field"><label for="email">الإيميل</label><input type="email" id="email" dir="ltr" autocomplete="username" required></div>
+  <div class="field"><label for="pass">كلمة السر</label><input type="password" id="pass" dir="ltr" autocomplete="current-password" required></div>
+  <div class="err" id="loginErr" role="alert"></div>
+  <button class="btn" type="submit">دخول</button>
+</form>
+
+<!-- التطبيق -->
+<div class="stack" id="app" hidden>
+  <div class="bar">
+    <div class="small" id="progress">بنحمّل الخامات...</div>
+    <div class="status" id="status" role="status"></div>
+  </div>
+  <p class="note" id="note" hidden></p>
+  <div class="stack" id="empty" hidden>
+    <p class="lead">مفيش خامات لسه. تحبي تبدئي بالخامات المشهورة في السوق وتعدّلي عليها؟</p>
+    <button class="btn" type="button" id="seed">ابدئي بـ 13 خامة مشهورة</button>
+  </div>
+  <div id="list"></div>
+  <button class="btn" type="button" id="add">خامة جديدة</button>
+  <button class="btn ghost" type="button" id="copy">نسخ البيانات كلها (للمطور)</button>
+</div>
+</main>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+(function(){
+'use strict';
+var OPT = {
+  grip: ['بتثبت لوحدها','محتاجة بونيه','محتاجة دبابيس','بتزحلق'],
+  weight: ['خفيفة جدًا','خفيفة','متوسطة','تقيلة'],
+  opacity: ['ساترة','شفافة شوية','شفافة'],
+  wrinkle: ['ما بتتكرمش','بتتكرمش شوية','بتتكرمش'],
+  season: ['صيف','شتا','كل الفصول'],
+  occasions: ['يومي','شغل','جامعة','خروج','سواريه وأفراح','رياضة'],
+  price: ['اقتصادي','متوسط','غالي']
+};
+var LABEL = { grip:'الثبات على الراس', weight:'الوزن', opacity:'الشفافية', wrinkle:'التكرمش', season:'الموسم', occasions:'المناسبة (اختاري كل اللي يناسب)', price:'شريحة السعر' };
+var SINGLE = ['grip','weight','opacity','wrinkle','season','price'];
+var COLORS = [['أسود','#111111'],['أبيض','#FFFFFF'],['أوف وايت','#F1E9DA'],['بيج','#D9C8B0'],['جملي','#C19A6B'],['كافيه','#9A7B5F'],['بني','#5A3B28'],['رمادي','#9A9DA3'],['رصاصي غامق','#4A4D52'],['كحلي','#1F2A52'],['أزرق','#2445B8'],['سماوي','#8FB8DE'],['تركواز','#2BB6B0'],['بترولي','#1F5C66'],['أخضر','#0F6B4F'],['زيتي','#5B6B2E'],['منت','#A8D5C5'],['أصفر','#F2C14E'],['خردلي','#C2952B'],['برتقالي','#E8742A'],['مرجاني','#F26B5B'],['أحمر','#C4202B'],['نبيتي','#6E1F33'],['وردي','#E8A6C1'],['فوشيا','#C2267A'],['كشمير','#C98C95'],['موف','#9A7FA6'],['بنفسجي','#4A2470'],['لافندر','#B7A6D9']];
+
+/* بداية اختيارية — وصف مبدئي متجمّع من مواقع ومتاجر (مش مرجع فني). الموظفة هي اللي بتأكد. */
+var SEED = [
+  { name:'قطن', grip:'بتثبت لوحدها', season:'صيف', occasions:['يومي','شغل','جامعة'], hint:'عملية ومريحة وبتسمح بمرور الهواء' },
+  { name:'جل (قطن جل)', grip:'بتثبت لوحدها', weight:'خفيفة', opacity:'ساترة', occasions:['يومي','شغل'], price:'اقتصادي', hint:'ثابتة وغير شفافة، سعرها اقتصادي وألوانها كتير' },
+  { name:'تايلندي', weight:'خفيفة', season:'كل الفصول', occasions:['يومي','شغل','جامعة'], hint:'ناعمة وخفيفة وما بتزحلقش بسهولة', check:'التعريف مختلف بين المتاجر: مودال، شاش قطني، أو سبونج. إيه هو عندنا؟' },
+  { name:'مودال', season:'كل الفصول', hint:'نعومة عالية وانسيابية وبتمتص الرطوبة' },
+  { name:'شيفون', grip:'محتاجة بونيه', weight:'خفيفة', opacity:'شفافة شوية', occasions:['سواريه وأفراح'], hint:'ملمس ناعم وبتتلف بطرق كتير، محتاجة تثبيت' },
+  { name:'كريب شيفون', weight:'خفيفة', season:'صيف', occasions:['سواريه وأفراح'], hint:'بتجمع ثبات الكريب وخفة الشيفون' },
+  { name:'كريب', occasions:['يومي','شغل'], hint:'ملمس مجعد وناعم', check:'هل محتاجة دبابيس؟' },
+  { name:'ستان', occasions:['سواريه وأفراح'], hint:'لامعة وناعمة' },
+  { name:'حرير', grip:'بتزحلق', occasions:['شغل','جامعة','سواريه وأفراح'], hint:'انسيابية وناعمة، محتاجة بندانة قطن تحتها' },
+  { name:'كتان', weight:'تقيلة', season:'شتا', hint:'دافية وما بتزحلقش وبتستحمل الاستخدام المتكرر', check:'مصدر واحد بيقول إنها غالية' },
+  { name:'جوبير / دانتيل', occasions:['سواريه وأفراح'], hint:'مطرزة، للأعراس والحفلات' },
+  { name:'قطن ليكرا', weight:'خفيفة', occasions:['يومي'], hint:'ثابتة ومريحة لساعات طويلة' },
+  { name:'كلينكس', weight:'خفيفة جدًا', opacity:'شفافة شوية', season:'صيف', occasions:['يومي','شغل','جامعة'], hint:'قطن ململ ناعم وبارد', check:'الثبات والتكرمش: كلام المتاجر عكس تقييمات العميلات. وهل محتاجة بونيه؟' }
+];
+
+function $(id){ return document.getElementById(id); }
+function el(tag, cls, text){ var e = document.createElement(tag); if(cls) e.className = cls; if(text != null) e.textContent = text; return e; }
+function newId(){ return 'f' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+firebase.initializeApp({
+  apiKey: "AIzaSyCa6Qho3IKoKE_jCNHYuFX6rtaV88jekQs",
+  authDomain: "customer-feedback-8ac1d.firebaseapp.com",
+  projectId: "customer-feedback-8ac1d",
+  storageBucket: "customer-feedback-8ac1d.appspot.com",
+  messagingSenderId: "408860081491",
+  appId: "1:408860081491:web:c5fa8b8e757c13196375a6"
+});
+var auth = firebase.auth(), db = firebase.firestore(), col = db.collection('pos_test_settings');
+var DOC = 'fabdev', ref = col.doc(DOC);
+
+var items = [];          // آخر قايمة من السيرفر
+var cards = {};          // id -> {root, refs, data}
+var openId = null, unsub = null, chain = Promise.resolve(), saving = 0, pendingText = {}, fullCache = {};
+
+function setStatus(text, kind){ var s = $('status'); s.textContent = text || ''; s.className = 'status' + (kind ? ' ' + kind : ''); }
+function note(text){ var n = $('note'); n.textContent = text || ''; n.hidden = !text; }
+
+/* ---------------- الدخول ---------------- */
+auth.onAuthStateChanged(function(u){
+  var staff = !!(u && u.providerData && u.providerData.some(function(p){ return p.providerId === 'password'; }));
+  $('login').hidden = staff; $('app').hidden = !staff; $('logout').hidden = !staff;
+  if(unsub){ unsub(); unsub = null; }
+  if(!staff) return;
+  unsub = ref.onSnapshot(function(d){
+    var data = d.exists ? d.data() : null;
+    items = data && Array.isArray(data.items) ? data.items : [];
+    render();
+  }, function(){ $('progress').textContent = ''; note('مقدرناش نحمّل البيانات. اتأكدي من النت وافتحي الصفحة تاني.'); });
+});
+$('login').addEventListener('submit', function(e){
+  e.preventDefault(); $('loginErr').textContent = '';
+  auth.signInWithEmailAndPassword($('email').value.trim(), $('pass').value)
+    .catch(function(){ $('loginErr').textContent = 'الإيميل أو كلمة السر مش مظبوطين.'; });
+});
+$('logout').addEventListener('click', function(){ auth.signOut(); });
+
+/* ---------------- الحفظ: transaction على القايمة، واحدة ورا التانية ---------------- */
+function mutate(fn){
+  saving++; setStatus('بيتحفظ...');
+  chain = chain.then(function(){
+    return db.runTransaction(function(tx){
+      return tx.get(ref).then(function(d){
+        var arr = d.exists && Array.isArray(d.data().items) ? d.data().items.map(function(x){ return Object.assign({}, x); }) : [];
+        var out = fn(arr) || arr;
+        tx.set(ref, { items: out, updatedAt: Date.now(), by: (auth.currentUser && auth.currentUser.email) || '' }, { merge: true });
+      });
+    });
+  }).then(function(){
+    saving--; if(saving <= 0){ saving = 0; setStatus('اتحفظ', 'ok'); render(); }
+  }, function(e){
+    saving--; if(saving < 0) saving = 0;
+    setStatus('ما اتحفظش، جربي تاني', 'bad');
+    if(e && String(e.code).indexOf('permission-denied') >= 0) note('الحساب ده مش مسموح له بالحفظ. ادخلي بحساب الموظفين.');
+  });
+  return chain;
+}
+function patchItem(id, patch){
+  var c = cards[id]; if(c){ c.data = Object.assign({}, c.data, patch); }
+  return mutate(function(arr){
+    for(var i = 0; i < arr.length; i++) if(arr[i].id === id){ Object.assign(arr[i], patch); return arr; }
+    return arr;
+  });
+}
+
+/* ---------------- الكارت ---------------- */
+function isBlank(d){
+  return !(d.grip || d.weight || d.opacity || d.wrinkle || d.season || d.price || (d.occasions && d.occasions.length) || (d.colors && d.colors.length));
+}
+function buildCard(id){
+  var root = el('section', 'card'), r = {};
+  var head = el('button', 'head'); head.type = 'button'; head.setAttribute('aria-expanded', 'false');
+  r.thumb = el('img', 'thumb'); r.thumb.alt = '';
+  var hn = el('div', 'hname'); r.title = el('strong'); r.sub = el('span', 'small'); hn.appendChild(r.title); hn.appendChild(r.sub);
+  r.pill = el('span', 'pill');
+  head.appendChild(r.thumb); head.appendChild(hn); head.appendChild(r.pill);
+  var body = el('div', 'body'); body.hidden = true;
+  head.addEventListener('click', function(){
+    var willOpen = body.hidden;
+    if(openId && openId !== id && cards[openId]){ cards[openId].refs.body.hidden = true; cards[openId].refs.head.setAttribute('aria-expanded', 'false'); }
+    body.hidden = !willOpen; head.setAttribute('aria-expanded', String(willOpen)); openId = willOpen ? id : null;
+    if(willOpen) loadFull(id);
+  });
+  r.head = head; r.body = body;
+
+  var fN = el('div', 'field'); var lN = el('label', null, 'اسم الخامة'); lN.htmlFor = 'n-' + id;
+  r.name = el('input'); r.name.type = 'text'; r.name.id = 'n-' + id; r.name.autocomplete = 'off';
+  fN.appendChild(lN); fN.appendChild(r.name); body.appendChild(fN);
+  bindText(id, r.name, 'name');
+
+  r.hint = el('div', 'hint'); body.appendChild(r.hint);
+
+  var fP = el('div', 'field'); fP.appendChild(el('div', 'lbl', 'صورة الخامة (قريبة وفي نور كويس)'));
+  var pr = el('div', 'photo'); r.photo = el('img'); r.photo.alt = 'صورة الخامة'; r.photo.hidden = true;
+  var pl = el('label', 'btn ghost', 'ارفعي صورة'); pl.htmlFor = 'p-' + id; r.photoLabel = pl;
+  var pi = el('input', 'file'); pi.type = 'file'; pi.accept = 'image/*'; pi.id = 'p-' + id;
+  pi.addEventListener('change', function(e){ var f = e.target.files[0]; e.target.value = ''; if(f) uploadPhoto(id, f); });
+  pr.appendChild(r.photo); pr.appendChild(pl); pr.appendChild(pi); fP.appendChild(pr); body.appendChild(fP);
+
+  r.chips = {};
+  Object.keys(OPT).forEach(function(key){
+    var f = el('div', 'field'); f.appendChild(el('div', 'lbl', LABEL[key]));
+    var box = el('div', 'chips'); r.chips[key] = [];
+    OPT[key].forEach(function(v){
+      var b = el('button', 'chip', v); b.type = 'button'; b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', function(){ toggle(id, key, v); });
+      box.appendChild(b); r.chips[key].push([v, b]);
+    });
+    f.appendChild(box); body.appendChild(f);
+  });
+
+  var fC = el('div', 'field'); fC.appendChild(el('div', 'lbl', 'الألوان المتوفرة عندنا من الخامة دي'));
+  var cg = el('div', 'colors'); r.colors = [];
+  COLORS.forEach(function(c){
+    var b = el('button', 'cw'); b.type = 'button'; b.setAttribute('aria-pressed', 'false');
+    var i = el('i'); i.style.background = c[1]; b.appendChild(i); b.appendChild(el('span', null, c[0]));
+    b.addEventListener('click', function(){ toggle(id, 'colors', c[0]); });
+    cg.appendChild(b); r.colors.push([c[0], b]);
+  });
+  fC.appendChild(cg); body.appendChild(fC);
+
+  var fT = el('div', 'field'); var lT = el('label', null, 'ملاحظاتك (أي حاجة العميلة لازم تعرفها)'); lT.htmlFor = 't-' + id;
+  r.notes = el('textarea'); r.notes.id = 't-' + id; fT.appendChild(lT); fT.appendChild(r.notes); body.appendChild(fT);
+  bindText(id, r.notes, 'notes');
+
+  var ck = el('label', 'check'); r.reviewed = el('input'); r.reviewed.type = 'checkbox'; r.reviewed.id = 'r-' + id;
+  r.reviewed.addEventListener('change', function(){ patchItem(id, { reviewed: r.reviewed.checked }); paintHead(id); });
+  ck.appendChild(r.reviewed); ck.appendChild(el('span', null, 'راجعت الخامة دي وبياناتها صح')); body.appendChild(ck);
+
+  var del = el('div', 'rowbtn');
+  var d1 = el('button', 'btn danger', 'احذفي الخامة'); d1.type = 'button';
+  var d2 = el('button', 'btn danger', 'أيوه احذفي'); d2.type = 'button'; d2.hidden = true;
+  var d3 = el('button', 'btn ghost', 'لأ'); d3.type = 'button'; d3.hidden = true;
+  d1.addEventListener('click', function(){ d1.hidden = true; d2.hidden = false; d3.hidden = false; });
+  d3.addEventListener('click', function(){ d1.hidden = false; d2.hidden = true; d3.hidden = true; });
+  d2.addEventListener('click', function(){ removeItem(id); });
+  del.appendChild(d1); del.appendChild(d2); del.appendChild(d3); body.appendChild(del);
+
+  root.appendChild(head); root.appendChild(body);
+  return { root: root, refs: r, data: {} };
+}
+
+function bindText(id, input, field){
+  var key = id + '/' + field;
+  function flush(){
+    if(pendingText[key]){ clearTimeout(pendingText[key]); pendingText[key] = null; }
+    var c = cards[id]; if(!c) return;
+    var v = input.value.trim();
+    if((c.data[field] || '') !== v){ var p = {}; p[field] = v; patchItem(id, p); paintHead(id); }
+  }
+  input.addEventListener('input', function(){ if(pendingText[key]) clearTimeout(pendingText[key]); pendingText[key] = setTimeout(flush, 1200); });
+  input.addEventListener('blur', flush);
+}
+function toggle(id, key, value){
+  var c = cards[id]; if(!c) return;
+  var p = {};
+  if(SINGLE.indexOf(key) >= 0){ p[key] = c.data[key] === value ? '' : value; }
+  else {
+    var cur = (c.data[key] || []).slice(), i = cur.indexOf(value);
+    if(i >= 0) cur.splice(i, 1); else cur.push(value);
+    p[key] = cur;
+  }
+  patchItem(id, p); paint(id);
+}
+function paintHead(id){
+  var c = cards[id], d = c.data, r = c.refs;
+  r.title.textContent = d.name || 'خامة من غير اسم';
+  var bits = []; if(d.weight) bits.push(d.weight); if(d.season) bits.push(d.season); if(d.colors && d.colors.length) bits.push(d.colors.length + ' لون');
+  r.sub.textContent = bits.join(' · ') || (isBlank(d) ? 'لسه فاضية' : '');
+  r.pill.textContent = d.reviewed ? 'تمت' : 'محتاجة مراجعة';
+  r.pill.className = 'pill' + (d.reviewed ? ' done' : '');
+  if(d.th){ if(r.thumb.getAttribute('src') !== d.th) r.thumb.src = d.th; r.photoLabel.textContent = 'غيّري الصورة'; }
+  else { r.thumb.removeAttribute('src'); r.photo.hidden = true; r.photoLabel.textContent = 'ارفعي صورة'; }
+}
+function paint(id){
+  var c = cards[id], d = c.data, r = c.refs;
+  paintHead(id);
+  if(document.activeElement !== r.name) r.name.value = d.name || '';
+  if(document.activeElement !== r.notes) r.notes.value = d.notes || '';
+  r.reviewed.checked = !!d.reviewed;
+  r.hint.textContent = '';
+  if(d.hint || d.check){
+    if(d.hint) r.hint.appendChild(document.createTextNode('وصف مبدئي من النت: ' + d.hint));
+    if(d.check){ if(d.hint) r.hint.appendChild(el('br')); r.hint.appendChild(el('b', null, 'محتاج تأكيد: ')); r.hint.appendChild(document.createTextNode(d.check)); }
+    r.hint.hidden = false;
+  } else r.hint.hidden = true;
+  Object.keys(OPT).forEach(function(key){
+    r.chips[key].forEach(function(pair){
+      var on = SINGLE.indexOf(key) >= 0 ? d[key] === pair[0] : (d[key] || []).indexOf(pair[0]) >= 0;
+      pair[1].setAttribute('aria-pressed', String(on));
+    });
+  });
+  r.colors.forEach(function(pair){ pair[1].setAttribute('aria-pressed', String((d.colors || []).indexOf(pair[0]) >= 0)); });
+}
+function render(){
+  note('');
+  var seen = {}, list = $('list'), done = 0;
+  items.forEach(function(it){
+    if(!it || !it.id) return;
+    seen[it.id] = true;
+    var fresh = !cards[it.id];
+    if(fresh) cards[it.id] = buildCard(it.id);
+    if(fresh || saving === 0) cards[it.id].data = Object.assign({}, it);   // وإحنا بنحفظ، اللي على الشاشة هو الأحدث
+    paint(it.id);
+    list.appendChild(cards[it.id].root);
+    if(it.reviewed) done++;
+  });
+  Object.keys(cards).forEach(function(id){ if(!seen[id]){ cards[id].root.remove(); delete cards[id]; if(openId === id) openId = null; } });
+  $('empty').hidden = items.length > 0;
+  $('progress').textContent = items.length ? ('اتراجع ' + done + ' من ' + items.length + ' خامة') : '';
+}
+
+/* ---------------- الصور ---------------- */
+function draw(im, max){
+  var k = Math.min(1, max / Math.max(im.naturalWidth, im.naturalHeight));
+  var c = document.createElement('canvas'); c.width = Math.max(1, Math.round(im.naturalWidth * k)); c.height = Math.max(1, Math.round(im.naturalHeight * k));
+  c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+  return c;
+}
+function uploadPhoto(id, file){
+  setStatus('بنرفع الصورة...');
+  var url = URL.createObjectURL(file), im = new Image();
+  im.onload = function(){
+    var full = draw(im, 1000).toDataURL('image/jpeg', 0.82), th = draw(im, 96).toDataURL('image/jpeg', 0.7);
+    URL.revokeObjectURL(url);
+    col.doc(DOC + '_p_' + id).set({ img: full, at: Date.now() }).then(function(){
+      fullCache[id] = full;
+      var c = cards[id]; if(c){ c.refs.photo.src = full; c.refs.photo.hidden = false; }
+      patchItem(id, { th: th, photoAt: Date.now() }); if(cards[id]) paintHead(id);
+    }, function(){ setStatus('الصورة ما اترفعتش، جربي تاني', 'bad'); });
+  };
+  im.onerror = function(){ URL.revokeObjectURL(url); setStatus('الصورة دي ما اتفتحتش', 'bad'); };
+  im.src = url;
+}
+function loadFull(id){
+  var c = cards[id]; if(!c || !c.data.th) return;
+  if(fullCache[id]){ c.refs.photo.src = fullCache[id]; c.refs.photo.hidden = false; return; }
+  c.refs.photo.src = c.data.th; c.refs.photo.hidden = false;
+  col.doc(DOC + '_p_' + id).get().then(function(d){
+    var img = d.exists && d.data().img; if(!img) return;
+    fullCache[id] = img; if(cards[id]) cards[id].refs.photo.src = img;
+  }).catch(function(){});
+}
+
+/* ---------------- إضافة / حذف / بداية ---------------- */
+function openCard(id){
+  var tries = 0;
+  (function go(){
+    var c = cards[id];
+    if(c){ if(c.refs.body.hidden) c.refs.head.click(); c.refs.name.focus(); c.root.scrollIntoView({ block: 'start' }); }
+    else if(tries++ < 30) setTimeout(go, 150);
+  })();
+}
+$('add').addEventListener('click', function(){
+  var id = newId();
+  mutate(function(arr){ arr.push({ id: id, name: '', reviewed: false }); return arr; }).then(function(){ openCard(id); });
+});
+function removeItem(id){
+  mutate(function(arr){ return arr.filter(function(x){ return x.id !== id; }); });
+  col.doc(DOC + '_p_' + id).set({ img: '', at: Date.now() }).catch(function(){});   // المسح ممنوع في القواعد — بنفضّي الصورة
+  delete fullCache[id];
+}
+$('seed').addEventListener('click', function(){
+  mutate(function(arr){
+    if(arr.length) return arr;                       // حد سبق وبدأ — ما نكررش
+    return SEED.map(function(s){ return Object.assign({ id: newId(), reviewed: false }, s); });
+  });
+});
+$('copy').addEventListener('click', function(){
+  var clean = items.map(function(it){ var o = Object.assign({}, it); delete o.th; return o; });
+  var text = JSON.stringify(clean, null, 2);
+  function ok(){ setStatus('البيانات اتنسخت', 'ok'); }
+  function manual(){
+    var t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select();
+    try{ document.execCommand('copy'); ok(); }catch(e){ setStatus('النسخ ما اشتغلش', 'bad'); }
+    t.remove();
+  }
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(ok, manual); else manual();
+});
+})();
+</script>
+</body>
+</html>
