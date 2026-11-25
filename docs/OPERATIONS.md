@@ -42,6 +42,12 @@ cd C:\Users\Mahmo\Documents\echarpe-push
 firebase deploy --only functions
 ```
 
+### 🤖 مراجع الكاميرات الذكي (functions/cctvAgent.js)
+- إعداد مرة واحدة: `firebase functions:secrets:set ANTHROPIC_API_KEY` (المفتاح من platform.claude.com) ثم `firebase deploy --only functions:cctvAgentDaily,functions:cctvAgentRun`.
+- لازم تنشر القواعد كمان (`office_cctv_ai` في security/firestore-phase2.rules) عشان أزرار «طبيعي / مشكلة» تشتغل.
+- بيشتغل لوحده 3:17 الفجر عن امبارح لكل فرع. الشاشة في Office ← المزيد ← 🤖 مراجع الكاميرات الذكي.
+- `functions/cctvReviewCore.js` نسخة من `office2/cctv-review-core.js` — أي تعديل في واحد لازم يتنسخ للتاني (الاختبار بيقع لو اختلفوا).
+
 ## 6. قبل أي رفع: الاختبارات
 
 ```
