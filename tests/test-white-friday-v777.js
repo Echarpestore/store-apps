@@ -44,6 +44,9 @@ assertEq(R.fn.ok.sent.length, 1, 'إرسال جديد = إشعار واحد');
 assertEq(R.fn.ok.sent[0], ['echarpe', OKT, OKB, 'promo', './?go=wf'], 'بيتبعت للبراند بالعنوان والكلام واللينك');
 assertEq(R.fn.sameSeq.sent.length, 0, 'تعديل من غير seq جديد = مفيش إرسال (سلبي)');
 assertEq(R.fn.sameDay.sent.length, 0, 'إرسال تاني في نفس اليوم = مرفوض (سلبي)');
+assertEq(R.fn.ok.acks.map(a => [a.d.sentDay, a.o.merge]), [['2026-11-26', true]], 'بعد الإرسال الفعلي السيرفر بيكتب sentDay (تأكيد للـOffice)');
+assertEq(R.fn.retryNoAck.sent.length, 1, 'اتسجل النهارده والسيرفر ما بعتش (الفانكشن مكانتش منشورة) = الإرسال التاني بيعدّي');
+assertEq(R.fn.sameSeq.acks.length, 0, 'من غير إرسال = مفيش تأكيد (سلبي)');
 assertEq(R.fn.nextDay.sent.length, 1, 'اليوم اللي بعده = مسموح');
 assertEq(R.fn.empty.sent.length, 0, 'عنوان فاضي = مفيش إرسال (سلبي)');
 assertEq(R.fn.badLink.sent[0][4], './', 'لينك برّه التطبيق بيتجاهل ويفتح الرئيسية (سلبي)');
@@ -68,6 +71,7 @@ assertEq(R.office.sentToday.asked, 0, 'ومن غير حتى ما يسأل');
 assertEq(R.office.glow.writes.map(w => w.d), ['promo_push_glow'], 'Glow له حد يومي لوحده');
 assert(/Glow/.test(R.office.glow.writes[0].data.title) && /Glow/.test(R.office.glow.writes[0].data.body) && !/إيشارب/.test(R.office.glow.writes[0].data.title + R.office.glow.writes[0].data.body), 'إشعار Glow بيتكلم عن Glow مش إيشارب (سلبي)');
 assertEq(R.office.short.writes.length, 0, 'كلام فاضي/قصير = مفيش إرسال (سلبي)');
+assertEq(R.office.noAck.writes.map(w => w.d), ['promo_push_echarpe'], 'اتسجل من غير تأكيد السيرفر = المالك يقدر يبعت تاني في نفس اليوم');
 /* v778 — ستوري التطبيق مفتوحة → نفس طريق إشعار الفيديو المنشور (من غير نشر فانكشن) · طريق واحد بس في المرة */
 const L = R.office.live.writes;
 assertEq(L.map(w => w.d), ['stories_push_echarpe'], 'ستوري مفتوحة = بيكتب مستند إشعار الستوري بس (مش الاتنين)');
@@ -78,3 +82,16 @@ assertEq(R.office.liveOtherBrand.writes.map(w => w.d), ['promo_push_glow'], 'Glo
 const off = read('Office/index.html');
 assert(off.indexOf('office2/promo-push.js?v=') > off.indexOf('office2/stories.js?v='), 'Office بيحمّل promo-push بعد stories');
 assert(+read('Office/sw.js').match(/echarpe-office-v(\d+)/)[1] >= 778, 'كاش Office اترفع');
+
+/* ---------- 4) Glow: نفس التصميم على رئيسية تطبيق Glow (من غير فيديو) وبيقف لوحده ---------- */
+const gh = read('glow/index.html');
+const ga = gh.indexOf('var WF_END'), gb = gh.indexOf('تبويب العروض (الخصومات السارية من الكاشير)', ga);
+assert(ga > 0 && gb > ga, 'Glow: كود الجمعة البيضاء موجود');
+function gAt(ms){ const c = { Date: { now: () => ms, UTC: Date.UTC } }; vm.createContext(c); vm.runInContext(gh.slice(ga, gh.lastIndexOf('/* ====', gb)), c); return c.wfBannerHtml(); }
+assert(/class="t3">Offers/.test(gAt(THU)) && /26 - 29/.test(gAt(THU)) && /Thu\./.test(gAt(THU)) && /Sun\./.test(gAt(THU)), 'Glow: الشرايط والتاريخ الصح (الخميس–الأحد 26–29)');
+assert(/في Glow/.test(gAt(THU)) && !/إيشارب/.test(gAt(THU)) && !/wf26/.test(gAt(THU)), 'Glow: باسم Glow ومن غير فيديو إيشارب (سلبي)');
+assert(/switchTab\('offers'\)/.test(gAt(THU)), 'Glow: الدوسة بتفتح العروض');
+assertEq(gAt(MON), '', 'Glow: بيختفي لوحده بعد الأحد (سلبي)');
+assert(/wfBannerHtml\(\)\+/.test(gh) && /\.wf-banner\{/.test(gh), 'Glow: البانر متركّب على الرئيسية ومعاه الستايل');
+assert(+read('glow/sw.js').match(/glow-loyalty-v(\d+)/)[1] >= 94, 'كاش Glow اترفع');
+assert(/class="t3">Offers/.test(wfAt(THU).html) && /26 - 29/.test(wfAt(THU).html), 'إيشارب: نفس التصميم بالتاريخ الصح');

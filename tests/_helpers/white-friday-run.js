@@ -8,7 +8,8 @@ const fn = read('functions/index.js');
 const p1 = fn.indexOf('const pm = docId.match'), p2 = fn.indexOf('const m = docId.match(/^catalog_');
 out.fnFound = p1 > 0 && p2 > p1;
 const run = new Function('docId', 'before', 'after', 'broadcastBrand', 'return (async () => {' + fn.slice(p1, p2) + ' return "next"; })();');
-async function fire(docId, before, after){ const sent = []; const r = await run(docId, before, after, async (...x) => { sent.push(x); }); return { sent, r }; }
+const run2 = new Function('docId', 'before', 'after', 'broadcastBrand', 'event', 'return (async () => {' + fn.slice(p1, p2) + ' return "next"; })();');
+async function fire(docId, before, after){ const sent = [], acks = []; const event = { data: { after: { ref: { set: async (d, o) => { acks.push({ d, o }); } } } } }; const r = await run2(docId, before, after, async (...x) => { sent.push(x); }, event); return { sent, r, acks }; }
 const OK = { seq: 1, day: '2026-11-26', title: 'الجمعة البيضاء في إيشارب 🤍', body: 'الحقي عروض الجمعة البيضاء من الخميس للأحد', link: './?go=wf' };
 function office(opts){
   const writes = []; const els = {};
@@ -34,7 +35,8 @@ const NOWMS = Date.UTC(2026, 10, 26, 9, 0);
 (async () => {
   out.fn.ok = await fire('promo_push_echarpe', {}, OK);
   out.fn.sameSeq = await fire('promo_push_echarpe', OK, Object.assign({}, OK, { title: 'تعديل' }));
-  out.fn.sameDay = await fire('promo_push_echarpe', OK, Object.assign({}, OK, { seq: 2 }));
+  out.fn.sameDay = await fire('promo_push_echarpe', Object.assign({}, OK, { sentDay: OK.day }), Object.assign({}, OK, { seq: 2, sentDay: OK.day }));
+  out.fn.retryNoAck = await fire('promo_push_echarpe', OK, Object.assign({}, OK, { seq: 2 }));
   out.fn.nextDay = await fire('promo_push_echarpe', OK, Object.assign({}, OK, { seq: 2, day: '2026-11-27' }));
   out.fn.empty = await fire('promo_push_echarpe', {}, { seq: 1, day: 'x', title: '  ', body: 'كلام' });
   out.fn.badLink = await fire('promo_push_glow', {}, Object.assign({}, OK, { link: 'https://evil.example/x' }));
@@ -45,12 +47,14 @@ const NOWMS = Date.UTC(2026, 10, 26, 9, 0);
   out.office.ok = { writes: o.writes, asked: o.ctx._asked };
   o = office({ now: NOWMS, confirm: false }); o.ctx.O2Promo.open(); hydrate(o); await o.ctx.O2Promo.send();
   out.office.declined = { writes: o.writes, asked: o.ctx._asked };
-  o = office({ now: NOWMS, last: { promo_push_echarpe: { day: '2026-11-26', title: 'x' } } }); o.ctx.O2Promo.open(); hydrate(o); await o.ctx.O2Promo.send();
+  o = office({ now: NOWMS, last: { promo_push_echarpe: { day: '2026-11-26', sentDay: '2026-11-26', title: 'x' } } }); o.ctx.O2Promo.open(); hydrate(o); await o.ctx.O2Promo.send();
   out.office.sentToday = { writes: o.writes, asked: o.ctx._asked };
-  o = office({ now: NOWMS, last: { promo_push_echarpe: { day: '2026-11-26' } } }); o.ctx.O2Promo.open(); hydrate(o); o.ctx.O2Promo.brand('glow'); hydrate(o); await o.ctx.O2Promo.send();
+  o = office({ now: NOWMS, last: { promo_push_echarpe: { day: '2026-11-26', sentDay: '2026-11-26' } } }); o.ctx.O2Promo.open(); hydrate(o); o.ctx.O2Promo.brand('glow'); hydrate(o); await o.ctx.O2Promo.send();
   out.office.glow = { writes: o.writes, asked: o.ctx._asked };
   o = office({ now: NOWMS }); o.ctx.O2Promo.open(); hydrate(o); o.els.ppT.value = '  '; o.els.ppB.value = 'قصير'; await o.ctx.O2Promo.send();
   out.office.short = { writes: o.writes, asked: o.ctx._asked };
+  o = office({ now: NOWMS, last: { promo_push_echarpe: { day: '2026-11-26', title: 'x', ts: NOWMS - 600000 } } }); o.ctx.O2Promo.open(); hydrate(o); await o.ctx.O2Promo.send();
+  out.office.noAck = { writes: o.writes, html: String(o.els.o2PpBody._h || '') };
   const LIVE = { stories_cfg: { live_echarpe: true } };
   o = office({ now: NOWMS, last: LIVE }); o.ctx.O2Promo.open(); hydrate(o); await o.ctx.O2Promo.send();
   out.office.live = { writes: o.writes, asked: o.ctx._asked };

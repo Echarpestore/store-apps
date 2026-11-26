@@ -318,12 +318,16 @@ exports.onCatalogUpdated = onDocumentWritten(
     if (pm) {
       const brand = pm[1];
       if (!(Number(after.seq || 0) > Number(before.seq || 0))) return;
-      if (before.day && after.day === before.day) return;            // إشعار واحد في اليوم
+      // إشعار واحد في اليوم — بنعدّ بـsentDay اللي السيرفر نفسه بيكتبه بعد الإرسال الفعلي
+      // (مش بـday بتاع Office: لو الفانكشن مكانتش منشورة ساعة الدوسة، الإرسال التاني في نفس اليوم لازم يعدّي).
+      if (after.sentDay && after.sentDay === after.day) return;
       const title = String(after.title || "").trim().slice(0, 60);
       const body = String(after.body || "").trim().slice(0, 180);
       if (!title || !body) return;
       const link = /^\.\/\?go=[a-z]{1,12}$/.test(String(after.link || "")) ? String(after.link) : "./";
       await broadcastBrand(brand, title, body, "promo", link);
+      // تأكيد للـOffice إن الإشعار اتبعت فعلًا (التحديث ده بيشغّل الفانكشن تاني بس seq متغيّرش → بترجع على طول)
+      await event.data.after.ref.set({ sentDay: String(after.day || ""), sentAt: Date.now() }, { merge: true });
       return;
     }
 

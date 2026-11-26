@@ -302,6 +302,34 @@
   .card-back .cb-wait{color:var(--muted); font-weight:700; padding:30px 0;}
   .card-back .flip-hint{color:var(--muted); opacity:.85; left:auto; right:20px;}
 
+  /* 🤍 الجمعة البيضاء (26–29 نوفمبر 2026) — بانر على الرئيسية بيختفي لوحده بعد الأحد.
+     الشكل اللي المالك اختاره: أرضية سماوي + تلات شرايط فوق بعض (أبيض · كحلي · أحمر) + التاريخ تحت، وجنبهم فيديو العرض. */
+  .wf-banner{position:relative; display:grid; grid-template-columns:1fr; align-items:center; gap:12px; width:100%; margin:14px 0 4px; padding:16px 14px 14px;
+    border:0; border-radius:22px; overflow:hidden; cursor:pointer; background:#CFE4F8; color:#1B2233; font:inherit; text-align:center;
+    box-shadow:0 18px 34px -20px rgba(27,34,51,.5);}
+  .wf-art{display:flex; flex-direction:column; align-items:center; direction:ltr; font-family:'Poppins','Montserrat','Segoe UI',system-ui,sans-serif;}
+  .wf-art i{display:block; font-style:normal; font-weight:900; line-height:1; letter-spacing:-.5px; padding:5px 12px 6px; font-size:clamp(25px,8.2vw,36px);}
+  .wf-art .t1{background:#fff; color:#1B2233; transform:translateX(-10px) rotate(-1deg);
+    clip-path:polygon(0 0,100% 0,98.5% 25%,100% 50%,98.5% 75%,100% 100%,0 100%,1.5% 75%,0 50%,1.5% 25%);}
+  .wf-art .t2{background:#1B2233; color:#fff; margin-top:-2px; transform:translateX(6px);
+    clip-path:polygon(0 0,100% 0,98.5% 25%,100% 50%,98.5% 75%,100% 100%,0 100%,1.5% 75%,0 50%,1.5% 25%);}
+  .wf-art .t3{background:#F0452F; color:#fff; margin-top:-2px; transform:translateX(-2px) rotate(-1deg);
+    clip-path:polygon(0 0,100% 0,98.5% 25%,100% 50%,98.5% 75%,100% 100%,0 100%,1.5% 75%,0 50%,1.5% 25%);}
+  .wf-date{display:block; margin-top:10px; color:#1B2233; line-height:1.05;}
+  .wf-date small{display:flex; justify-content:space-between; gap:26px; font-size:11.5px; font-weight:800; padding:0 4px;}
+  .wf-date b{display:block; font-size:clamp(22px,7vw,30px); font-weight:900; letter-spacing:.5px;}
+  .wf-date em{display:block; font-style:normal; font-size:15px; font-weight:900;}
+  .wf-vid{position:relative; display:block; aspect-ratio:3/4; border-radius:16px; overflow:hidden; background:#1B2233 center/cover no-repeat; border:3px solid #fff;
+    box-shadow:0 12px 22px -12px rgba(27,34,51,.6); transform:rotate(2deg);}
+  .wf-vid video{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block;}
+  .wf-vid .wf-play{position:absolute; inset:auto auto 8px 8px; width:30px; height:30px; border-radius:50%; display:grid; place-items:center; font-size:11px; color:#fff;
+    background:rgba(27,34,51,.55); border:1px solid rgba(255,255,255,.7);}
+  .wf-ar{grid-column:1/-1; display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:4px; text-align:right;}
+  .wf-ar b{display:block; font-size:14.5px; font-weight:900; color:#1B2233; line-height:1.35;}
+  .wf-ar b small{display:block; font-size:11.5px; font-weight:700; opacity:.75;}
+  .wf-ar em{flex:none; font-style:normal; font-size:12.5px; font-weight:900; background:#F0452F; color:#fff; padding:8px 14px; border-radius:999px;}
+  .wf-banner.wf-solo{padding:20px 14px 14px;}
+  .wf-banner.wf-solo .wf-ar{margin-top:12px;}
   .show-cashier{
     width:100%; margin-top:14px; padding:15px; border:none; border-radius:16px;
     background:var(--white); color:var(--pink-deep); font-weight:800; font-size:16px;
@@ -1994,6 +2022,7 @@ function renderCard(){
         '<div class="gcard-scanhint">📷 اعرضي الكود ده للكاشير عند الدفع</div>'+
       '</div>'+
     '</div>'+
+    wfBannerHtml()+
     (window.StoriesApp ? StoriesApp.storiesHtml() : '')+
     (window.StoriesApp ? StoriesApp.homeHtml() : '')+
 
@@ -2015,6 +2044,18 @@ function renderCard(){
   if(code){
     try{ drawBarcode('cardBarcode', code); }catch(e){ console.warn('barcode', e); }
   }
+}
+
+/* 🤍 الجمعة البيضاء في Glow — من الخميس 26 للأحد 29 نوفمبر 2026 (القاهرة). بانر بنفس تصميم إيشارب
+   (من غير فيديو: الفيديو بتاع فروع إيشارب) · الدوسة بتفتح «العروض» · بيختفي لوحده بعد الأحد. */
+var WF_END = Date.UTC(2026, 10, 29, 22, 0, 0);
+function wfOn(){ return Date.now() < WF_END; }
+function wfBannerHtml(){
+  if(!wfOn()) return '';
+  return '<button class="wf-banner wf-solo" type="button" onclick="switchTab(\'offers\')" aria-label="عروض الجمعة البيضاء في Glow">'
+    + '<span class="wf-art"><i class="t1">White</i><i class="t2">Friday</i><i class="t3">Offers</i>'
+    + '<span class="wf-date"><small><span>Thu.</span><span>Sun.</span></small><b>26 - 29</b><em>November</em></span></span>'
+    + '<span class="wf-ar"><b>الجمعة البيضاء · خصومات على كل المنتجات<small>من الخميس للأحد · في Glow</small></b><em>شوفي العروض</em></span></button>';
 }
 
 /* ============================================================
