@@ -18,9 +18,9 @@ const R = 'echarpe El Rehab';
 const L = (bc, price, qty, extra)=> Object.assign({ id:'p'+bc, barcode:bc, name:'x', price, qty:qty||1 }, extra||{});
 const tot = (cart)=> Math.round(cart.reduce((s,c)=> s + c.price*c.qty, 0)*100)/100;
 
-let cart = [L('902', 700), L('832', 420), L('60', 650), L('582', 250), L('749', 180)];
+let cart = [L('902', 700), L('832', 420), L('60', 650), L('582', 250), L('749', 180), L('746', 600)];
 ap(cart, THU, R);
-ok(cart.map(c=>c.price).join(',') === '399,299,550,199,99', 'الأكواد السبعة بالأسعار المطلوبة');
+ok(cart.map(c=>c.price).join(',') === '399,299,550,199,99,510', 'الأكواد السبعة بالأسعار المطلوبة');
 ok(cart.every(c=> c.originalPrice > c.price && /الجمعة البيضاء/.test(c.discountName)), 'الفاتورة بتوضح السعر الأصلي واسم العرض');
 cart = [L('999', 200, 2)]; ap(cart, THU, R);
 ok(cart[0].price === 170, 'أي صنف تاني = خصم 15%');
@@ -52,7 +52,9 @@ cart = [L('60', 700)]; ap(cart, THU, CC); ok(cart[0].price === 550, 'سيتي س
 cart = [L('1115', 700)]; ap(cart, THU, R); ok(cart[0].price === 595, 'سلبي: 1115 في الرحاب مش سعر ثابت (15%)');
 cart = [L('60', 700)]; ap(cart, THU, 'Glow'); ok(cart[0].price === 550, '60 = 550 في Glow');
 cart = [L('749', 180)]; ap(cart, THU, R); ok(cart[0].price === 99, '749 = 99');
-cart = [L('746', 600)]; ap(cart, THU, R); ok(cart[0].price === 540 && /10%/.test(cart[0].discountName), '746 = خصم 10% (600 → 540)');
+cart = [L('746', 600)]; ap(cart, THU, 'Glow'); ok(cart[0].price === 540 && /10%/.test(cart[0].discountName), 'Glow: 746 = خصم 10% (600 → 540)');
+cart = [L('746', 600)]; ap(cart, THU, R); ok(cart[0].price === 510, 'سلبي: الرحاب 746 = 510 (مش 10%)');
+cart = [L('746', 600)]; ap(cart, THU, 'echarpe City Centre'); ok(cart[0].price === 510, 'سلبي: سيتي سنتر 746 = 510');
 cart = [L('582', 150)]; ap(cart, THU, R); ok(cart[0].price === 150, 'سلبي: كود سعره أصلًا أقل من سعر العرض → مايغلاش عليها (ولا ياخد 15%)');
 cart = [L('999', 200, 1, { price:150, originalPrice:200, discountName:'خصم الفرع' })]; ap(cart, THU, R);
 ok(cart[0].price === 150 && cart[0].discountName === 'خصم الفرع', 'خصم تاني أحسن شغال → يفضل هو (مش بيتجمعوا)');

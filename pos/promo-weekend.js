@@ -17,10 +17,11 @@
     from: '2026-11-26', to: '2026-11-29',          // شامل اليومين
     pct: 15,                                        // باقي المحل
     // v776 (تصحيح المالك 26-11): السعر الثابت هو اللي بيتطبق (مش 15% حتى لو أرخص) · 832=299 · 749=99
-    fixed: { '902':399,   /* v783: 902 بـ399 في كل الفروع (قرار المالك 26-11) */ '832':299, '60':550, '582':199, '749':99 },
+    fixed: { '902':399,   /* v783: 902 بـ399 في كل الفروع (قرار المالك 26-11) */ '832':299, '60':550, '582':199, '749':99, '746':510 },
     // v777: سيتي سنتر بيبيع نفس الصنف بكود 772 (بدل 832) → 772 بـ299 هناك، و832 للفروع التانية
     // المفتاح = جزء من اسم الفرع (من غير حروف كبيرة/صغيرة) — 'madinaty' بيمسك 'echarpe Madinaty' و'echarpe Madinaty-1'
-    pctByCode: { '138':10, '746':10 },   // v786: 746 خصم 10% (بدل 510)                        // v784: كود 138 خصم 10% (بدل 595 ثابت) — مش الـ15%
+    pctByCode: { '138':10 },                        // v784: كود 138 خصم 10% (بدل 595 ثابت) — مش الـ15%
+    pctByBranch: { 'glow': { '746':10 } },         // v787: 746 خصم 10% في Glow بس — باقي الفروع 510
     fixedByBranch: {
       'city centre': { add: { '772':299, '1115':550 }, remove: ['832'] }   // v785: 1115 = نفس صنف 60 بكود سيتي سنتر
     },
@@ -84,6 +85,14 @@
     return out;
   }
   window.weekendPromoFixedFor = fixedFor;
+  function pctFor(br){
+    var out = {}; Object.keys(PROMO.pctByCode || {}).forEach(function(k){ out[k] = PROMO.pctByCode[k]; });
+    var lb = String(br || '').trim().toLowerCase();
+    Object.keys(PROMO.pctByBranch || {}).forEach(function(b){
+      if(lb.indexOf(b.toLowerCase()) >= 0){ var o = PROMO.pctByBranch[b]; Object.keys(o).forEach(function(k){ out[k] = o[k]; }); }
+    });
+    return out;
+  }
   function applyWeekendPromo(cart, now, br){
     cart = cart || [];
     var on = promoActive(now, br);
@@ -96,8 +105,9 @@
       remember(c);
       var code = String(c.barcode || '').trim();
       if(code === PROMO.bundle.code){ bundleLines.push(c); return; }
-      if(PROMO.pctByCode && Object.prototype.hasOwnProperty.call(PROMO.pctByCode, code)){
-        var pc = PROMO.pctByCode[code];
+      var PCT = pctFor(br);
+      if(Object.prototype.hasOwnProperty.call(PCT, code)){
+        var pc = PCT[code];
         setPrice(c, c.promoBase * (1 - pc/100), PROMO.name + ' ' + pc + '%');
         return;
       }
