@@ -34,6 +34,12 @@ cart[0].qty = 2; ap(cart, THU, R); ok(tot(cart) === 100 && cart[0].discountName 
 cart = [L('187', 50, 2), L('187', 50, 2, { id:'p187b', noMerge:true })]; ap(cart, THU, R); ok(tot(cart) === 150, 'بندانة في سطرين (2+2) = 150');
 cart = [L('45', 50, 4)]; ap(cart, THU, R); ok(tot(cart) === 170, 'كود 45 مبقاش في عرض الـ4 (بياخد 15% زي باقي المحل)');
 cart = [L('832', 450)]; ap(cart, THU, R); ok(cart[0].price === 299, '832 = 299 بالظبط حتى لو الـ15% مختلفة');
+const CC = 'echarpe City Centre';
+cart = [L('772', 350)]; ap(cart, THU, CC); ok(cart[0].price === 299, 'سيتي سنتر: كود 772 = 299 بدل 350');
+cart = [L('832', 400)]; ap(cart, THU, CC); ok(cart[0].price === 340, 'سلبي: سيتي سنتر كود 832 مش في السعر الثابت (15% زي الباقي)');
+cart = [L('772', 350)]; ap(cart, THU, R); ok(cart[0].price === 297.5, 'سلبي: الرحاب كود 772 = 15% بس (السعر الثابت لسيتي سنتر)');
+cart = [L('832', 400)]; ap(cart, THU, 'echarpe Madinaty'); ok(cart[0].price === 299, 'مدينتي كود 832 = 299');
+cart = [L('902', 700)]; ap(cart, THU, CC); ok(cart[0].price === 490, 'سيتي سنتر باقي الأكواد زي ما هي');
 cart = [L('749', 180)]; ap(cart, THU, R); ok(cart[0].price === 99, '749 = 99');
 cart = [L('746', 500)]; ap(cart, THU, R); ok(cart[0].price === 500, 'سلبي: كود سعره أصلًا أقل من سعر العرض → مايغلاش عليها (ولا ياخد 15%)');
 cart = [L('999', 200, 1, { price:150, originalPrice:200, discountName:'خصم الفرع' })]; ap(cart, THU, R);

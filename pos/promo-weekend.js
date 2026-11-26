@@ -18,6 +18,8 @@
     pct: 15,                                        // باقي المحل
     // v776 (تصحيح المالك 26-11): السعر الثابت هو اللي بيتطبق (مش 15% حتى لو أرخص) · 832=299 · 749=99
     fixed: { '902':490, '832':299, '60':550, '582':199, '138':595, '749':99, '746':510 },
+    // v777: سيتي سنتر بيبيع نفس الصنف بكود 772 (بدل 832) → 772 بـ299 هناك، و832 للفروع التانية
+    fixedByBranch: { 'echarpe City Centre': { add: { '772':299 }, remove: ['832'] } },
     bundle: { code:'187', qty:4, price:150 }        // البندانة 187: كل 4 بـ150 · الزيادة بالسعر الكامل
   };
   window.PROMO_WEEKEND = PROMO;
@@ -70,9 +72,18 @@
     }else{ undo(c); c.promoSet = c.price; }
   }
 
+  function fixedFor(br){
+    var out = {}; Object.keys(PROMO.fixed).forEach(function(k){ out[k] = PROMO.fixed[k]; });
+    var key = Object.keys(PROMO.fixedByBranch || {}).find(function(b){ return b.toLowerCase() === String(br || '').trim().toLowerCase(); });
+    var o = key ? PROMO.fixedByBranch[key] : null;
+    if(o){ (o.remove || []).forEach(function(k){ delete out[k]; }); Object.keys(o.add || {}).forEach(function(k){ out[k] = o.add[k]; }); }
+    return out;
+  }
+  window.weekendPromoFixedFor = fixedFor;
   function applyWeekendPromo(cart, now, br){
     cart = cart || [];
     var on = promoActive(now, br);
+    var FIX = fixedFor(br);
     var bundleLines = [];
     cart.forEach(function(c){
       if(!c) return;
@@ -81,8 +92,8 @@
       remember(c);
       var code = String(c.barcode || '').trim();
       if(code === PROMO.bundle.code){ bundleLines.push(c); return; }
-      if(Object.prototype.hasOwnProperty.call(PROMO.fixed, code)){
-        setPrice(c, Math.min(c.promoBase, PROMO.fixed[code]), PROMO.name + ' (' + PROMO.fixed[code] + ' ج)');
+      if(Object.prototype.hasOwnProperty.call(FIX, code)){
+        setPrice(c, Math.min(c.promoBase, FIX[code]), PROMO.name + ' (' + FIX[code] + ' ج)');
         return;
       }
       setPrice(c, c.promoBase * (1 - PROMO.pct/100), PROMO.name + ' ' + PROMO.pct + '%');
