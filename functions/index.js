@@ -262,7 +262,7 @@ exports.onWelcomeToken = onDocumentUpdated(
    عندهم `fcmTokens_<brand>` (مصفوفة). استعلام واحد على الحقل القديم
    بس كان معناه إن كل عميلة فتحت التطبيق بعد التحديث **تختفي** من
    إشعارات الكتالوج تمامًا. */
-async function broadcastBrand(brand, title, body, tag) {
+async function broadcastBrand(brand, title, body, tag, link) {
   const field = TOKEN_FIELDS[brand] || TOKEN_FIELDS.echarpe;
   const [snapNew, snapOld] = await Promise.all([
     db.collection("pos_test_customers").where(field, "!=", null).get(),
@@ -281,12 +281,12 @@ async function broadcastBrand(brand, title, body, tag) {
     batchTokens.push(...tokens);
     // FCM بيسمح بـ 500 توكن للدفعة — نبعت على دفعات
     while (batchTokens.length >= 500) {
-      await sendToTokens(batchTokens.slice(0, 500), title, body, tag, null);
+      await sendToTokens(batchTokens.slice(0, 500), title, body, tag, null, link);
       batchTokens = batchTokens.slice(500);
     }
   }
   if (batchTokens.length) {
-    await sendToTokens(batchTokens, title, body, tag, null);
+    await sendToTokens(batchTokens, title, body, tag, null, link);
   }
 }
 
@@ -308,6 +308,22 @@ exports.onCatalogUpdated = onDocumentWritten(
       // 🎬 الفيديو (من Sales على طول) بيكتب kind:'video' — نفس حد «إشعار واحد في اليوم» مع الستوري
       const icon = after.kind === "video" ? "🎬 " : "📸 ";
       await broadcastBrand(brand, BRAND_NAMES[brand] || brand, icon + String(after.title || "ستوري جديدة — افتحي وشوفي"), "stories");
+      return;
+    }
+
+    /* 📣 إشعار عرض لكل عميلات البراند — المالك بيكتبه من Office 2 («المزيد» ← 📣 إشعار عرض).
+       Office بيزوّد seq مع كل إرسال (مرة في اليوم بالكتير لكل براند، والحد ده متأكد منه هنا كمان).
+       اللينك نسبي جوّه التطبيق بس (./?go=…) — أي حاجة تانية بتتجاهل وبيفتح الرئيسية. */
+    const pm = docId.match(/^promo_push_(echarpe|glow)$/);
+    if (pm) {
+      const brand = pm[1];
+      if (!(Number(after.seq || 0) > Number(before.seq || 0))) return;
+      if (before.day && after.day === before.day) return;            // إشعار واحد في اليوم
+      const title = String(after.title || "").trim().slice(0, 60);
+      const body = String(after.body || "").trim().slice(0, 180);
+      if (!title || !body) return;
+      const link = /^\.\/\?go=[a-z]{1,12}$/.test(String(after.link || "")) ? String(after.link) : "./";
+      await broadcastBrand(brand, title, body, "promo", link);
       return;
     }
 

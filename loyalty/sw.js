@@ -1,4 +1,4 @@
-const CACHE_NAME = 'loyalty-shell-v725';
+const CACHE_NAME = 'loyalty-shell-v777';
 
 // ============ استقبال إشعارات Push (حتى والتطبيق مقفول) ============
 self.addEventListener('push', (event) => {
@@ -102,6 +102,8 @@ self.addEventListener('fetch', (event) => {
   // نتعامل بس مع ملفات موقعنا (HTML, manifest, icons).
   // أي حاجة تانية (Firebase/Firestore, Google Fonts, JsBarcode) نسيبها تعدي عادي.
   if (url.origin !== self.location.origin) return;
+  // 🎬 الفيديو (طلبات Range/206) يعدّي للشبكة على طول — الكاش مبيقبلش 206
+  if (/\.mp4$/i.test(url.pathname)) return;
 
   event.respondWith(
     fetch(req, { cache: 'no-store' })
