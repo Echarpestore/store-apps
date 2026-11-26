@@ -337,26 +337,39 @@
   .atl-banner b{display:block; font-size:16px; font-weight:800;}
   .atl-banner span{display:block; font-size:12px; opacity:.8; margin-top:2px;}
   .atl-banner .go{margin-inline-start:auto; font-size:20px; opacity:.85;}
-  /* 🤍 الجمعة البيضاء (26–29 نوفمبر 2026) — بانر فيديو على الرئيسية، بيختفي لوحده بعد الأحد */
-  .wf-banner{position:relative; display:block; width:100%; margin:14px 0 4px; padding:0; border:0; border-radius:22px; overflow:hidden; cursor:pointer;
-    aspect-ratio:54/35; background:#1a1114 center/cover no-repeat; color:#fff; font:inherit; text-align:right;
-    box-shadow:0 18px 34px -18px rgba(58,34,51,.55);}
-  .wf-banner video{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block;}
-  .wf-banner .wf-shade{position:absolute; inset:0; background:linear-gradient(180deg,rgba(20,10,16,.10) 0%,rgba(20,10,16,.18) 38%,rgba(20,10,16,.86) 100%);}
-  .wf-banner .wf-tag{position:absolute; top:12px; right:12px; background:#fff; color:#1a1114; font-size:11px; font-weight:800; letter-spacing:.3px; padding:5px 11px; border-radius:999px;}
-  .wf-banner .wf-play{position:absolute; top:10px; left:12px; width:34px; height:34px; border-radius:50%; display:grid; place-items:center; font-size:13px;
-    background:rgba(255,255,255,.22); -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px); border:1px solid rgba(255,255,255,.5);}
-  .wf-banner .wf-txt{position:absolute; right:16px; left:16px; bottom:14px;}
-  .wf-banner .wf-txt b{display:block; font-size:25px; font-weight:900; line-height:1.15; text-shadow:0 2px 12px rgba(0,0,0,.45);}
-  .wf-banner .wf-txt span{display:block; font-size:13.5px; font-weight:700; margin-top:5px; opacity:.95;}
-  .wf-banner .wf-txt em{display:inline-block; margin-top:9px; font-style:normal; font-size:12px; font-weight:800; background:var(--pink); color:#fff; padding:6px 13px; border-radius:999px;}
+  /* 🤍 الجمعة البيضاء (26–29 نوفمبر 2026) — بانر على الرئيسية بيختفي لوحده بعد الأحد.
+     الشكل اللي المالك اختاره: أرضية سماوي + تلات شرايط فوق بعض (أبيض · كحلي · أحمر) + التاريخ تحت، وجنبهم فيديو العرض. */
+  .wf-banner{position:relative; display:grid; grid-template-columns:1fr 38%; align-items:center; gap:12px; width:100%; margin:14px 0 4px; padding:16px 14px 14px;
+    border:0; border-radius:22px; overflow:hidden; cursor:pointer; background:#CFE4F8; color:#1B2233; font:inherit; text-align:center;
+    box-shadow:0 18px 34px -20px rgba(27,34,51,.5);}
+  .wf-art{display:flex; flex-direction:column; align-items:center; direction:ltr; font-family:'Poppins','Montserrat','Segoe UI',system-ui,sans-serif;}
+  .wf-art i{display:block; font-style:normal; font-weight:900; line-height:1; letter-spacing:-.5px; padding:5px 12px 6px; font-size:clamp(25px,8.2vw,36px);}
+  .wf-art .t1{background:#fff; color:#1B2233; transform:translateX(-10px) rotate(-1deg);
+    clip-path:polygon(0 0,100% 0,98.5% 25%,100% 50%,98.5% 75%,100% 100%,0 100%,1.5% 75%,0 50%,1.5% 25%);}
+  .wf-art .t2{background:#1B2233; color:#fff; margin-top:-2px; transform:translateX(6px);
+    clip-path:polygon(0 0,100% 0,98.5% 25%,100% 50%,98.5% 75%,100% 100%,0 100%,1.5% 75%,0 50%,1.5% 25%);}
+  .wf-art .t3{background:#F0452F; color:#fff; margin-top:-2px; transform:translateX(-2px) rotate(-1deg);
+    clip-path:polygon(0 0,100% 0,98.5% 25%,100% 50%,98.5% 75%,100% 100%,0 100%,1.5% 75%,0 50%,1.5% 25%);}
+  .wf-date{display:block; margin-top:10px; color:#1B2233; line-height:1.05;}
+  .wf-date small{display:flex; justify-content:space-between; gap:26px; font-size:11.5px; font-weight:800; padding:0 4px;}
+  .wf-date b{display:block; font-size:clamp(22px,7vw,30px); font-weight:900; letter-spacing:.5px;}
+  .wf-date em{display:block; font-style:normal; font-size:15px; font-weight:900;}
+  .wf-vid{position:relative; display:block; aspect-ratio:3/4; border-radius:16px; overflow:hidden; background:#1B2233 center/cover no-repeat; border:3px solid #fff;
+    box-shadow:0 12px 22px -12px rgba(27,34,51,.6); transform:rotate(2deg);}
+  .wf-vid video{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block;}
+  .wf-vid .wf-play{position:absolute; inset:auto auto 8px 8px; width:30px; height:30px; border-radius:50%; display:grid; place-items:center; font-size:11px; color:#fff;
+    background:rgba(27,34,51,.55); border:1px solid rgba(255,255,255,.7);}
+  .wf-ar{grid-column:1/-1; display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:4px; text-align:right;}
+  .wf-ar b{display:block; font-size:14.5px; font-weight:900; color:#1B2233; line-height:1.35;}
+  .wf-ar b small{display:block; font-size:11.5px; font-weight:700; opacity:.75;}
+  .wf-ar em{flex:none; font-style:normal; font-size:12.5px; font-weight:900; background:#F0452F; color:#fff; padding:8px 14px; border-radius:999px;}
   #wfOverlay{position:fixed; inset:0; z-index:99990; background:#000; display:none;}
   #wfOverlay.on{display:block;}
   #wfOverlay video{position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background:#000;}
   #wfOverlay .wf-x{position:absolute; top:calc(12px + env(safe-area-inset-top)); left:14px; width:40px; height:40px; border-radius:50%; border:0; background:rgba(0,0,0,.5); color:#fff; font-size:17px;}
   #wfOverlay .wf-cta{position:absolute; right:16px; left:16px; bottom:calc(18px + env(safe-area-inset-bottom)); border:0; border-radius:16px; padding:15px; background:#fff; color:#1a1114; font-size:16px; font-weight:900;
     box-shadow:0 14px 30px -12px rgba(0,0,0,.7);}
-  @media (prefers-reduced-motion: reduce){ .wf-banner video{display:none;} }
+  @media (prefers-reduced-motion: reduce){ .wf-vid video{display:none;} }
   .prod{background:#fff; border:1.5px solid var(--line); border-radius:18px; padding:14px 14px 15px; position:relative;}
   .prod .pname{font-weight:800; font-size:14.5px; line-height:1.4; min-height:40px;}
   .prod .pmeta{font-size:12px; color:var(--muted); font-weight:600; margin-top:4px; min-height:17px;}
@@ -2512,10 +2525,11 @@ var WF_END = Date.UTC(2026, 10, 29, 22, 0, 0);
 function wfOn(){ return Date.now() < WF_END; }
 function wfBannerHtml(){
   if(!wfOn()) return '';
-  return '<button class="wf-banner" type="button" onclick="wfOpen()" style="background-image:url(wf26-poster.jpg)" aria-label="عروض الجمعة البيضاء — شوفي الفيديو">'
-    + '<video src="wf26-loop.mp4" poster="wf26-poster.jpg" autoplay muted loop playsinline preload="metadata" disablepictureinpicture></video>'
-    + '<span class="wf-shade"></span><span class="wf-tag">من الخميس للأحد</span><span class="wf-play">▶</span>'
-    + '<span class="wf-txt"><b>الجمعة البيضاء 🤍</b><span>خصومات على كل المنتجات في كل فروع إيشارب</span><em>شوفي العروض</em></span></button>';
+  return '<button class="wf-banner" type="button" onclick="wfOpen()" aria-label="عروض الجمعة البيضاء — شوفي الفيديو">'
+    + '<span class="wf-art"><i class="t1">White</i><i class="t2">Friday</i><i class="t3">Offers</i>'
+    + '<span class="wf-date"><small><span>Thu.</span><span>Sun.</span></small><b>26 - 29</b><em>November</em></span></span>'
+    + '<span class="wf-vid" style="background-image:url(wf26-poster.jpg)"><video src="wf26-loop.mp4" poster="wf26-poster.jpg" autoplay muted loop playsinline preload="metadata" disablepictureinpicture></video><span class="wf-play">▶</span></span>'
+    + '<span class="wf-ar"><b>الجمعة البيضاء · خصومات على كل المنتجات<small>من الخميس للأحد · في كل فروع إيشارب</small></b><em>شوفي العروض</em></span></button>';
 }
 function wfOpen(){
   if(!wfOn()) return;
