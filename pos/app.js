@@ -853,15 +853,23 @@ function buildReceiptHTML(data){
       const _after  = _wfItems.reduce(function(s, it){ return s + Number(it.line || 0); }, 0);
       const _saved  = Math.max(0, Math.round((_before - _after) * 100) / 100);
       if(_saved > 0.009){
-        const _band = '<div style="-webkit-print-color-adjust:exact; print-color-adjust:exact; background:#000; color:#fff; margin:6px 0 4px; padding:7px 4px 6px; text-align:center; border-radius:3px;">'
-          + '<div dir="ltr" style="font-weight:900; font-size:17px; letter-spacing:5px; line-height:1.1;">WHITE FRIDAY</div>'
-          + '<div style="font-weight:800; font-size:11px; margin-top:3px; letter-spacing:.5px;">تخفيضات الجمعة البيضاء</div></div>';
+        /* v780: نفس شكل صورة المالك — ٣ تيكتات متراصة بحواف مسنّنة (White · Friday · Offers) + التاريخ — أبيض وأسود للطابعة */
+        const _zig = 'clip-path:polygon(0 0,100% 0,97% 15%,100% 30%,97% 45%,100% 60%,97% 75%,100% 90%,100% 100%,0 100%,0 90%,3% 75%,0 60%,3% 45%,0 30%,3% 15%);';
+        const _pc = '-webkit-print-color-adjust:exact; print-color-adjust:exact;';
+        const _tag = function(txt, fill, rot){ return '<div style="display:inline-block; ' + _pc + _zig + ' transform:rotate(' + rot + 'deg); font-family:Arial Black,Arial,sans-serif; font-weight:900; font-size:20px; line-height:1; padding:3px 9px 4px; '
+          + (fill ? 'background:#000; color:#fff;' : 'background:#fff; color:#000; outline:2px solid #000; outline-offset:-2px;') + '">' + txt + '</div>'; };
+        const _band = '<div dir="ltr" style="text-align:center; margin:8px 0 6px;">'
+          + '<div>' + _tag('White', false, -2) + '</div>'
+          + '<div style="margin-top:-1px;">' + _tag('Friday', true, 1) + '</div>'
+          + '<div style="margin-top:-1px;">' + _tag('Offers', true, -1.5) + '</div>'
+          + '<div style="font-family:Arial Black,Arial,sans-serif; font-weight:900; font-size:11px; margin-top:5px; letter-spacing:.5px;">THU. 26 - SUN. 29 NOVEMBER</div>'
+          + '<div dir="rtl" style="font-weight:800; font-size:11px; margin-top:2px;">تخفيضات الجمعة البيضاء</div></div>';
         const _itemsAt = parts.findIndex(function(h){ return /<table/.test(h); });
         if(_itemsAt >= 0) parts.splice(_itemsAt, 0, _band); else parts.splice(headerEnd, 0, _band);
         const _cur = (typeof currencyLabel === 'function') ? currencyLabel() : 'ج.م';
         const _row = function(k, v, strong){ return '<div style="display:flex; justify-content:space-between; gap:6px; font-size:' + (strong?13:11) + 'px; font-weight:' + (strong?900:700) + '; padding:1px 0;"><span>' + k + '</span><span dir="ltr">' + v + '</span></div>'; };
         const _box = '<div style="border:2px solid #000; border-radius:5px; margin:6px 0 4px; overflow:hidden;">'
-          + '<div style="-webkit-print-color-adjust:exact; print-color-adjust:exact; background:#000; color:#fff; text-align:center; font-weight:900; font-size:11px; letter-spacing:3px; padding:3px 0;" dir="ltr">WHITE FRIDAY SAVINGS</div>'
+          + '<div style="-webkit-print-color-adjust:exact; print-color-adjust:exact; background:#000; color:#fff; text-align:center; font-family:Arial Black,Arial,sans-serif; font-weight:900; font-size:12px; letter-spacing:1px; padding:3px 0;" dir="ltr">White Friday Offers · SAVINGS</div>'
           + '<div style="padding:5px 7px 6px;">'
           + _row('قبل التخفيض (' + _wfItems.length + ' صنف)', _before.toFixed(2) + ' ' + _cur)
           + _row('بعد التخفيض', _after.toFixed(2) + ' ' + _cur)

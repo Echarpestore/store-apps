@@ -33,41 +33,51 @@
   window.wfActive = wfActive;
   window.WHITE_FRIDAY = WF;
 
+  /* 🎨 v780 — الشكل من صورة المالك: ٣ تيكتات متراصة (White أبيض · Friday أسود · Offers أحمر) بحواف مسنّنة
+     على خلفية لبني فاتح + التاريخ تحت. */
+  var BLUE = '#cfe2f6', RED = '#ef3f33', INK = '#1f2330';
+  var ZIG = 'polygon(0 0,100% 0,97% 12%,100% 25%,97% 38%,100% 50%,97% 62%,100% 75%,97% 88%,100% 100%,0 100%,3% 88%,0 75%,3% 62%,0 50%,3% 38%,0 25%,3% 12%)';
   var CSS = [
-    /* ===== الأساس المشترك ===== */
-    '.wf-mark{font-family:"Cairo",system-ui,sans-serif;direction:ltr;letter-spacing:.32em;font-weight:900;line-height:1}',
-    '.wf-mark b{color:#fff}.wf-mark i{font-style:normal;color:#e10600}',
-    '.wf-ribbon{position:relative;overflow:hidden;background:#0b0b0b;color:#fff;border-bottom:1px solid #2a2a2a;font-family:"Cairo",sans-serif;display:flex;align-items:center;justify-content:center;gap:14px;padding:8px 14px;direction:rtl;z-index:5}',
-    '.wf-ribbon:before{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 0 38%,rgba(225,6,0,.55) 46%,transparent 54% 100%);transform:translateX(-60%);animation:wfSweep 5.5s ease-in-out infinite}',
-    '.wf-ribbon .wf-mark{font-size:13px;position:relative}',
-    '.wf-ribbon .wf-sep{width:5px;height:5px;border-radius:50%;background:#e10600;position:relative;box-shadow:0 0 10px #e10600}',
-    '.wf-ribbon .wf-ar{font-size:13px;font-weight:800;position:relative;color:#f1f1f1}',
-    '@keyframes wfSweep{0%{transform:translateX(-70%)}55%,100%{transform:translateX(70%)}}',
-    '.wf-chip{display:inline-flex;align-items:center;gap:4px;vertical-align:middle;margin-inline-start:6px;padding:2px 7px 2px 6px;border-radius:4px;background:#0b0b0b;color:#fff;border:1px solid #e10600;font:900 9.5px/1.25 "Cairo",sans-serif;letter-spacing:.14em;direction:ltr;white-space:nowrap}',
-    '.wf-chip:before{content:"";width:6px;height:6px;border-radius:50%;background:#e10600}',
-    /* ===== الهيرو (شاشة الدخول / الكيوسك) ===== */
-    '.wf-hero{position:relative;text-align:center;margin:0 auto 18px;padding:22px 26px 18px;max-width:560px;border-radius:18px;background:#0b0b0b;color:#fff;border:1px solid #262626;box-shadow:0 30px 60px -30px rgba(225,6,0,.55);overflow:hidden;font-family:"Cairo",sans-serif}',
-    '.wf-hero:before{content:"";position:absolute;inset:auto -20% -60% -20%;height:120%;background:radial-gradient(closest-side,rgba(225,6,0,.38),transparent 70%)}',
-    '.wf-hero:after{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#fff 0 33%,#e10600 33% 66%,#fff 66%)}',
-    '.wf-hero .wf-mark{position:relative;font-size:clamp(22px,4.2vw,38px)}',
-    '.wf-hero .wf-sub{position:relative;margin-top:10px;font-size:15px;font-weight:800;color:#fff}',
-    '.wf-hero .wf-sub span{color:#e10600}',
-    '.wf-hero .wf-note{position:relative;margin-top:4px;font-size:12px;color:#a9a9a9;font-weight:600}',
+    '@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@700;800&display=swap");',
+    '.wf-stack{display:inline-flex;flex-direction:column;align-items:center;font-family:"Poppins","Arial Black",Arial,sans-serif;direction:ltr;line-height:1;user-select:none}',
+    '.wf-t{display:inline-block;font-weight:800;letter-spacing:-.02em;padding:.08em .34em .12em;clip-path:' + ZIG + ';-webkit-print-color-adjust:exact;print-color-adjust:exact}',
+    '.wf-t.w{background:#fff;color:' + INK + ';transform:rotate(-2deg);margin-bottom:-.06em}',
+    '.wf-t.b{background:' + INK + ';color:#fff;transform:rotate(1deg);position:relative;z-index:1}',
+    '.wf-t.r{background:' + RED + ';color:#fff;transform:rotate(-1.5deg);margin-top:-.04em}',
+    '.wf-dates{margin-top:.5em;color:' + INK + ';font-weight:800;text-align:center;font-family:"Poppins","Arial Black",Arial,sans-serif;direction:ltr}',
+    '.wf-dates .dd{font-size:1.5em;letter-spacing:.02em}',
+    '.wf-dates .dw{display:flex;justify-content:space-between;font-size:.8em;padding:0 .3em}',
+    '.wf-dates .mm{font-size:1.05em}',
+    /* الشريط الأفقي (الرئيسية / المبيعات) */
+    '.wf-ribbon{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;background:' + BLUE + ';color:' + INK + ';padding:8px 14px;direction:rtl;font-family:"Cairo",sans-serif;position:relative;z-index:5}',
+    '.wf-ribbon .wf-row3{display:inline-flex;align-items:center;gap:3px;direction:ltr;font-family:"Poppins","Arial Black",Arial,sans-serif}',
+    '.wf-ribbon .wf-t{font-size:15px}',
+    '.wf-ribbon .wf-t.w{transform:rotate(-2deg)}.wf-ribbon .wf-t.r{transform:rotate(2deg)}',
+    '.wf-ribbon .wf-ar{font-size:13px;font-weight:800}',
+    '.wf-ribbon .wf-d{font:800 12px "Poppins",Arial,sans-serif;direction:ltr;background:#fff;border-radius:20px;padding:3px 10px}',
+    /* الشارة على الصنف */
+    '.wf-chip{display:inline-flex;vertical-align:middle;margin-inline-start:6px;direction:ltr;font:800 9.5px/1.2 "Poppins",Arial,sans-serif;white-space:nowrap}',
+    '.wf-chip b{background:' + INK + ';color:#fff;padding:2px 5px;font-weight:800}',
+    '.wf-chip i{background:' + RED + ';color:#fff;padding:2px 5px;font-style:normal}',
+    /* الهيرو (شاشة الدخول / التابلت) */
+    '.wf-hero{text-align:center;margin:0 auto 16px;padding:18px 26px 16px;background:' + BLUE + ';border-radius:18px;max-width:420px;box-shadow:0 18px 40px -22px rgba(0,0,0,.45)}',
+    '.wf-hero .wf-stack{font-size:clamp(30px,5vw,46px)}',
+    '.wf-hero .wf-dates{font-size:clamp(13px,1.9vw,17px)}',
+    '.wf-hero .wf-ar{margin-top:8px;font:800 14px "Cairo",sans-serif;color:' + INK + '}',
     /* ===== POS ===== */
-    'body.wf-on #loginScreen{background:radial-gradient(1200px 600px at 50% 115%,rgba(225,6,0,.22),transparent 60%),linear-gradient(180deg,#050505,#111 60%,#050505)!important}',
-    'body.wf-on #loginScreen .pin-box{background:rgba(255,255,255,.03);border:1px solid #2a2a2a;border-radius:16px;padding:18px;backdrop-filter:blur(2px)}',
-    'body.wf-on #loginScreen .pin-box h2{color:#fff}',
-    'body.wf-on #employeePickerGrid > *{border-color:#2d2d2d!important}',
-    'body.wf-on #employeePickerGrid > *:hover{border-color:#e10600!important;box-shadow:0 0 0 1px #e10600 inset}',
-    'body.wf-on #dashboardScreen .wf-ribbon{margin:-2px -2px 10px;border-radius:12px}',
-    'body.wf-on #saleScreen .qbx-top{position:relative}',
-    'body.wf-on #saleScreen .qbx-title:after{content:"WHITE FRIDAY";margin-inline-start:10px;padding:3px 9px;border-radius:4px;background:#0b0b0b;color:#fff;border:1px solid #e10600;font:900 10px/1.3 "Cairo",sans-serif;letter-spacing:.2em;vertical-align:middle}',
-    'body.wf-on #cartTbody tr.wf-row{box-shadow:inset -3px 0 0 #e10600}',
-    /* ===== Sales ===== */
-    'body.wf-on.wf-sales{background:radial-gradient(900px 500px at 50% -10%,rgba(225,6,0,.20),transparent 60%),#0a0a0a}',
-    /* ===== Feedback (التابلت قدام العميلة) ===== */
-    'body.wf-on.wf-feedback #kiosk{background:radial-gradient(900px 520px at 50% 110%,rgba(225,6,0,.28),transparent 60%),linear-gradient(180deg,#050505,#121212 55%,#050505)!important;color:#fff}',
-    'body.wf-on.wf-feedback .wf-hero{margin-top:10px}'
+    'body.wf-on #loginScreen{background:linear-gradient(180deg,#e3eefa,' + BLUE + ')!important}',
+    'body.wf-on #loginScreen .pin-box{background:#fff;color:' + INK + ';border-radius:16px;padding:18px;box-shadow:0 14px 34px -20px rgba(0,0,0,.4)}',
+    'body.wf-on #loginScreen .pin-box h2{color:' + INK + '}',
+    'body.wf-on #loginScreen > div:first-child:not([data-wf]){color:' + INK + '!important}',
+    'body.wf-on #employeePickerGrid > *{background:#f4f7fb!important;color:' + INK + '!important;border:1px solid #d7e2ee!important}',
+    'body.wf-on #employeePickerGrid > * *{color:' + INK + '!important}',
+    'body.wf-on #employeePickerGrid > *:hover{border-color:' + RED + '!important;box-shadow:0 0 0 1px ' + RED + ' inset}',
+    'body.wf-on #dashboardScreen .wf-ribbon{margin:0 0 10px;border-radius:12px}',
+    'body.wf-on #saleScreen .qbx-title:after{content:"White Friday Offers";margin-inline-start:10px;padding:3px 9px;background:' + INK + ';color:#fff;border-right:6px solid ' + RED + ';font:800 11px/1.3 "Poppins",Arial,sans-serif;vertical-align:middle}',
+    'body.wf-on #cartTbody tr.wf-row{box-shadow:inset -3px 0 0 ' + RED + '}',
+    /* ===== Sales / Feedback ===== */
+    'body.wf-on.wf-feedback #kiosk{background:linear-gradient(180deg,#e3eefa,' + BLUE + ')!important;color:' + INK + '}',
+    'body.wf-on.wf-feedback .wf-hero{margin-top:8px;box-shadow:none;background:transparent}'
   ].join('\n');
 
   function ensureCss(){
@@ -75,16 +85,18 @@
     var st = document.createElement('style'); st.id = 'wfCss'; st.textContent = CSS;
     (document.head || document.documentElement).appendChild(st);
   }
-  var MARK = '<span class="wf-mark"><b>WHITE</b> <i>FRIDAY</i></span>';
+  var STACK = '<div class="wf-stack"><span class="wf-t w">White</span><span class="wf-t b">Friday</span><span class="wf-t r">Offers</span></div>';
+  var DATES = '<div class="wf-dates"><div class="dw"><span>Thu.</span><span>Sun.</span></div><div class="dd">26 - 29</div><div class="mm">November</div></div>';
+  window.WF_STACK_HTML = STACK;
   function ribbon(){
     var d = document.createElement('div'); d.className = 'wf-ribbon'; d.setAttribute('data-wf','1');
-    d.innerHTML = MARK + '<span class="wf-sep"></span><span class="wf-ar">' +
-      (APP === 'feedback' ? 'تخفيضات الجمعة البيضاء — لحد الأحد' : 'عروض الجمعة البيضاء بدأت — لحد الأحد') + '</span>';
+    d.innerHTML = '<span class="wf-row3"><span class="wf-t w">White</span><span class="wf-t b">Friday</span><span class="wf-t r">Offers</span></span>' +
+      '<span class="wf-ar">' + (APP === 'feedback' ? 'تخفيضات الجمعة البيضاء' : 'عروض الجمعة البيضاء بدأت') + '</span><span class="wf-d">Thu 26 – Sun 29 Nov</span>';
     return d;
   }
-  function hero(sub, note){
+  function hero(sub){
     var d = document.createElement('div'); d.className = 'wf-hero'; d.setAttribute('data-wf','1');
-    d.innerHTML = MARK + '<div class="wf-sub">' + sub + '</div>' + (note ? '<div class="wf-note">' + note + '</div>' : '');
+    d.innerHTML = STACK + DATES + (sub ? '<div class="wf-ar">' + sub + '</div>' : '');
     return d;
   }
   function place(parent, el, before){
@@ -110,7 +122,7 @@
       tr.classList.toggle('wf-row', on);
       var nm = tr.querySelector('td.item-name'); if(!nm) return;
       var chip = nm.querySelector('.wf-chip');
-      if(on && !chip){ chip = document.createElement('span'); chip.className = 'wf-chip'; chip.textContent = 'WHITE FRIDAY'; nm.appendChild(chip); }
+      if(on && !chip){ chip = document.createElement('span'); chip.className = 'wf-chip'; chip.innerHTML = '<b>White Friday</b><i>Offers</i>'; nm.appendChild(chip); }
       if(!on && chip) chip.remove();
     });
   }
@@ -123,7 +135,7 @@
     document.body.classList.add('wf-on', 'wf-' + APP);
     if(APP === 'pos'){
       var box = document.getElementById('employeePickerBox');
-      if(box && box.parentNode) place(box.parentNode, hero('عروض <span>الجمعة البيضاء</span> بدأت', 'الأسعار نازلة لوحدها على الكاشير — لحد الأحد'), box.parentNode.firstChild);
+      if(box && box.parentNode) place(box.parentNode, hero('الأسعار نازلة لوحدها على الكاشير'), box.parentNode.firstChild);
       var qb = document.querySelector('#dashboardScreen .qb-main') || document.querySelector('#dashboardScreen .qb-layout');
       if(qb) place(qb, ribbon());
       tagCart();
@@ -131,7 +143,7 @@
       place(document.body, ribbon());
     }else{
       var k = document.getElementById('kiosk');
-      if(k) place(k, hero('تخفيضات <span>الجمعة البيضاء</span>', 'لحد يوم الأحد — اسألي عن العروض'), k.querySelector('.k-brand') || k.firstChild);
+      if(k) place(k, hero('تخفيضات الجمعة البيضاء — اسألي عن العروض'), k.querySelector('.k-brand') || k.firstChild);
     }
   }
   window.wfMount = mount;

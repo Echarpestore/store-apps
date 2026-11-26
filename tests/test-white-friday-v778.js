@@ -17,15 +17,15 @@ const items = [
 ];
 const base = { dateStr:'26/11/2026', empName:'Rawan', totalStr:'940.00', payStr:'كاش', invoiceNo:'9001', scanCode:'9001', branch:'echarpe El Rehab' };
 let html = ''; try{ html = ctx.build(Object.assign({ items }, base)); }catch(e){ console.log(e); }
-ok(/WHITE FRIDAY/.test(html) && /تخفيضات الجمعة البيضاء/.test(html), 'الفاتورة فيها شريط WHITE FRIDAY');
-ok(/WHITE FRIDAY SAVINGS/.test(html) && /وفّرتي مع الجمعة البيضاء/.test(html), 'وبلوك «وفّرتي مع الجمعة البيضاء»');
+ok(/>White</.test(html) && />Friday</.test(html) && />Offers</.test(html) && /THU\. 26 - SUN\. 29 NOVEMBER/.test(html), 'الفاتورة فيها شكل White · Friday · Offers + التاريخ');
+ok(/White Friday Offers · SAVINGS/.test(html) && /وفّرتي مع الجمعة البيضاء/.test(html), 'وبلوك «وفّرتي مع الجمعة البيضاء»');
 ok(/900\.00/.test(html) && /640\.00/.test(html) && /260\.00/.test(html), 'الحساب: قبل 900 · بعد 640 · وفّرتي 260 (الأصناف المخفّضة بس)');
-ok(html.indexOf('WHITE FRIDAY SAVINGS') > html.indexOf('940.00'), 'بلوك التوفير تحت الإجمالي');
+ok(html.indexOf('SAVINGS') > html.indexOf('940.00'), 'بلوك التوفير تحت الإجمالي');
 ok(html.indexOf('تخفيضات الجمعة البيضاء') < html.indexOf('<table'), 'الشريط فوق جدول الأصناف');
 const gift = ctx.build(Object.assign({ items, giftMode:true }, base));
-ok(!/WHITE FRIDAY SAVINGS/.test(gift) && !/260\.00/.test(gift), 'سلبي: إيصال الهدية مفيهوش التوفير (مفيش فلوس)');
+ok(!/SAVINGS/.test(gift) && !/260\.00/.test(gift), 'سلبي: إيصال الهدية مفيهوش التوفير (مفيش فلوس)');
 const plain = ctx.build(Object.assign({ items:[items[2]] }, base));
-ok(!/WHITE FRIDAY/.test(plain), 'سلبي: فاتورة من غير أصناف العرض = مفيش شريط');
+ok(!/>Offers</.test(plain), 'سلبي: فاتورة من غير أصناف العرض = مفيش شريط');
 ok(/wf: !!\(it\.promoOn && !it\.isReturn\), wfOrig:/.test(APP), 'الطباعة بتبعت السعر قبل العرض لكل صنف');
 fs.writeFileSync(path.join(require('os').tmpdir(), 'wf-receipt.html'), '<!doctype html><meta charset="utf-8"><body style="width:72mm;margin:0 auto;background:#fff">' + html + '</body>');
 // الثيم
