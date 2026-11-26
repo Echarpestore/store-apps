@@ -1,4 +1,4 @@
-const CACHE_NAME = 'glow-loyalty-v93';
+const CACHE_NAME = 'glow-loyalty-v94';
 
 // ============ استقبال إشعارات Push (حتى والتطبيق مقفول) ============
 self.addEventListener('push', (event) => {

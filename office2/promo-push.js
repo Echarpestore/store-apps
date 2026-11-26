@@ -1,5 +1,5 @@
 /* ============================================================
-   📣 office2/promo-push.js — v3 — إشعار عرض لكل العميلات
+   📣 office2/promo-push.js — v4 — إشعار عرض لكل العميلات
    ------------------------------------------------------------
    طلب المالك (26-11-2026، الجمعة البيضاء): إشعار واحد لكل عميلات البراند
    على الـPWA وتطبيق جوجل بلاي بكلام العرض.
@@ -71,7 +71,10 @@ function keep(){ var t = document.getElementById('ppT'), b = document.getElement
 /* ① ستوري مفتوحة = الطريق المنشور · ② غير كده الفانكشن الجديدة */
 function viaStories(b){ return !!(S.cfg && S.cfg['live_' + b] === true); }
 function lastOf(b){ var a = S.last[b] || {}, c = S.stLast[b] || {}; return (Number(c.ts) || 0) > (Number(a.ts) || 0) ? c : a; }
-function sentToday(b){ var t = dayKey(Date.now()); return (S.last[b] || {}).day === t || (viaStories(b) && (S.stLast[b] || {}).day === t); }
+/* اتبعت فعلًا النهارده؟ الطريق ② بيتأكد من sentDay اللي السيرفر بيكتبه · الطريق ① من يوم إشعار الستوري */
+function sentToday(b){ var t = dayKey(Date.now()); return (S.last[b] || {}).sentDay === t || (viaStories(b) && (S.stLast[b] || {}).day === t); }
+/* اتسجل النهارده بس السيرفر لسه ما أكّدش (الفانكشن مش منشورة) — مسموح يتبعت تاني */
+function waiting(b){ var t = dayKey(Date.now()), a = S.last[b] || {}; return !viaStories(b) && a.day === t && a.sentDay !== t && (Date.now() - (Number(a.ts) || 0)) > 90000; }
 
 function render(){
   if(!S.open) return;
@@ -84,6 +87,7 @@ function render(){
   h += done
     ? '<div class="alert w">✅ اتبعت إشعار النهارده لتطبيق ' + (b === 'glow' ? 'Glow' : 'إيشارب') + ' — «' + esc(last.title || '') + '». الإشعار الجاي بكرة.</div>'
     : '<button class="btn g" style="width:100%;padding:14px;font-size:15px" id="ppSend" onclick="O2Promo.send()">📣 ابعت لكل عميلات ' + (b === 'glow' ? 'Glow' : 'إيشارب') + '</button>';
+  if(!done && waiting(b)) h += '<div class="alert" style="margin-top:8px;cursor:default">⏳ إشعار النهارده اتسجل بس السيرفر ما بعتوش لسه. بعد نشر الفانكشن دوس «ابعت» تاني.</div>';
   if(!done && S.cfg !== null && !viaStories(b)) h += '<div class="alert w" style="margin-top:8px;cursor:default">⚠️ ستوري تطبيق ' + (b === 'glow' ? 'Glow' : 'إيشارب') + ' مقفولة — الإشعار بالطريق ده محتاج نشر الفانكشن الجديدة الأول (onCatalogUpdated).</div>';
   if(!done && last.day) h += '<div class="hint">آخر إشعار: ' + esc(last.day) + ' — «' + esc(last.title || '') + '»</div>';
   document.getElementById('o2PpBody').innerHTML = h; type();
