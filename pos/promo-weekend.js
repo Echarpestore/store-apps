@@ -17,9 +17,10 @@
     from: '2026-11-26', to: '2026-11-29',          // شامل اليومين
     pct: 15,                                        // باقي المحل
     // v776 (تصحيح المالك 26-11): السعر الثابت هو اللي بيتطبق (مش 15% حتى لو أرخص) · 832=299 · 749=99
-    fixed: { '902':399,   /* v783: 902 بـ399 في كل الفروع (قرار المالك 26-11) */ '832':299, '60':550, '582':199, '138':595, '749':99, '746':510 },
+    fixed: { '902':399,   /* v783: 902 بـ399 في كل الفروع (قرار المالك 26-11) */ '832':299, '60':550, '582':199, '749':99, '746':510 },
     // v777: سيتي سنتر بيبيع نفس الصنف بكود 772 (بدل 832) → 772 بـ299 هناك، و832 للفروع التانية
     // المفتاح = جزء من اسم الفرع (من غير حروف كبيرة/صغيرة) — 'madinaty' بيمسك 'echarpe Madinaty' و'echarpe Madinaty-1'
+    pctByCode: { '138':10 },                        // v784: كود 138 خصم 10% (بدل 595 ثابت) — مش الـ15%
     fixedByBranch: {
       'city centre': { add: { '772':299 }, remove: ['832'] }
     },
@@ -95,6 +96,11 @@
       remember(c);
       var code = String(c.barcode || '').trim();
       if(code === PROMO.bundle.code){ bundleLines.push(c); return; }
+      if(PROMO.pctByCode && Object.prototype.hasOwnProperty.call(PROMO.pctByCode, code)){
+        var pc = PROMO.pctByCode[code];
+        setPrice(c, c.promoBase * (1 - pc/100), PROMO.name + ' ' + pc + '%');
+        return;
+      }
       if(Object.prototype.hasOwnProperty.call(FIX, code)){
         setPrice(c, Math.min(c.promoBase, FIX[code]), PROMO.name + ' (' + FIX[code] + ' ج)');
         return;

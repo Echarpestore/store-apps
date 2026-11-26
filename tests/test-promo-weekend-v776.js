@@ -18,9 +18,9 @@ const R = 'echarpe El Rehab';
 const L = (bc, price, qty, extra)=> Object.assign({ id:'p'+bc, barcode:bc, name:'x', price, qty:qty||1 }, extra||{});
 const tot = (cart)=> Math.round(cart.reduce((s,c)=> s + c.price*c.qty, 0)*100)/100;
 
-let cart = [L('902', 700), L('832', 420), L('60', 650), L('582', 250), L('138', 700), L('749', 180), L('746', 600)];
+let cart = [L('902', 700), L('832', 420), L('60', 650), L('582', 250), L('749', 180), L('746', 600)];
 ap(cart, THU, R);
-ok(cart.map(c=>c.price).join(',') === '399,299,550,199,595,99,510', 'الأكواد السبعة بالأسعار المطلوبة');
+ok(cart.map(c=>c.price).join(',') === '399,299,550,199,99,510', 'الأكواد السبعة بالأسعار المطلوبة');
 ok(cart.every(c=> c.originalPrice > c.price && /الجمعة البيضاء/.test(c.discountName)), 'الفاتورة بتوضح السعر الأصلي واسم العرض');
 cart = [L('999', 200, 2)]; ap(cart, THU, R);
 ok(cart[0].price === 170, 'أي صنف تاني = خصم 15%');
@@ -44,6 +44,9 @@ cart = [L('902', 700)]; ap(cart, THU, 'echarpe Madinaty'); ok(cart[0].price === 
 cart = [L('902', 700)]; ap(cart, THU, 'echarpe Madinaty-1'); ok(cart[0].price === 399, 'مدينتي-1: 902 = 399');
 cart = [L('902', 700)]; ap(cart, THU, R); ok(cart[0].price === 399, 'الرحاب 902 = 399 (كل الفروع)');
 cart = [L('832', 400)]; ap(cart, THU, 'echarpe Madinaty'); ok(cart[0].price === 299, 'مدينتي باقي الأكواد زي ما هي (832 = 299)');
+cart = [L('138', 700)]; ap(cart, THU, R); ok(cart[0].price === 630 && /10%/.test(cart[0].discountName), 'كود 138 = خصم 10% (700 → 630)');
+cart = [L('138', 700)]; ap(cart, THU, 'Glow'); ok(cart[0].price === 630, '138 = 10% في Glow كمان');
+cart = [L('138', 700)]; ap(cart, WED, R); ok(cart[0].price === 700, 'سلبي: 138 قبل العرض بسعره');
 cart = [L('749', 180)]; ap(cart, THU, R); ok(cart[0].price === 99, '749 = 99');
 cart = [L('746', 500)]; ap(cart, THU, R); ok(cart[0].price === 500, 'سلبي: كود سعره أصلًا أقل من سعر العرض → مايغلاش عليها (ولا ياخد 15%)');
 cart = [L('999', 200, 1, { price:150, originalPrice:200, discountName:'خصم الفرع' })]; ap(cart, THU, R);
