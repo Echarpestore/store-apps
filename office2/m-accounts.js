@@ -63,15 +63,19 @@ async function loadPl(mk){
   if(c && (c.loading || (c.done && !(cur && Date.now() - c.at > 2*60000)))) return;
   PL.cache[mk] = Object.assign({}, c||{}, { loading:true });
   const a = mk.split('-').map(Number); const r = u.caiMonthRange(u.caiStamp(a[0], a[1], 15, 12, 0)); const T = firebase.firestore.Timestamp;
+  // 🧾 v2: مبيعات الشهر بيوم الشغل (زي باقي Office والكاشير) — بنقرا لحد بداية يوم الشغل التالي ونفلتر بوقت الفاتورة الفعلي
+  const sEnd = r.end + (u.bizHour() || 0) * 3600000;
   try{
     const [s1, s2, sp, ad, ex] = await Promise.all([
-      u.db.collection('pos_test_sales').where('createdAtMs','>=',r.start).where('createdAtMs','<=',r.end).get(),
-      u.db.collection('pos_test_sales').where('createdAt','>=',T.fromMillis(r.start)).where('createdAt','<=',T.fromMillis(r.end)).get(),
+      u.db.collection('pos_test_sales').where('createdAtMs','>=',r.start).where('createdAtMs','<=',sEnd).get(),
+      u.db.collection('pos_test_sales').where('createdAt','>=',T.fromMillis(r.start)).where('createdAt','<=',T.fromMillis(sEnd)).get(),
       u.db.collection('sales_salary_payments').where('paidAt','>=',r.start).where('paidAt','<=',r.end).get(),
       u.db.collection('sales_advances').where('ts','>=',r.start).where('ts','<=',r.end).get(),
       u.db.collection('office_expenses').where('ts','>=',r.start).where('ts','<=',r.end).get() ]);
     const m = {}; s1.forEach(d=>{ m[d.id] = Object.assign({ id:d.id }, d.data()); }); s2.forEach(d=>{ m[d.id] = Object.assign({ id:d.id }, d.data()); });
-    PL.cache[mk] = { done:true, loading:false, at: Date.now(), sales: Object.values(m), salaryPays: rows(sp), advances: rows(ad), expenses: rows(ex) };
+    // ⚠️ الاستعلامين بيرجّعوا فواتير وقتها الفعلي في شهر تاني (حدود الشهر) → كانت بتتعد في الشهرين
+    const monthSales = Object.values(m).filter(x=> u.bizKey(u.saleMs(x)).slice(0,7) === mk);
+    PL.cache[mk] = { done:true, loading:false, at: Date.now(), sales: monthSales, salaryPays: rows(sp), advances: rows(ad), expenses: rows(ex) };
   }catch(e){ PL.cache[mk] = { done:true, loading:false, at: Date.now(), err: String(e && (e.code||e.message)), sales:[], salaryPays:[], advances:[], expenses:[] }; }
   u.render();
 }
@@ -82,7 +86,7 @@ function txnsOf(mid){ return S.mtxns.filter(t=> t.merchantId===mid).sort((a,b)=>
 // 💹 profitReport — الإيراد صافي المبيعات (من غير المعكوس وصف العكس) − المصروف الفعلي
 function plReport(c, mk, branch){
   const byBranch = {}; let revenue = 0;
-  (c.sales||[]).forEach(s=>{ if(!s || s.reversed || s.isReversal) return; if(branch && s.branch !== branch) return; const t = Number(s.total)||0; const br = s.branch || '—'; byBranch[br] = (byBranch[br]||0) + t; revenue += t; });
+  (c.sales||[]).forEach(s=>{ if(!s || s.reversed || s.isReversal) return; if(branch && s.branch !== branch) return; const t = u.saleNet(s); const br = s.branch || '—'; byBranch[br] = (byBranch[br]||0) + t; revenue += t; });
   const salaryPaid = (c.salaryPays||[]).reduce((n,p)=>{ if(!p || (p.status && p.status !== 'paid')) return n; if(branch && p.branch !== branch) return n; const ts = Number(p.paidAt||p.ts||0); if(!ts || mkOf(ts) !== mk) return n; const paid = p.payoutTotal != null ? Number(p.payoutTotal) : Number(p.amount); return n + (paid||0); }, 0);
   const adv = { cash:0, orders:0, count:0 };
   (c.advances||[]).forEach(a=>{ if(!a) return; if(branch && a.branch !== branch) return; const ts = Number(a.ts||0); const am = ts ? mkOf(ts) : String(a.date||'').slice(0,7); if(am !== mk) return; const amount = Number(a.amount)||0; if(String(a.source||'').indexOf('staff_order')===0) adv.orders += amount; else adv.cash += amount; adv.count++; });

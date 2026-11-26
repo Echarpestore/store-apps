@@ -17,11 +17,16 @@ const sale = (id, ms, total, extra)=> Object.assign({ id, branch:'echarpe El Reh
     sale('C', MID + 12*H, 300),                  // 12:00 النهاردة
     sale('Y', MID - 6*H, 900),                   // امبارح 18:00
     sale('R', MID + 11*H, 200, { reversed:true }),
-    sale('P', MID + 13*H, 400, { payments:{ cash:350, points:50 } })   // فاتورة قديمة: 50 نقط اتسجلت كدفع = خصم
+    sale('P', MID + 13*H, 400, { payments:{ cash:350, points:50 } }),   // فاتورة قديمة: 50 نقط اتسجلت كدفع = خصم
+    // v16: الحقول الحقيقية للفاتورة — البياعة sellerEmployeeName والكاشير employeeName (مفيش employee/seller)
+    { id:'S1', branch:'Glow', invoiceNo:'S1', createdAtMs: MID + 10*H, total:1000, payments:{ visa:1000 }, items:[{ name:'x', barcode:'9', qty:1, price:1000 }], sellerEmployeeName:'هدى', employeeName:'كاشير منى' },
+    { id:'S2', branch:'Glow', invoiceNo:'S2', createdAtMs: MID + 11*H, total:600, payments:{ cash:600 }, items:[{ name:'x', barcode:'9', qty:1, price:600 }], sellerEmployeeName:'', employeeName:'كاشير منى' },
+    { id:'S3', branch:'Glow', invoiceNo:'S3', createdAtMs: MID + 12*H, total:-200, payments:{ cash:-200 }, items:[{ name:'x', barcode:'9', qty:1, price:-200, isReturn:true }], sellerEmployeeName:'هدى', employeeName:'كاشير منى' }
   ], pos_test_settings:[ { id:'office_gate', hash:null }, { id:'day_cfg', startHour:6 } ] } });
   out.today = await pg.go('today', null, 500);
   out.branchToday = await pg.go('branch', 'echarpe El Rehab', 500);
   await pg.call(()=> O2.day(-1), 900); out.branchY = await pg.text();
+  await pg.go('today', null, 300); out.glow = await pg.go('branch', 'Glow', 500);
   out.unit = await pg.p.evaluate((MID)=>{ const u = O2.u, H = 3600000; const ts = (ms)=>({ toMillis:()=> ms });
     return {
       offline: u.saleMs({ createdAtMs: MID + 20*H, createdAt: ts(MID + 30*H) }) === MID + 20*H,      // اتباعت 8م واترفعت تاني يوم 6ص → وقت البيع
@@ -40,11 +45,16 @@ const sale = (id, ms, total, extra)=> Object.assign({ id, branch:'echarpe El Reh
 })().catch(e=>{ console.error(e); process.exit(1); });`;
 const tmp = path.join(require('os').tmpdir(), 'o2-biz-' + Date.now() + '.js'); fs.writeFileSync(tmp, RUN);
 let out; try{ out = JSON.parse(execFileSync(process.execPath, [tmp], { cwd: ROOT, encoding:'utf8', timeout: 120000 }).trim().split('\n').pop()); } finally { try{ fs.unlinkSync(tmp); }catch(e){} }
-ok(/مبيعات النهاردة ·\s*1,150/.test(out.today), 'النهاردة = 500 + 300 + 350 = 1,150 (فاتورة 01:30 مش من النهاردة · الملغية لأ · النقط خصم)');
+ok(/مبيعات النهاردة ·\s*2,550/.test(out.today) && /El Rehab\n1,150/.test(out.today) && /Glow\n1,400/.test(out.today), 'النهاردة: الرحاب 500 + 300 + 350 = 1,150 (فاتورة 01:30 مش من النهاردة · الملغية لأ · النقط خصم) · Glow 1,400');
 ok(!/1,850|1,900|2,100/.test(out.today.split('مين موجود')[0]), 'سلبي: فاتورة بعد نص الليل (700) مش محسوبة على النهاردة');
 ok(/يوم الشغل من 06:00 لـ 06:00/.test(out.today), 'الشاشة بتقول يوم الشغل من 6ص (نفس التقفيل)');
 ok(/المبيعات\n1,150/.test(out.branchToday), 'صفحة الفرع النهاردة = نفس الرقم 1,150');
 ok(/المبيعات\n1,600/.test(out.branchY) && /#A/.test(out.branchY) && /#Y/.test(out.branchY), 'امبارح = 900 + 700 (فاتورة 01:30 اتحسبت على يوم امبارح زي الكاشير)');
+ok(/هدى\n1 فاتورة\n800/.test(out.glow) && /كاشير منى\n1 فاتورة\n600/.test(out.glow), 'مين باع: البياعة (sellerEmployeeName) ولو مفيش → اللي على الكاشير — مش «—»');
+ok(!/—\n\d+ فاتورة/.test(out.glow), 'سلبي: مفيش مبيعات متجمعة تحت «—»');
+ok(/💰 النهاردة/.test(out.glow), 'فتح فرع تاني بعد ما كنت على امبارح = بيفتح على النهاردة');
+ok(/2 فاتورة · 1 مرتجع/.test(out.glow) && /المبيعات\n1,400/.test(out.glow) && /متوسط الفاتورة\n800/.test(out.glow), 'عدد الفواتير من غير المرتجع (2) · الصافي 1,400 · المتوسط 800 — زي تقرير الكاشير');
+ok(/مرتجعات\n1 فاتورة · اترجّعت: كاش 200/.test(out.glow), 'المرتجع مكتوب اترجّع إزاي (كاش 200)');
 ok(out.unit.offline, 'فاتورة أوفلاين اترفعت تاني يوم → بتتحسب بوقت البيع الفعلي');
 ok(out.unit.badClock, 'سلبي: ساعة الجهاز بايظة (فرق > 48 س) → وقت السيرفر');
 ok(out.unit.serverOnly, 'فاتورة من غير وقت جهاز → وقت السيرفر');
@@ -55,5 +65,8 @@ ok(Array.isArray(out.loadDay) && out.loadDay.length === 0, 'سلبي: يوم م�
 ok(out.coalesce <= 2, '30 طلب رسم ورا بعض = رسمة واحدة (كانت 30) — ' + out.coalesce);
 ok(!(out.errs||[]).length, 'مفيش أخطاء JS: ' + (out.errs||[]).join(' | ').slice(0,200));
 const html = fs.readFileSync(path.join(ROOT,'Office','index.html'),'utf8');
-ok(/office2\.js\?v=(1[5-9]|[2-9]\d)/.test(html) && /m-reports\.js\?v=([2-9]|\d\d)/.test(html), 'Office بيحمّل النسخ الجديدة');
+ok(/office2\.js\?v=(1[6-9]|[2-9]\d)/.test(html) && /m-reports\.js\?v=([3-9]|\d\d)/.test(html) && /m-accounts\.js\?v=([2-9]|\d\d)/.test(html), 'Office بيحمّل النسخ الجديدة');
+const acc = fs.readFileSync(path.join(ROOT,'office2','m-accounts.js'),'utf8'), rep = fs.readFileSync(path.join(ROOT,'office2','m-reports.js'),'utf8');
+ok(/filter\(x=> u\.bizKey\(u\.saleMs\(x\)\)\.slice\(0,7\) === mk\)/.test(acc) && /const t = u\.saleNet\(s\)/.test(acc), 'الحسابات: مبيعات الشهر بوقت الفاتورة الفعلي (مفيش فاتورة في شهرين) وبالصافي');
+ok(/Promise\.all\(ks\.slice\(i, i\+6\)\.map\(k=> u\.loadDay\(k\)\)\)/.test(rep), 'التقارير: الأيام بتتحمّل 6 مع بعض (مش يوم ورا يوم)');
 console.log(`\n${fail ? '❌' : '✅'} office2 bizday v15: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
