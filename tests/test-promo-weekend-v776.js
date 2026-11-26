@@ -48,7 +48,8 @@ ok(cart[0].price === 150 && cart[0].discountName === 'خصم الفرع', 'خص�
 cart = [L('902', 700)]; ap(cart, WED, R); ok(cart[0].price === 700, 'سلبي: الأربع 25 = مفيش عرض');
 cart = [L('902', 700)]; ap(cart, MON, R); ok(cart[0].price === 700, 'سلبي: الاتنين 30 (القاهرة) = مفيش عرض');
 cart = [L('902', 700)]; ap(cart, SUN_NIGHT, R); ok(cart[0].price === 490, 'الأحد 11:30 بالليل القاهرة لسه شغال');
-cart = [L('902', 700)]; ap(cart, THU, 'Glow'); ok(cart[0].price === 700, 'سلبي: فرع Glow = مفيش عرض');
+cart = [L('902', 700)]; ap(cart, THU, 'Glow'); ok(cart[0].price === 490, 'Glow: نفس العرض (v779)');
+cart = [L('999', 200)]; ap(cart, THU, 'Glow'); ok(cart[0].price === 170, 'Glow: باقي المحل 15%');
 cart = [L('902', 700)]; ap(cart, THU, 'echarpe office'); ok(cart[0].price === 700, 'سلبي: echarpe office مش فرع بيع');
 cart = [L('902', -700, 1, { isReturn:true })]; ap(cart, THU, R); ok(cart[0].price === -700, 'سلبي: المرتجع بسعره');
 cart = [{ id:'__loyalty_redemption__', price:-50, qty:1, isRedemption:true }]; ap(cart, THU, R); ok(cart[0].price === -50, 'سلبي: سطر الاستبدال ميتلمسش');

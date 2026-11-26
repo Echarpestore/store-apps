@@ -8,7 +8,7 @@
    ============================================================ */
 (function(){
   'use strict';
-  var WF = { from:'2026-11-26', to:'2026-11-29', glow:['glow'] };
+  var WF = { from:'2026-11-26', to:'2026-11-29', glow:[] };   // v779: Glow داخلة كمان
   var me = document.currentScript;
   var APP = (me && me.getAttribute('data-wf-app')) || 'pos';
 
