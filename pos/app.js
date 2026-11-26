@@ -844,6 +844,35 @@ function buildReceiptHTML(data){
         break;
     }
   }
+  /* 🖤❤️ v778 — الجمعة البيضاء على الفاتورة: شريط أسود فوق الأصناف + بلوك «وفّرتي» تحت الإجمالي.
+     ⚠️ مش في إيصال الهدية (فيه فلوس). الطابعة الحرارية أبيض وأسود — فالتصميم أسود/أبيض بس. */
+  if(!gift){
+    const _wfItems = (d.items || []).filter(function(it){ return it && it.wf && it.wfOrig != null; });
+    if(_wfItems.length){
+      const _before = _wfItems.reduce(function(s, it){ return s + Number(it.wfOrig) * Number(it.qty || 0); }, 0);
+      const _after  = _wfItems.reduce(function(s, it){ return s + Number(it.line || 0); }, 0);
+      const _saved  = Math.max(0, Math.round((_before - _after) * 100) / 100);
+      if(_saved > 0.009){
+        const _band = '<div style="-webkit-print-color-adjust:exact; print-color-adjust:exact; background:#000; color:#fff; margin:6px 0 4px; padding:7px 4px 6px; text-align:center; border-radius:3px;">'
+          + '<div dir="ltr" style="font-weight:900; font-size:17px; letter-spacing:5px; line-height:1.1;">WHITE FRIDAY</div>'
+          + '<div style="font-weight:800; font-size:11px; margin-top:3px; letter-spacing:.5px;">تخفيضات الجمعة البيضاء</div></div>';
+        const _itemsAt = parts.findIndex(function(h){ return /<table/.test(h); });
+        if(_itemsAt >= 0) parts.splice(_itemsAt, 0, _band); else parts.splice(headerEnd, 0, _band);
+        const _cur = (typeof currencyLabel === 'function') ? currencyLabel() : 'ج.م';
+        const _row = function(k, v, strong){ return '<div style="display:flex; justify-content:space-between; gap:6px; font-size:' + (strong?13:11) + 'px; font-weight:' + (strong?900:700) + '; padding:1px 0;"><span>' + k + '</span><span dir="ltr">' + v + '</span></div>'; };
+        const _box = '<div style="border:2px solid #000; border-radius:5px; margin:6px 0 4px; overflow:hidden;">'
+          + '<div style="-webkit-print-color-adjust:exact; print-color-adjust:exact; background:#000; color:#fff; text-align:center; font-weight:900; font-size:11px; letter-spacing:3px; padding:3px 0;" dir="ltr">WHITE FRIDAY SAVINGS</div>'
+          + '<div style="padding:5px 7px 6px;">'
+          + _row('قبل التخفيض (' + _wfItems.length + ' صنف)', _before.toFixed(2) + ' ' + _cur)
+          + _row('بعد التخفيض', _after.toFixed(2) + ' ' + _cur)
+          + '<div style="border-top:1.5px dashed #000; margin:4px 0 3px;"></div>'
+          + _row('وفّرتي مع الجمعة البيضاء', _saved.toFixed(2) + ' ' + _cur, true)
+          + '</div></div>';
+        const _totAt = parts.findIndex(function(h){ return h.indexOf((L.total || '') + ':') >= 0; });
+        if(_totAt >= 0) parts.splice(_totAt + 1, 0, _box); else parts.push(_box);
+      }
+    }
+  }
   /* 🎁 بانر الهدية — بعد ترويسة المحل على طول، عشان يبان قبل الأصناف */
   if(gift){
     const gs = Math.max(11, (parseInt((c.elements.find(function(e){ return (e.base||e.id)==='shopName'; })||{}).size) || 13) - 1);
@@ -1364,7 +1393,9 @@ function printReceipt(payments, total, invoiceNo, invoiceCode, scanCode){
     branch: (typeof currentBranch!=='undefined' ? currentBranch : ''),
     brand: _deviceBrand(),
     items: cart.map(it=> ({name:it.name, qty:it.qty, barcode:it.barcode||'',
-      unit:Number(it.price||0).toFixed(2), line:(it.price*it.qty).toFixed(2)})),
+      unit:Number(it.price||0).toFixed(2), line:(it.price*it.qty).toFixed(2),
+      // 🖤❤️ v778 الجمعة البيضاء: السعر قبل العرض عشان الفاتورة تطبع «وفّرتي»
+      wf: !!(it.promoOn && !it.isReturn), wfOrig: (it.promoOn && it.originalPrice != null) ? Number(it.originalPrice) : null})),
     totalStr: Number(total).toFixed(2), payStr, invoiceNo: invoiceNo||'', scanCode: scanCode||invoiceCode||invoiceNo||'',   // 📷 v711: الكود القصير لو موجود
     // 💳↩️ v295 (فاتورة 1444): اتسحب من الكارت أكتر من الفاتورة —
     //    بيتطبع صراحةً إنه بيترد — الورقة هي إثبات العميلة إنها تاخد حقها

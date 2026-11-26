@@ -21,7 +21,7 @@ const tot = (cart)=> Math.round(cart.reduce((s,c)=> s + c.price*c.qty, 0)*100)/1
 let cart = [L('902', 700), L('832', 420), L('60', 650), L('582', 250), L('138', 700), L('749', 180), L('746', 600)];
 ap(cart, THU, R);
 ok(cart.map(c=>c.price).join(',') === '490,299,550,199,595,99,510', 'الأكواد السبعة بالأسعار المطلوبة');
-ok(cart.every(c=> c.originalPrice > c.price && /عرض الويك إند/.test(c.discountName)), 'الفاتورة بتوضح السعر الأصلي واسم العرض');
+ok(cart.every(c=> c.originalPrice > c.price && /الجمعة البيضاء/.test(c.discountName)), 'الفاتورة بتوضح السعر الأصلي واسم العرض');
 cart = [L('999', 200, 2)]; ap(cart, THU, R);
 ok(cart[0].price === 170, 'أي صنف تاني = خصم 15%');
 cart = [L('187', 50, 4)]; ap(cart, THU, R); ok(tot(cart) === 150, 'بندانة 187: 4 قطع = 150');
