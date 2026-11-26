@@ -20,7 +20,7 @@ const tot = (cart)=> Math.round(cart.reduce((s,c)=> s + c.price*c.qty, 0)*100)/1
 
 let cart = [L('902', 700), L('832', 420), L('60', 650), L('582', 250), L('138', 700), L('749', 180), L('746', 600)];
 ap(cart, THU, R);
-ok(cart.map(c=>c.price).join(',') === '490,299,550,199,595,99,510', 'الأكواد السبعة بالأسعار المطلوبة');
+ok(cart.map(c=>c.price).join(',') === '399,299,550,199,595,99,510', 'الأكواد السبعة بالأسعار المطلوبة');
 ok(cart.every(c=> c.originalPrice > c.price && /الجمعة البيضاء/.test(c.discountName)), 'الفاتورة بتوضح السعر الأصلي واسم العرض');
 cart = [L('999', 200, 2)]; ap(cart, THU, R);
 ok(cart[0].price === 170, 'أي صنف تاني = خصم 15%');
@@ -39,10 +39,10 @@ cart = [L('772', 350)]; ap(cart, THU, CC); ok(cart[0].price === 299, 'سيتي �
 cart = [L('832', 400)]; ap(cart, THU, CC); ok(cart[0].price === 340, 'سلبي: سيتي سنتر كود 832 مش في السعر الثابت (15% زي الباقي)');
 cart = [L('772', 350)]; ap(cart, THU, R); ok(cart[0].price === 297.5, 'سلبي: الرحاب كود 772 = 15% بس (السعر الثابت لسيتي سنتر)');
 cart = [L('832', 400)]; ap(cart, THU, 'echarpe Madinaty'); ok(cart[0].price === 299, 'مدينتي كود 832 = 299');
-cart = [L('902', 700)]; ap(cart, THU, CC); ok(cart[0].price === 490, 'سيتي سنتر باقي الأكواد زي ما هي');
+cart = [L('902', 700)]; ap(cart, THU, CC); ok(cart[0].price === 399, 'سيتي سنتر 902 = 399');
 cart = [L('902', 700)]; ap(cart, THU, 'echarpe Madinaty'); ok(cart[0].price === 399, 'مدينتي: 902 = 399');
 cart = [L('902', 700)]; ap(cart, THU, 'echarpe Madinaty-1'); ok(cart[0].price === 399, 'مدينتي-1: 902 = 399');
-cart = [L('902', 700)]; ap(cart, THU, R); ok(cart[0].price === 490, 'سلبي: الرحاب 902 لسه 490');
+cart = [L('902', 700)]; ap(cart, THU, R); ok(cart[0].price === 399, 'الرحاب 902 = 399 (كل الفروع)');
 cart = [L('832', 400)]; ap(cart, THU, 'echarpe Madinaty'); ok(cart[0].price === 299, 'مدينتي باقي الأكواد زي ما هي (832 = 299)');
 cart = [L('749', 180)]; ap(cart, THU, R); ok(cart[0].price === 99, '749 = 99');
 cart = [L('746', 500)]; ap(cart, THU, R); ok(cart[0].price === 500, 'سلبي: كود سعره أصلًا أقل من سعر العرض → مايغلاش عليها (ولا ياخد 15%)');
@@ -51,8 +51,8 @@ ok(cart[0].price === 150 && cart[0].discountName === 'خصم الفرع', 'خص�
 // سلبي
 cart = [L('902', 700)]; ap(cart, WED, R); ok(cart[0].price === 700, 'سلبي: الأربع 25 = مفيش عرض');
 cart = [L('902', 700)]; ap(cart, MON, R); ok(cart[0].price === 700, 'سلبي: الاتنين 30 (القاهرة) = مفيش عرض');
-cart = [L('902', 700)]; ap(cart, SUN_NIGHT, R); ok(cart[0].price === 490, 'الأحد 11:30 بالليل القاهرة لسه شغال');
-cart = [L('902', 700)]; ap(cart, THU, 'Glow'); ok(cart[0].price === 490, 'Glow: نفس العرض (v779)');
+cart = [L('902', 700)]; ap(cart, SUN_NIGHT, R); ok(cart[0].price === 399, 'الأحد 11:30 بالليل القاهرة لسه شغال');
+cart = [L('902', 700)]; ap(cart, THU, 'Glow'); ok(cart[0].price === 399, 'Glow: نفس العرض (902 = 399)');
 cart = [L('999', 200)]; ap(cart, THU, 'Glow'); ok(cart[0].price === 170, 'Glow: باقي المحل 15%');
 cart = [L('902', 700)]; ap(cart, THU, 'echarpe office'); ok(cart[0].price === 700, 'سلبي: echarpe office مش فرع بيع');
 cart = [L('902', -700, 1, { isReturn:true })]; ap(cart, THU, R); ok(cart[0].price === -700, 'سلبي: المرتجع بسعره');
