@@ -1,0 +1,125 @@
+/* ============================================================
+   🏷️ عرض الويك إند — فروع إيشارب (قرار المالك 26-11-2026)
+   من الخميس 26-11 لحد الأحد 29-11 (بتوقيت القاهرة) · فروع إيشارب بس (Glow لأ).
+   • أكواد بسعر ثابت (PROMO_FIXED)
+   • البندانة 45: كل 4 قطع بـ150
+   • باقي المحل كله: خصم 15%
+   القواعد:
+   • السعر بيتحسب من سعر الصنف الأصلي، والعميلة بتاخد الأحسن ليها (العرض أو أي خصم تاني شغال) — مش بيتجمعوا.
+   • مش بيلمس: المرتجع · استبدال النقط · المكافأة · الرصيد · كارت الهدية · سطر الكاشير عدّلت سعره بإيدها ·
+     عرض العميلة من التطبيق · أوردر الموظف (خصمه بيتحسب لوحده).
+   • بيتعاد حسابه كل ما السلة تتغير (renderCart) — فزيادة/نقصان القطع بيظبط سعر البندانة لوحده.
+   ============================================================ */
+(function(){
+  'use strict';
+  var PROMO = {
+    name: 'عرض الويك إند',
+    from: '2026-11-26', to: '2026-11-29',          // شامل اليومين
+    pct: 15,                                        // باقي المحل
+    fixed: { '902':490, '832':350, '60':550, '582':199, '138':595, '749':135, '746':510 },
+    bundle: { code:'45', qty:4, price:150 }         // البندانة: كل 4 بـ150
+  };
+  window.PROMO_WEEKEND = PROMO;
+
+  function cairoDay(ts){
+    try{ return new Intl.DateTimeFormat('en-CA', { timeZone:'Africa/Cairo', year:'numeric', month:'2-digit', day:'2-digit' }).format(new Date(ts)); }
+    catch(e){ var d = new Date(ts + 2*3600e3); return d.toISOString().slice(0,10); }
+  }
+  function isEcharpeBranch(br){
+    br = String(br || '').trim();
+    if(!br || /office/i.test(br)) return false;
+    if(typeof _brandOfBranch === 'function') return _brandOfBranch(br) === 'echarpe';
+    return /^echarpe/i.test(br);
+  }
+  function promoActive(now, br){
+    var d = cairoDay(now == null ? Date.now() : now);
+    return d >= PROMO.from && d <= PROMO.to && isEcharpeBranch(br);
+  }
+  function r2(x){ return Math.round(x * 100) / 100; }
+  function eligible(c){
+    if(!c || c.isReturn || c.isRedemption || c.isRewardDiscount || c.isGiftCard || c.isCreditSpend) return false;
+    if(c.edited || c.offerApplied || c.promoLocked) return false;
+    if(String(c.id || '').startsWith('__')) return false;
+    return true;
+  }
+  /* بيرجّع السطر لحالته قبل العرض (لو العرض اتشال أو السطر بقى مش مؤهل) */
+  function undo(c){
+    if(!c || !c.promoOn || c.edited || c.promoLocked) return;   // الكاشير غيّرت السعر بإيدها = سعرها هو اللي يفضل
+    c.price = c.promoEng; c.promoSet = c.promoEng;
+    c.originalPrice = c.promoOrigBefore;
+    c.discountName = c.promoNameBefore;
+    c.promoOn = false;
+  }
+  function remember(c){
+    if(c.promoBase != null) return;
+    c.promoEng = Number(c.price);                                    // السعر بعد أي خصم تاني شغال
+    c.promoBase = Number(c.originalPrice != null ? c.originalPrice : c.price);   // سعر الصنف الأصلي
+    c.promoOrigBefore = c.originalPrice == null ? null : c.originalPrice;
+    c.promoNameBefore = c.discountName == null ? null : c.discountName;
+    c.promoSet = c.price;
+  }
+  /* حد غيّر السعر بعد ما العرض حسبه (خصم على إجمالي الفاتورة · تعديل الصنف) → منلمسوش تاني */
+  function detectExternal(c){
+    if(c && c.promoBase != null && c.promoSet != null && Math.abs(Number(c.price) - Number(c.promoSet)) > 0.004) c.promoLocked = true;
+  }
+  function setPrice(c, p, label){
+    p = r2(p);
+    if(p < c.promoEng - 0.004){
+      c.price = p; c.originalPrice = c.promoBase; c.discountName = label; c.promoOn = true; c.promoSet = p;
+    }else{ undo(c); c.promoSet = c.price; }
+  }
+
+  function applyWeekendPromo(cart, now, br){
+    cart = cart || [];
+    var on = promoActive(now, br);
+    var bundleLines = [];
+    cart.forEach(function(c){
+      if(!c) return;
+      detectExternal(c);
+      if(!on || !eligible(c)){ undo(c); return; }
+      remember(c);
+      var code = String(c.barcode || '').trim();
+      if(code === PROMO.bundle.code){ bundleLines.push(c); return; }
+      if(Object.prototype.hasOwnProperty.call(PROMO.fixed, code)){
+        var pct = c.promoBase * (1 - PROMO.pct/100);
+        if(PROMO.fixed[code] <= pct) setPrice(c, PROMO.fixed[code], PROMO.name + ' (' + PROMO.fixed[code] + ' ج)');
+        else setPrice(c, pct, PROMO.name + ' ' + PROMO.pct + '%');     // الأحسن ليها: لو الـ15% أرخص من السعر الثابت
+        return;
+      }
+      setPrice(c, c.promoBase * (1 - PROMO.pct/100), PROMO.name + ' ' + PROMO.pct + '%');
+    });
+    if(bundleLines.length){
+      var q = 0, base = 0, eng = Infinity;
+      bundleLines.forEach(function(c){ q += Math.max(0, Math.floor(Number(c.qty)||0)); base = Math.max(base, c.promoBase); eng = Math.min(eng, c.promoEng); });
+      if(q > 0){
+        var unitOther = Math.min(eng, base * (1 - PROMO.pct/100));         // القطع الزيادة عن مضاعفات 4 = 15%
+        var groups = Math.floor(q / PROMO.bundle.qty), rem = q - groups * PROMO.bundle.qty;
+        var groupPrice = Math.min(PROMO.bundle.price, PROMO.bundle.qty * unitOther);
+        var total = groups * groupPrice + rem * unitOther;
+        var label = groups ? (PROMO.name + ' — كل ' + PROMO.bundle.qty + ' بـ' + PROMO.bundle.price) : (PROMO.name + ' ' + PROMO.pct + '%');
+        bundleLines.forEach(function(c){ setPrice(c, total / q, label); });
+      }
+    }
+    return on;
+  }
+  window.applyWeekendPromo = applyWeekendPromo;
+  window.weekendPromoActive = promoActive;
+
+  /* الربط: قبل كل رسم للسلة (renderCart) */
+  if(typeof window.renderCart === 'function' && !window.renderCart.__promoWrapped){
+    var _orig = window.renderCart;
+    var wrapped = function(){
+      try{
+        if(typeof cardCartEditBlockReason !== 'function' || !cardCartEditBlockReason()){
+          if(typeof staffPurchase === 'undefined' || !staffPurchase){
+            applyWeekendPromo(typeof cart !== 'undefined' ? cart : [], Date.now(), typeof currentBranch !== 'undefined' ? currentBranch : '');
+          }
+        }
+      }catch(e){ console.warn('weekend promo', e); }
+      return _orig.apply(this, arguments);
+    };
+    wrapped.__promoWrapped = true;
+    window.renderCart = wrapped;
+    try{ renderCart = wrapped; }catch(e){}
+  }
+})();
