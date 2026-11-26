@@ -67,6 +67,13 @@ assertEq(R.office.sentToday.writes.length, 0, 'اتبعت النهارده خل�
 assertEq(R.office.sentToday.asked, 0, 'ومن غير حتى ما يسأل');
 assertEq(R.office.glow.writes.map(w => w.d), ['promo_push_glow'], 'Glow له حد يومي لوحده');
 assertEq(R.office.short.writes.length, 0, 'كلام فاضي/قصير = مفيش إرسال (سلبي)');
+/* v778 — ستوري التطبيق مفتوحة → نفس طريق إشعار الفيديو المنشور (من غير نشر فانكشن) · طريق واحد بس في المرة */
+const L = R.office.live.writes;
+assertEq(L.map(w => w.d), ['stories_push_echarpe'], 'ستوري مفتوحة = بيكتب مستند إشعار الستوري بس (مش الاتنين)');
+assertEq([L[0].data.kind, L[0].data.day, L[0].data.seq.inc], ['video', '2026-11-26', 1], 'بنفس شكل إشعار الفيديو اللي الفانكشن المنشورة بتفهمه');
+assert(/الجمعة البيضاء/.test(L[0].data.title) && /من الخميس للأحد/.test(L[0].data.title) && L[0].data.title.length <= 200, 'العنوان والكلام في سطر واحد');
+assertEq(R.office.liveStoryToday.writes.length, 0, 'ستوري اتبعت إشعارها النهارده = مفيش إشعار تاني (سلبي)');
+assertEq(R.office.liveOtherBrand.writes.map(w => w.d), ['promo_push_glow'], 'Glow مقفول = الطريق الجديد لـGlow');
 const off = read('Office/index.html');
 assert(off.indexOf('office2/promo-push.js?v=') > off.indexOf('office2/stories.js?v='), 'Office بيحمّل promo-push بعد stories');
-assert(+read('Office/sw.js').match(/echarpe-office-v(\d+)/)[1] >= 777, 'كاش Office اترفع');
+assert(+read('Office/sw.js').match(/echarpe-office-v(\d+)/)[1] >= 778, 'كاش Office اترفع');
