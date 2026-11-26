@@ -66,6 +66,7 @@ assertEq(R.office.declined.writes.length, 0, 'المالك رجع في كلام�
 assertEq(R.office.sentToday.writes.length, 0, 'اتبعت النهارده خلاص = مفيش تاني (سلبي)');
 assertEq(R.office.sentToday.asked, 0, 'ومن غير حتى ما يسأل');
 assertEq(R.office.glow.writes.map(w => w.d), ['promo_push_glow'], 'Glow له حد يومي لوحده');
+assert(/Glow/.test(R.office.glow.writes[0].data.title) && /Glow/.test(R.office.glow.writes[0].data.body) && !/إيشارب/.test(R.office.glow.writes[0].data.title + R.office.glow.writes[0].data.body), 'إشعار Glow بيتكلم عن Glow مش إيشارب (سلبي)');
 assertEq(R.office.short.writes.length, 0, 'كلام فاضي/قصير = مفيش إرسال (سلبي)');
 /* v778 — ستوري التطبيق مفتوحة → نفس طريق إشعار الفيديو المنشور (من غير نشر فانكشن) · طريق واحد بس في المرة */
 const L = R.office.live.writes;

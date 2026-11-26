@@ -1,5 +1,5 @@
 /* ============================================================
-   📣 office2/promo-push.js — v2 — إشعار عرض لكل العميلات
+   📣 office2/promo-push.js — v3 — إشعار عرض لكل العميلات
    ------------------------------------------------------------
    طلب المالك (26-11-2026، الجمعة البيضاء): إشعار واحد لكل عميلات البراند
    على الـPWA وتطبيق جوجل بلاي بكلام العرض.
@@ -21,7 +21,7 @@ var db = firebase.firestore();
 var BR = [['echarpe', 'إيشارب'], ['glow', 'Glow']];
 var S = { open:false, booted:false, brand:'echarpe', last:{}, stLast:{}, cfg:null, busy:false,
   title:'الجمعة البيضاء في إيشارب 🤍',
-  body:'الحقي عروض الجمعة البيضاء من الخميس للأحد — خصومات على كل المنتجات في كل الفروع 🛍️',
+  body:'الحقي عروض الجمعة البيضاء من الخميس للأحد — خصومات على كل المنتجات في فروع إيشارب 🛍️',
   link:'./?go=wf' };
 
 function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]; }); }
@@ -119,6 +119,6 @@ async function send(){
   S.busy = false; render();
 }
 
-window.O2Promo = { open: open, close: close, send: send, type: type, brand: function(x){ keep(); S.brand = x === 'glow' ? 'glow' : 'echarpe'; render(); }, _clean: clean, _dayKey: dayKey };
+window.O2Promo = { open: open, close: close, send: send, type: type, brand: function(x){ keep(); var nb = x === 'glow' ? 'glow' : 'echarpe'; if(nb !== S.brand){ var from = S.brand === 'glow' ? 'Glow' : 'إيشارب', to = nb === 'glow' ? 'Glow' : 'إيشارب'; S.title = S.title.split(from).join(to); S.body = S.body.split(from).join(to); } S.brand = nb; render(); }, _clean: clean, _dayKey: dayKey };
 if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchScreen); else watchScreen();
 })();
