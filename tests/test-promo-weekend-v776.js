@@ -47,6 +47,10 @@ cart = [L('832', 400)]; ap(cart, THU, 'echarpe Madinaty'); ok(cart[0].price === 
 cart = [L('138', 700)]; ap(cart, THU, R); ok(cart[0].price === 630 && /10%/.test(cart[0].discountName), 'كود 138 = خصم 10% (700 → 630)');
 cart = [L('138', 700)]; ap(cart, THU, 'Glow'); ok(cart[0].price === 630, '138 = 10% في Glow كمان');
 cart = [L('138', 700)]; ap(cart, WED, R); ok(cart[0].price === 700, 'سلبي: 138 قبل العرض بسعره');
+cart = [L('1115', 700)]; ap(cart, THU, CC); ok(cart[0].price === 550, 'سيتي سنتر: 1115 = 550');
+cart = [L('60', 700)]; ap(cart, THU, CC); ok(cart[0].price === 550, 'سيتي سنتر: 60 كمان = 550');
+cart = [L('1115', 700)]; ap(cart, THU, R); ok(cart[0].price === 595, 'سلبي: 1115 في الرحاب مش سعر ثابت (15%)');
+cart = [L('60', 700)]; ap(cart, THU, 'Glow'); ok(cart[0].price === 550, '60 = 550 في Glow');
 cart = [L('749', 180)]; ap(cart, THU, R); ok(cart[0].price === 99, '749 = 99');
 cart = [L('746', 500)]; ap(cart, THU, R); ok(cart[0].price === 500, 'سلبي: كود سعره أصلًا أقل من سعر العرض → مايغلاش عليها (ولا ياخد 15%)');
 cart = [L('999', 200, 1, { price:150, originalPrice:200, discountName:'خصم الفرع' })]; ap(cart, THU, R);
