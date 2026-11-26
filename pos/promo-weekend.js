@@ -1,6 +1,6 @@
 /* ============================================================
    🏷️ عرض الويك إند — فروع إيشارب (قرار المالك 26-11-2026)
-   من الخميس 26-11 لحد الأحد 29-11 (بتوقيت القاهرة) · فروع إيشارب بس (Glow لأ).
+   من الخميس 26-11 لحد الأحد 29-11 (بتوقيت القاهرة) · كل الفروع (إيشارب + Glow من v779).
    • أكواد بسعر ثابت (PROMO_FIXED)
    • البندانة 187: كل 4 قطع بـ150 (القطعة الزيادة بسعرها الكامل)
    • باقي المحل كله: خصم 15%
@@ -31,8 +31,7 @@
   function isEcharpeBranch(br){
     br = String(br || '').trim();
     if(!br || /office/i.test(br)) return false;
-    if(typeof _brandOfBranch === 'function') return _brandOfBranch(br) === 'echarpe';
-    return /^echarpe/i.test(br);
+    return true;   // v779 (قرار المالك 26-11): نفس العرض في Glow كمان — كل فروع البيع
   }
   function promoActive(now, br){
     var d = cairoDay(now == null ? Date.now() : now);

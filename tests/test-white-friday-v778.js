@@ -33,7 +33,8 @@ const wctx = { console, Intl, Date, document:{ currentScript:{ getAttribute:()=>
 wctx.window = wctx; vm.createContext(wctx); vm.runInContext(WF, wctx);
 const T = Date.parse('2026-11-26T09:00:00Z');
 ok(wctx.wfActive(T, 'echarpe El Rehab') === true, 'الثيم شغال الخميس في فرع إيشارب');
-ok(wctx.wfActive(T, 'Glow') === false, 'سلبي: Glow لأ');
+ok(wctx.wfActive(T, 'Glow') === true, 'Glow كمان (v779)');
+ok(wctx.wfActive(T, 'echarpe office') === false, 'سلبي: المكتب لأ');
 ok(wctx.wfActive(Date.parse('2026-11-29T22:30:00Z'), 'echarpe Madinaty') === false, 'سلبي: الاتنين (القاهرة) اختفى لوحده');
 ok(wctx.wfActive(Date.parse('2026-11-25T21:00:00Z'), 'echarpe Madinaty') === false, 'سلبي: قبل الخميس لأ');
 for(const [f, app] of [['pos/index.html','pos'],['sales/index.html','sales'],['feedback/index.html','feedback']]){
