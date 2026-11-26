@@ -23,6 +23,13 @@ function caiKey(ms){ const p = caiParts(ms); return p.y + '-' + String(p.m).padS
 function caiOffsetMs(ms){ const p = caiParts(ms); return Date.UTC(p.y, p.m-1, p.d, p.h, p.mi, 0) - Math.floor(ms/60000)*60000; }
 function caiStamp(y, m, d, h, mi){ const guess = Date.UTC(y, m-1, d, h||0, mi||0); return guess - caiOffsetMs(guess); }
 function caiDayStart(ms){ const p = caiParts(ms); return caiStamp(p.y, p.m, p.d, 0, 0); }
+/* 🕕 v15 — يوم الشغل (نفس الكاشير بالظبط): اليوم بيبدأ الساعة الفاصلة (pos_test_settings/day_cfg.startHour، الافتراضي 6ص)
+   مش نص الليل. قبل كده Office كان بيقسم على نص الليل والكاشير/تقفيل اليوم على 6ص → فواتير بعد 12 بتروح ليوم غلط
+   وأرقام Office مبتطابقش التقفيل. كل شاشات المبيعات هنا بتستخدم biz* — والحضور لسه على اليوم العادي. */
+let BIZ_HOUR = 6;
+function bizDayStart(ms){ return caiDayStart(ms - BIZ_HOUR*3600000) + BIZ_HOUR*3600000; }
+function bizKey(ms){ return caiKey(ms - BIZ_HOUR*3600000); }
+function bizRange(dayKey){ const a = String(dayKey).split('-').map(Number); const from = caiStamp(a[0],a[1],a[2],BIZ_HOUR,0); return { from, to: from + DAY - 1 }; }
 function caiMonthRange(ms){ const p = caiParts(ms); const last = new Date(Date.UTC(p.y, p.m, 0)).getUTCDate(); return { start: caiStamp(p.y,p.m,1,0,0), end: caiStamp(p.y,p.m,last,23,59) + 59999, y:p.y, m:p.m, days:last }; }
 function hm(ms){ if(!ms) return '—'; const p = caiParts(ms); return String(p.h).padStart(2,'0') + ':' + String(p.mi).padStart(2,'0'); }
 const AR_DAYS = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
@@ -104,7 +111,7 @@ try{ document.getElementById('gEmail').value = localStorage.getItem('office_emai
 auth.onAuthStateChanged(u=>{ try{ if(u && u.email) localStorage.setItem('office_email', u.email); }catch(e){} gateFlow(u); });
 
 /* ---------- 📦 البيانات ---------- */
-const D = { employees:[], shifts:[], breaks:[], points:[], ratings:[], leaves:[], bonus:[], sales:[], settings:{}, credits:[], staffOrders:[], advances:[], deductions:[], salaryPays:[], commPays:[], expenses:[], advCfg:{} };
+const D = { employees:[], shifts:[], breaks:[], points:[], ratings:[], leaves:[], bonus:[], sales:[], salesReady:{ ms:false, srv:false }, salesErr:'', settings:{}, credits:[], staffOrders:[], advances:[], deductions:[], salaryPays:[], commPays:[], expenses:[], advCfg:{} };
 let booted = false, screenName = 'today', screenArg = null; const unsub = [];
 function salesCfg(branch){ const s = D.settings[branch] || D.settings[Object.keys(D.settings)[0]] || {}; return s; }
 function timeCfg(branch){ return Object.assign({}, (salesCfg(branch).timeCfg)||{}); }
@@ -139,10 +146,13 @@ function boot(){
   watch('office_expenses', 'ts', Date.now() - 75*DAY, 'expenses');
   db.collection('pos_test_settings').doc('advances_cfg').get().then(d=>{ D.advCfg = d.exists ? (d.data()||{}) : {}; render(); }).catch(()=>{});
   // 💰 فواتير النهاردة وامبارح — استعلامين (createdAt للسيرفر + createdAtMs للأوفلاين) ودمج بالمعرّف
-  const from = caiDayStart(Date.now()) - DAY; const salesMap = {};
-  const mergeSales = (s)=>{ s.docs.forEach(d=>{ salesMap[d.id] = Object.assign({ id:d.id }, d.data()); }); D.sales = Object.values(salesMap); render(); };
-  unsub.push(db.collection('pos_test_sales').where('createdAtMs', '>=', from).onSnapshot(mergeSales, ()=>{}));
-  unsub.push(db.collection('pos_test_sales').where('createdAt', '>=', firebase.firestore.Timestamp.fromMillis(from)).onSnapshot(mergeSales, ()=>{}));
+  db.collection('pos_test_settings').doc('day_cfg').get().then(d=>{ const h = d.exists ? Number((d.data()||{}).startHour) : NaN; if(!isNaN(h) && h >= 0 && h <= 23 && h !== BIZ_HOUR){ BIZ_HOUR = h; render(); } }).catch(()=>{});
+  // النافذة: من بداية يوم الشغل بتاع امبارح ناقص يوم احتياطي (الساعة الفاصلة ممكن تتغير + فواتير أوفلاين)
+  const from = caiDayStart(Date.now()) - 2*DAY; const salesMap = {};
+  const mergeSales = (which)=> (s)=>{ s.docs.forEach(d=>{ salesMap[d.id] = Object.assign({ id:d.id }, d.data()); }); D.sales = Object.values(salesMap); D.salesReady[which] = true; render(); };
+  const salesErr = (which)=> (e)=>{ console.warn('pos_test_sales', which, e && e.code); D.salesErr = String(e && (e.code || e.message) || 'error'); D.salesReady[which] = true; setSync(false); render(); };
+  unsub.push(db.collection('pos_test_sales').where('createdAtMs', '>=', from).onSnapshot(mergeSales('ms'), salesErr('ms')));
+  unsub.push(db.collection('pos_test_sales').where('createdAt', '>=', firebase.firestore.Timestamp.fromMillis(from)).onSnapshot(mergeSales('srv'), salesErr('srv')));
   document.querySelectorAll('#tabbar button').forEach(b=> b.onclick = ()=> go(b.dataset.s));
   document.getElementById('btnOld').onclick = ()=> go('more');
   setInterval(()=>{ if(screenName==='today') render(); }, 60000);
@@ -151,7 +161,14 @@ function setSync(ok){ const d = document.getElementById('syncDot'); if(d) d.clas
 function toast(t){ const el = document.getElementById('toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast._t); toast._t = setTimeout(()=> el.classList.remove('on'), 2200); }
 
 /* ---------- 🧮 حسابات مشتركة ---------- */
-function saleMs(s){ return (s.createdAt && typeof s.createdAt.toMillis==='function') ? s.createdAt.toMillis() : (Number(s.createdAtMs)||0); }
+/* 🧾 وقت الفاتورة — نفس قاعدة الكاشير (saleTs): وقت الجهاز لحظة البيع، إلا لو بعيد عن وقت السيرفر أكتر من 48 ساعة
+   (ساعة الجهاز بايظة). قبل كده Office كان بياخد وقت السيرفر دايمًا → فاتورة اتباعت أوفلاين واترفعت بعدين كانت بتروح ليوم تاني. */
+function saleMs(s){
+  const server = (s && s.createdAt && typeof s.createdAt.toMillis==='function') ? s.createdAt.toMillis() : null;
+  const local = (s && typeof s.createdAtMs === 'number' && s.createdAtMs > 0) ? s.createdAtMs : null;
+  if(local != null && server != null) return Math.abs(server - local) <= 48*3600000 ? local : server;
+  return local != null ? local : (server != null ? server : (Number(s && s.createdAtMs)||0));
+}
 function shiftEmp(shift, emp){ const d = shiftDefs(emp && emp.branch)[shift.attendanceShiftKey] || {}; return shift.scheduledStartTime ? Object.assign({}, emp||{}, { scheduledStartTime: shift.scheduledStartTime, scheduledEndTime: shift.scheduledEndTime || d.end || (emp&&emp.scheduledEndTime) }) : (emp||{}); }
 function startEndHM(emp){ const d = shiftDefs(emp.branch)[emp.shift] || {}; return { s: emp.scheduledStartTime || d.start || '', e: emp.scheduledEndTime || d.end || '' }; }
 function requiredMin(shift, emp){
@@ -193,8 +210,10 @@ function monthBonuses(emp, range){
 function openShift(empId){ return D.shifts.find(s=> s.employeeId===empId && !s.clockOutTs && !s.voided); }
 function onBreak(empId){ return D.breaks.find(b=> b.employeeId===empId && !b.endTs); }
 function todaySales(branch, dayStartMs){ const end = dayStartMs + DAY - 1; return D.sales.filter(s=> s.branch===branch && !s.reversed && !s.isReversal && saleMs(s) >= dayStartMs && saleMs(s) <= end); }
-function sumTotal(list){ return list.reduce((n,s)=> n + (Number(s.total)||0), 0); }
-function payBreak(list){ const o = {}; list.forEach(s=>{ Object.entries(s.payments||{}).forEach(([k,v])=>{ o[k] = (o[k]||0) + (Number(v)||0); }); }); return o; }
+/* نفس حساب تقارير الكاشير (repAggregate): نقط/مكافأة اتسجلوا كـ«دفع» في فواتير قديمة = خصم مش مبيعات، ومش طريقة دفع */
+function saleNet(s){ const p = (s && s.payments) || {}; return (Number(s && s.total)||0) - (Number(p.points)||0) - (Number(p.reward)||0); }
+function sumTotal(list){ return list.reduce((n,s)=> n + saleNet(s), 0); }
+function payBreak(list){ const o = {}; list.forEach(s=>{ Object.entries(s.payments||{}).forEach(([k,v])=>{ if(k==='points'||k==='reward') return; o[k] = (o[k]||0) + (Number(v)||0); }); }); return o; }
 const SHIFT_AR = { morning:'صباحي', evening:'مسائي', setup:'تجهيز' };
 const PAY_AR = { cash:'كاش', visa:'فيزا', instapay:'إنستاباي', wallet:'محفظة', credit:'رصيد', points:'نقط' };
 // 💳 ملخص طرق الدفع ليوم: المبلغ · عدد الفواتير · النسبة · المرتجع
@@ -224,9 +243,15 @@ async function fixForgotten(){
 
 /* ---------- 🧭 التنقل ---------- */
 const MODS = {};   // 🧩 شاشات إضافية في ملفات m-*.js — O2.register(name, { icon, title, desc, tab, render(arg), enter(arg) })
-function go(name, arg){ const prev = screenName; screenName = name; screenArg = arg || null; window.scrollTo(0,0); const tab = MODS[name] ? (MODS[name].tab||'more') : (name==='emp' ? 'staff' : (name==='branch' ? 'today' : (name==='activity' ? 'more' : name))); document.querySelectorAll('#tabbar button').forEach(b=> b.classList.toggle('on', b.dataset.s === tab)); if(MODS[name] && MODS[name].enter) { try{ MODS[name].enter(screenArg, prev); }catch(e){ console.error(e); } } render(); }
+function go(name, arg){ const prev = screenName; screenName = name; screenArg = arg || null; window.scrollTo(0,0); const tab = MODS[name] ? (MODS[name].tab||'more') : (name==='emp' ? 'staff' : (name==='branch' ? 'today' : (name==='activity' ? 'more' : name))); document.querySelectorAll('#tabbar button').forEach(b=> b.classList.toggle('on', b.dataset.s === tab)); if(MODS[name] && MODS[name].enter) { try{ MODS[name].enter(screenArg, prev); }catch(e){ console.error(e); } } renderNow(); }
 function head(t, sub){ document.getElementById('hTitle').innerHTML = t; document.getElementById('hSub').textContent = sub || ''; }
-function render(){
+/* ⚡ v15 — الرسم بيتجمّع: ~17 مستمع كانوا كل واحد بيعيد رسم الشاشة كلها فور ما بياناته توصل
+   (عشرات المرات في أول ثواني + مع كل فاتورة) → بطء وقفز في الشاشة. دلوقتي رسمة واحدة كل ~150ms،
+   ومع الحفاظ على مكان السكرول. renderNow للتنقل (فوري). */
+let _rT = 0;
+function render(){ if(_rT) return; _rT = setTimeout(()=>{ _rT = 0; const y = window.scrollY; renderNow(); if(Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y); }, 150); }
+function renderNow(){
+  if(_rT){ clearTimeout(_rT); _rT = 0; }
   if(!booted) return;
   const el = document.getElementById('screen'); if(!el) return;
   try{
@@ -261,7 +286,8 @@ function rToday(){
   const now = Date.now(); head('اليوم · ' + dayName(now) + ' ' + caiParts(now).d, 'كل الفروع');
   const al = alerts().map((a,i)=>`<div class="alert ${a.k}" onclick="O2.alert(${i})">${a.t}<span class="go">افتح ›</span></div>`).join('');
   window._alerts = alerts();
-  const t0 = caiDayStart(now), y0 = t0 - DAY;
+  const t0 = bizDayStart(now), y0 = t0 - DAY;
+  const salesLoading = !(D.salesReady.ms && D.salesReady.srv);
   const kp = branches().map(b=>{ const t = sumTotal(todaySales(b, t0)); const ySame = sumTotal(todaySales(b, y0).filter(x=> saleMs(x) <= now - DAY)); const d = ySame>0 ? Math.round((t-ySame)/ySame*100) : 0; return `<div class="kpi" onclick="O2.go('branch','${esc(b)}')"><small>${esc(b.replace('echarpe ',''))}</small><b>${n0(t)}</b><span class="d ${d>=0?'up':'dn'}">${ySame>0?(d>=0?'▲':'▼')+' '+Math.abs(d)+'% عن امبارح نفس الوقت':'—'}</span></div>`; }).join('');
   const emps = activeEmps().filter(e=>!isSetup(e)); const present = emps.filter(e=> openShift(e.id));
   const rows = emps.sort((a,b)=> (openShift(b.id)?1:0) - (openShift(a.id)?1:0) || String(a.branch).localeCompare(String(b.branch))).map(e=>{
@@ -271,7 +297,7 @@ function rToday(){
     return `<div class="row" onclick="O2.go('emp','${e.id}')"><span class="sdot ${s?(brk?'brk':''):'off'}"></span><div class="n"><b>${esc(e.name)} · ${esc(String(e.branch||'').replace('echarpe ',''))}</b><small>${st} · ${pointsIn(e.id, t0, now)} نقطة النهاردة</small></div>${pill}</div>`;
   }).join('');
   return `<div class="full">${al}</div>
-    <div class="card"><h3>💰 مبيعات النهاردة · <span class="money">${n0(branches().reduce((n,b)=> n + sumTotal(todaySales(b, t0)), 0))}</span> <small>لحد ${hm(now)} · اضغط الفرع للتفاصيل</small></h3><div class="kpis">${kp || '<div class="empty">—</div>'}</div></div>
+    <div class="card"><h3>💰 مبيعات النهاردة · <span class="money">${salesLoading ? '…' : n0(branches().reduce((n,b)=> n + sumTotal(todaySales(b, t0)), 0))}</span> <small>${salesLoading ? 'بيتحمّل…' : 'لحد ' + hm(now) + ' · اضغط الفرع للتفاصيل'}</small></h3>${D.salesErr ? `<div class="alert bad" style="cursor:default">⚠️ تعذر قراية الفواتير (${esc(D.salesErr)}) — الرقم ممكن يكون ناقص. افتح Office تاني.</div>` : ''}<div class="hint" style="margin:0 0 6px">يوم الشغل من ${String(BIZ_HOUR).padStart(2,'0')}:00 لـ ${String(BIZ_HOUR).padStart(2,'0')}:00 — نفس تقفيل اليوم في الكاشير</div>${salesLoading ? '<div class="skel"></div>' : `<div class="kpis">${kp || '<div class="empty">—</div>'}</div>`}</div>
     <div class="card"><h3>👥 مين موجود دلوقتي <small>${present.length} من ${emps.length}</small></h3>${rows || '<div class="empty">لسه مفيش موظفين</div>'}</div>`;
 }
 function todayShift(e){ const t0 = caiDayStart(Date.now()); return D.shifts.find(s=> s.employeeId===e.id && s.clockInTs >= t0 && s.clockOutTs); }
@@ -280,20 +306,22 @@ function todayShift(e){ const t0 = caiDayStart(Date.now()); return D.shifts.find
 let branchDay = null; const dayCache = {};
 async function loadDay(dayKey){
   if(dayCache[dayKey] && dayCache[dayKey].done) return dayCache[dayKey].rows;
-  const a = dayKey.split('-').map(Number); const from = caiStamp(a[0],a[1],a[2],0,0), to = from + DAY - 1;
+  const { from, to } = bizRange(dayKey);
   dayCache[dayKey] = dayCache[dayKey] || { rows:[], done:false, loading:true };
   try{
     const [s1, s2] = await Promise.all([
       db.collection('pos_test_sales').where('createdAtMs','>=',from).where('createdAtMs','<=',to).get(),
       db.collection('pos_test_sales').where('createdAt','>=',firebase.firestore.Timestamp.fromMillis(from)).where('createdAt','<=',firebase.firestore.Timestamp.fromMillis(to)).get() ]);
     const m = {}; s1.forEach(d=>{ m[d.id] = Object.assign({ id:d.id }, d.data()); }); s2.forEach(d=>{ m[d.id] = Object.assign({ id:d.id }, d.data()); });
-    dayCache[dayKey] = { rows: Object.values(m), done: dayKey !== caiKey(Date.now()), loading:false };   // النهاردة بيتحمّل تاني كل مرة
+    // ⚠️ الاستعلامين (وقت الجهاز / وقت السيرفر) ممكن يرجّعوا فاتورة وقتها الفعلي برّه اليوم ده → كانت بتتعد في يومين
+    const rows = Object.values(m).filter(x=>{ const t = saleMs(x); return t >= from && t <= to; });
+    dayCache[dayKey] = { rows, done: dayKey !== bizKey(Date.now()), loading:false };   // النهاردة بيتحمّل تاني كل مرة
   }catch(e){ dayCache[dayKey] = { rows:[], done:false, loading:false, err: e && e.code }; }
   return dayCache[dayKey].rows;
 }
 function daySales(branch, dayKey){
-  const today = caiKey(Date.now());
-  if(dayKey === today) return D.sales.filter(s=> s.branch===branch && saleMs(s) >= caiDayStart(Date.now()));
+  const today = bizKey(Date.now());
+  if(dayKey === today){ const r = bizRange(today); return D.sales.filter(s=> s.branch===branch && saleMs(s) >= r.from && saleMs(s) <= r.to); }
   const c = dayCache[dayKey]; if(!c || c.loading){ loadDay(dayKey).then(render); return null; }
   return c.rows.filter(s=> s.branch===branch);
 }
@@ -303,15 +331,15 @@ function topItems(list){
   return Object.values(agg).filter(x=> x.pieces !== 0).sort((a,b)=> b.pieces - a.pieces);
 }
 function rBranch(){
-  const b = screenArg; const dayKey = branchDay || caiKey(Date.now()); branchDay = dayKey;
+  const b = screenArg; const dayKey = branchDay || bizKey(Date.now()); branchDay = dayKey;
   head(`<button class="back" onclick="O2.go('today')">‹</button> ${esc(b)}`, 'مبيعات أي يوم · السجل · الأكثر مبيعًا');
   const list = daySales(b, dayKey);
   const a = dayKey.split('-').map(Number); const dayMs = caiStamp(a[0],a[1],a[2],12,0);
-  const nav = `<div class="card full" style="display:flex;align-items:center;gap:8px"><button class="back" onclick="O2.day(-1)">‹</button><input type="date" value="${dayKey}" max="${caiKey(Date.now())}" onchange="O2.dayPick(this.value)" style="flex:1;padding:9px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-weight:800;text-align:center"><button class="back" onclick="O2.day(1)" ${dayKey>=caiKey(Date.now())?'disabled':''}>›</button><span class="tag">${dayName(dayMs)}</span></div>`;
+  const nav = `<div class="card full" style="display:flex;align-items:center;gap:8px"><button class="back" onclick="O2.day(-1)">‹</button><input type="date" value="${dayKey}" max="${bizKey(Date.now())}" onchange="O2.dayPick(this.value)" style="flex:1;padding:9px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-weight:800;text-align:center"><button class="back" onclick="O2.day(1)" ${dayKey>=caiKey(Date.now())?'disabled':''}>›</button><span class="tag">${dayName(dayMs)}</span></div>`;
   if(list === null) return nav + '<div class="card"><div class="skel"></div><div class="skel" style="width:60%;margin-top:8px"></div></div>';
   const ok = list.filter(s=> !s.reversed && !s.isReversal); const ret = list.filter(s=> Number(s.total) < 0); const pb = payBreak(ok);
   const pieces = ok.reduce((n,s)=> n + (s.items||[]).reduce((m,it)=> m + (it && !it.isRedemption ? (it.isReturn?-1:1)*(Number(it.qty)||0) : 0), 0), 0);
-  const kpis = `<div class="card"><h3>💰 ${dayKey===caiKey(Date.now())?'النهاردة':'اليوم ده'} <small>${ok.length} فاتورة${ret.length?' · '+ret.length+' مرتجع':''}</small></h3><div class="kpis"><div class="kpi"><small>المبيعات</small><b>${n0(sumTotal(ok))}</b></div><div class="kpi"><small>القطع</small><b>${n0(pieces)}</b></div><div class="kpi"><small>متوسط الفاتورة</small><b>${ok.length?n0(sumTotal(ok)/ok.length):'—'}</b></div></div></div>` + paymentSummaryHtml(list);
+  const kpis = `<div class="card"><h3>💰 ${dayKey===bizKey(Date.now())?'النهاردة':'اليوم ده'} <small>${ok.length} فاتورة${ret.length?' · '+ret.length+' مرتجع':''}</small></h3><div class="kpis"><div class="kpi"><small>المبيعات</small><b>${n0(sumTotal(ok))}</b></div><div class="kpi"><small>القطع</small><b>${n0(pieces)}</b></div><div class="kpi"><small>متوسط الفاتورة</small><b>${ok.length?n0(sumTotal(ok)/ok.length):'—'}</b></div></div></div>` + paymentSummaryHtml(list);
   const top = topItems(ok).slice(0, 12).map((x,i)=>`<div class="row" style="cursor:default"><div class="n"><b>${i+1}. ${esc(x.name)}</b><small>${esc(x.barcode)}</small></div><span class="pill p-acc">${x.pieces} قطعة</span><b class="money">${n0(x.revenue)}</b></div>`).join('');
   const bySeller = {}; ok.forEach(s=>{ const k = s.employee || s.seller || '—'; bySeller[k] = bySeller[k] || { n:0, t:0 }; bySeller[k].n++; bySeller[k].t += Number(s.total)||0; });
   const sellers = Object.entries(bySeller).sort((x,y)=> y[1].t - x[1].t).map(([k,v])=>`<div class="row" style="cursor:default"><div class="n"><b>${esc(k)}</b><small>${v.n} فاتورة</small></div><b class="money">${n0(v.t)}</b></div>`).join('');
@@ -319,7 +347,7 @@ function rBranch(){
   return nav + kpis + `<div class="card"><h3>🏆 الأكثر مبيعًا <small>بالقطع</small></h3>${top || '<div class="empty">مفيش مبيعات</div>'}</div><div class="card"><h3>👩‍💼 البياعات</h3>${sellers || '<div class="empty">—</div>'}</div><div class="card full"><h3>🧾 سجل الفواتير <small>اضغط الفاتورة للأصناف</small></h3>${log || '<div class="empty">مفيش فواتير اليوم ده</div>'}</div>`;
 }
 function invoiceSheet(dayKey, id){
-  const src = dayKey === caiKey(Date.now()) ? D.sales : ((dayCache[dayKey]||{}).rows||[]); const s = src.find(x=> x.id===id); if(!s) return;
+  const src = dayKey === bizKey(Date.now()) ? D.sales : ((dayCache[dayKey]||{}).rows||[]); const s = src.find(x=> x.id===id); if(!s) return;
   const items = (s.items||[]).map(it=>`<div class="row" style="cursor:default"><div class="n"><b>${esc(it.name||it.barcode||'')}${it.isReturn?' <span class="pill p-bad">مرتجع</span>':''}${it.isRedemption?' <span class="pill p-gray">استبدال نقط</span>':''}</b><small>${esc(it.barcode||'')}${it.attribute?' · '+esc(it.attribute):''}${it.size?' · '+esc(it.size):''}</small></div><span class="pill p-acc">×${it.qty||1}</span><b class="money">${n0((Number(it.price)||0)*(Number(it.qty)||1))}</b></div>`).join('');
   sheet(`<h2>🧾 فاتورة #${esc(s.invoiceNo||'')}</h2><div class="hint">${esc(s.branch||'')} · ${dayName(saleMs(s))} ${caiKey(saleMs(s))} ${hm(saleMs(s))} · ${esc(s.employee||s.seller||'')}${s.customerName?' · '+esc(s.customerName):''}${s.customerPhone?' · '+esc(s.customerPhone):''}</div>${items}<div class="row" style="cursor:default;border-top:2px solid var(--ink)"><div class="n"><b>الإجمالي</b><small>${Object.entries(s.payments||{}).filter(([k,v])=>v).map(([k,v])=> (PAY_AR[k]||k)+' '+n0(v)).join(' · ')}</small></div><b class="money" style="font-size:18px">${n0(s.total)}</b></div>${(O2.cctv && O2.cctv.canReview && O2.cctv.canReview(s.branch)) ? `<div class="btns"><button class="btn p" onclick="O2.cctv.reviewSaleId('${esc(s.id)}')">📼 راجع الفاتورة بالكاميرا والسلة</button></div>` : ''}`);
 }
@@ -417,7 +445,7 @@ const O2 = {
   shFilter(g){ shFilter = g; render(); }, shBranch(b){ shBranch = b; render(); }, shSearch(v){ shQ = v; render(); try{ const i = document.getElementById('shSearch'); if(i){ i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }catch(e){} }, shMore(){ shDays += 7; loadShield(shDays); }, shVideo, shShots, shDecide, shDetail, invoiceAny, bioEnroll, bioForget,
   inboxTab(t){ inboxTab = t; render(); }, moneyTab(t){ moneyTab = t; render(); }, payMonth(d){ payOffset += d; render(); },
   paySheet, paySalary, payComm, addAdvance, addDeduction, addExpense, invoice: invoiceSheet,
-  day(d){ const a = branchDay.split('-').map(Number); branchDay = caiKey(caiStamp(a[0],a[1],a[2],12,0) + d*DAY); if(branchDay > caiKey(Date.now())) branchDay = caiKey(Date.now()); render(); }, dayPick(v){ if(v) { branchDay = v; render(); } },
+  day(d){ const a = branchDay.split('-').map(Number); branchDay = caiKey(caiStamp(a[0],a[1],a[2],12,0) + d*DAY); if(branchDay > bizKey(Date.now())) branchDay = bizKey(Date.now()); render(); }, dayPick(v){ if(v) { branchDay = v; render(); } },
   logout(){ try{ sessionStorage.removeItem(SESS_KEY); }catch(e){} auth.signOut(); location.reload(); }
 };
 O2.register = (name, mod)=>{ MODS[name] = mod; if(booted && screenName==='more') render(); };
@@ -474,7 +502,7 @@ function commOf(e, r){ const label = O2Pay.monthLabel(r.start); const rate = Num
 function paidOf(e, label){ return D.salaryPays.find(p=> p.employeeId===e.id && p.periodLabel===label); }
 function rMoney(){
   head('الفلوس', 'المبيعات · المصاريف · المرتبات');
-  const now = Date.now(); const t0 = caiDayStart(now), y0 = t0 - DAY;
+  const now = Date.now(); const t0 = bizDayStart(now), y0 = t0 - DAY;
   const seg = `<div class="seg full"><button class="${moneyTab==='today'?'on':''}" onclick="O2.moneyTab('today')">اليوم</button><button class="${moneyTab==='pay'?'on':''}" onclick="O2.moneyTab('pay')">المرتبات</button><button class="${moneyTab==='exp'?'on':''}" onclick="O2.moneyTab('exp')">المصاريف</button></div>`;
   if(moneyTab==='pay'){
     const r = payPeriod(); const label = O2Pay.monthLabel(r.start); const mLabel = new Intl.DateTimeFormat('ar-EG', { month:'long', year:'numeric' }).format(r.start);
@@ -716,7 +744,7 @@ async function shDecide(id, status, ts){
   try{ if(!status){ await db.collection('office_cases').doc(id).delete(); delete sh.cases[id]; } else { await db.collection('office_cases').doc(id).set({ status, ts, at: Date.now(), by:'owner' }); sh.cases[id] = { status, ts }; } render(); }
   catch(e){ toast('تعذر الحفظ: ' + (e && e.code)); }
 }
-function invoiceAny(id){ const all = windowSales(0); const s = all.find(x=> x.id===id); if(!s) return; const k = caiKey(saleMs(s)); if(!dayCache[k]) dayCache[k] = { rows:[], done:false }; if(!dayCache[k].rows.some(x=>x.id===id)) dayCache[k].rows.push(s); invoiceSheet(k, id); }
+function invoiceAny(id){ const all = windowSales(0); const s = all.find(x=> x.id===id); if(!s) return; const k = bizKey(saleMs(s)); if(!dayCache[k]) dayCache[k] = { rows:[], done:false }; if(!dayCache[k].rows.some(x=>x.id===id)) dayCache[k].rows.push(s); invoiceSheet(k, id); }
 
 /* ---------- ٥) المزيد ---------- */
 function rMore(){
@@ -729,5 +757,5 @@ function rMore(){
     <div class="hint">Office · v9 · البيانات من نفس القاعدة — أي تعديل هنا بيظهر في sales وOffice فورًا</div>`;
 }
 // 🧰 أدوات مشتركة للموديولات (m-*.js) — نفس الدوال اللي الشاشات الأساسية بتستخدمها
-O2.u = { db, auth, D, DAY, GLOW, esc, n0, hm, hm2min, caiParts, caiKey, caiStamp, caiDayStart, caiMonthRange, caiDow, dayName, AR_DAYS, SHIFT_AR, PAY_AR, sheet, closeSheet, toast, render, head, branches, activeEmps, empById, salesCfg, timeCfg, shiftDefs, brandOf, isSetup, loadDay, dayCache, daySales, saleMs, sumTotal, payBreak, paymentSummaryHtml, topItems, windowSales, invoiceAny, invoiceSheet, siteOf, SH_SITES, openShift, onBreak, go, screen: ()=> screenName, arg: ()=> screenArg };
+O2.u = { db, auth, D, DAY, GLOW, esc, n0, hm, hm2min, caiParts, caiKey, caiStamp, caiDayStart, bizDayStart, bizKey, bizRange, bizHour: ()=> BIZ_HOUR, saleNet, renderNow, caiMonthRange, caiDow, dayName, AR_DAYS, SHIFT_AR, PAY_AR, sheet, closeSheet, toast, render, head, branches, activeEmps, empById, salesCfg, timeCfg, shiftDefs, brandOf, isSetup, loadDay, dayCache, daySales, saleMs, sumTotal, payBreak, paymentSummaryHtml, topItems, windowSales, invoiceAny, invoiceSheet, siteOf, SH_SITES, openShift, onBreak, go, screen: ()=> screenName, arg: ()=> screenArg };
 })();

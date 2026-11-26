@@ -14,13 +14,13 @@ const DAY = u.DAY, WIN = 30;
 let view = 'period';
 /* ---------- 📦 نافذة 30 يوم (مرة واحدة لكل دخول) ---------- */
 const win = { loading:false, loadedUntil:0, progress:0, err:'' };
-function winSince(){ return u.caiDayStart(Date.now()) - (WIN-1)*DAY; }
+function winSince(){ return u.bizDayStart(Date.now()) - (WIN-1)*DAY; }
 async function load30(){
   const since = winSince(); if(win.loading || (win.loadedUntil && win.loadedUntil <= since)) return;
   win.loading = true; win.progress = 0; win.err = ''; u.render();
   try{
-    const today = u.caiKey(Date.now());
-    for(let d = 0; d < WIN; d++){ const k = u.caiKey(since + d*DAY + 3600000); if(k !== today) await u.loadDay(k); win.progress = d+1; if(d % 6 === 5) u.render(); }
+    const today = u.bizKey(Date.now());
+    for(let d = 0; d < WIN; d++){ const k = u.bizKey(since + d*DAY + 3600000); if(k !== today) await u.loadDay(k); win.progress = d+1; if(d % 6 === 5) u.render(); }
     win.loadedUntil = since;
   }catch(e){ win.err = String(e && (e.code||e.message)); }
   win.loading = false; u.render();
@@ -35,20 +35,20 @@ function branchSel(cur, fn, all){ return `<select onchange="O2.reports.${fn}(thi
 /* ---------- ١) 💰 مبيعات فترة ---------- */
 const per = { from:'', to:'', branch:'', quick:'today', loading:false, loadedKey:'', err:'', progress:0 };
 function perKeys(){ if(!per.from || !per.to || per.from > per.to) return null; const a = per.from.split('-').map(Number); let ms = u.caiStamp(a[0],a[1],a[2],12,0); const out = []; while(u.caiKey(ms) <= per.to && out.length <= 40){ out.push(u.caiKey(ms)); ms += DAY; } return out; }
-function perSetQuick(kind){ const now = Date.now(); per.quick = kind; per.to = u.caiKey(now); per.from = kind==='today' ? per.to : u.caiKey(now - (Number(kind)-1)*DAY); perLoad(); }
+function perSetQuick(kind){ const now = Date.now(); per.quick = kind; per.to = u.bizKey(now); per.from = kind==='today' ? per.to : u.bizKey(now - (Number(kind)-1)*DAY); perLoad(); }
 async function perLoad(){
   const keys = perKeys(); per.err = '';
   if(!keys){ per.err = 'راجع تاريخ البداية والنهاية'; u.render(); return; }
   if(keys.length > 31){ per.err = 'أقصى فترة 31 يوم في المرة'; u.render(); return; }
   const k = per.from + '|' + per.to; if(per.loading || per.loadedKey === k) { u.render(); return; }
   per.loading = true; per.progress = 0; u.render();
-  try{ const today = u.caiKey(Date.now()); for(const key of keys){ if(key !== today) await u.loadDay(key); per.progress++; if(per.progress % 6 === 0) u.render(); } per.loadedKey = k; }
+  try{ const today = u.bizKey(Date.now()); for(const key of keys){ if(key !== today) await u.loadDay(key); per.progress++; if(per.progress % 6 === 0) u.render(); } per.loadedKey = k; }
   catch(e){ per.err = String(e && (e.code||e.message)); }
   per.loading = false; u.render();
 }
-function perRows(){ const keys = perKeys() || []; const today = u.caiKey(Date.now()); const out = []; keys.forEach(k=>{ const rows = k===today ? u.D.sales.filter(s=> u.caiKey(u.saleMs(s))===k) : ((u.dayCache[k]||{}).rows||[]); rows.forEach(s=>{ if(okSale(s) && (!per.branch || s.branch===per.branch)) out.push(s); }); }); return out; }
+function perRows(){ const keys = perKeys() || []; const today = u.bizKey(Date.now()); const out = []; keys.forEach(k=>{ const rows = k===today ? u.D.sales.filter(s=> u.bizKey(u.saleMs(s))===k) : ((u.dayCache[k]||{}).rows||[]); rows.forEach(s=>{ if(okSale(s) && (!per.branch || s.branch===per.branch)) out.push(s); }); }); return out; }
 function rPeriod(){
-  const today = u.caiKey(Date.now());
+  const today = u.bizKey(Date.now());
   const ctl = `<div class="card full"><div class="seg" style="margin-bottom:8px"><button class="${per.quick==='today'?'on':''}" onclick="O2.reports.quick('today')">اليوم</button><button class="${per.quick==='7'?'on':''}" onclick="O2.reports.quick('7')">7 أيام</button><button class="${per.quick==='30'?'on':''}" onclick="O2.reports.quick('30')">30 يوم</button></div>
     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><label style="flex:1;min-width:120px;font-size:11px;font-weight:800;color:var(--sub)">من<input type="date" value="${per.from}" max="${today}" onchange="O2.reports.from(this.value)" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-weight:800"></label><label style="flex:1;min-width:120px;font-size:11px;font-weight:800;color:var(--sub)">إلى<input type="date" value="${per.to}" max="${today}" onchange="O2.reports.to(this.value)" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-weight:800"></label></div>
     <div style="margin-top:6px">${branchSel(per.branch, 'pBranch', true)}</div></div>`;
@@ -56,10 +56,10 @@ function rPeriod(){
   if(per.loading || !per.loadedKey) return ctl + `<div class="card full"><div class="skel"></div><div class="hint">بيقرا فواتير الفترة… ${per.progress}/${(perKeys()||[]).length}</div></div>`;
   const rows = perRows(); const pos = rows.filter(s=> Number(s.total) >= 0); const ret = rows.filter(s=> Number(s.total) < 0);
   const total = u.sumTotal(pos), retSum = u.sumTotal(ret);
-  const byBr = {}; pos.forEach(s=>{ const b = s.branch || 'غير محدد'; byBr[b] = byBr[b] || { t:0, n:0 }; byBr[b].t += Number(s.total)||0; byBr[b].n++; });
+  const byBr = {}; pos.forEach(s=>{ const b = s.branch || 'غير محدد'; byBr[b] = byBr[b] || { t:0, n:0 }; byBr[b].t += u.saleNet(s); byBr[b].n++; });
   const brs = Object.keys(byBr).sort((a,b)=> byBr[b].t - byBr[a].t);
-  const byDay = {}; rows.forEach(s=>{ const k = u.caiKey(u.saleMs(s)); byDay[k] = byDay[k] || { net:0, n:0 }; byDay[k].net += Number(s.total)||0; if(Number(s.total) >= 0) byDay[k].n++; });
-  const bySeller = {}; pos.forEach(s=>{ const k = s.sellerEmployeeName || s.employeeName || s.employee || s.seller || '—'; bySeller[k] = bySeller[k] || { n:0, t:0 }; bySeller[k].n++; bySeller[k].t += Number(s.total)||0; });
+  const byDay = {}; rows.forEach(s=>{ const k = u.bizKey(u.saleMs(s)); byDay[k] = byDay[k] || { net:0, n:0 }; byDay[k].net += u.saleNet(s); if(Number(s.total) >= 0) byDay[k].n++; });
+  const bySeller = {}; pos.forEach(s=>{ const k = s.sellerEmployeeName || s.employeeName || s.employee || s.seller || '—'; bySeller[k] = bySeller[k] || { n:0, t:0 }; bySeller[k].n++; bySeller[k].t += u.saleNet(s); });
   const kpis = `<div class="card"><h3>💰 ${per.from===per.to ? (per.from===today ? 'النهاردة' : u.dayName(u.caiStamp(...per.from.split('-').map(Number),12,0)) + ' ' + per.from.slice(5)) : per.from.slice(5) + ' → ' + per.to.slice(5)} <small>${pos.length} فاتورة${ret.length?' · '+ret.length+' مرتجع':''}${per.branch?' · '+brName(per.branch):' · كل الفروع'}</small></h3><div class="kpis"><div class="kpi"><small>المبيعات</small><b>${u.n0(total)}</b></div><div class="kpi"><small>الفواتير</small><b>${pos.length}</b></div><div class="kpi"><small>متوسط الفاتورة</small><b>${pos.length?u.n0(total/pos.length):'—'}</b></div></div>${ret.length?`<div class="hint">مرتجعات ${u.n0(retSum)} ج · الصافي ${u.n0(total+retSum)} ج</div>`:''}</div>`;
   const brHtml = brs.map(b=>{ const share = total ? byBr[b].t/total*100 : 0; return `<div class="row" style="cursor:default"><div class="n"><b>🏬 ${u.esc(b)}</b><small>${byBr[b].n} فاتورة · ${share.toFixed(1)}%</small></div>${bar(share)}<b class="money" style="margin-inline-start:8px">${u.n0(byBr[b].t)}</b></div>`; }).join('');
   const dayHtml = Object.keys(byDay).sort().reverse().map(k=>{ const ms = u.caiStamp(...k.split('-').map(Number),12,0); return `<div class="row" style="cursor:default"><div class="n"><b>${u.dayName(ms)} ${k.slice(5)}</b><small>${byDay[k].n} فاتورة</small></div><b class="money ${byDay[k].net<0?'dn':''}">${u.n0(byDay[k].net)}</b></div>`; }).join('');
@@ -240,7 +240,7 @@ function rRated(){
 }
 async function openInvoice(id){
   if(u.windowSales(0).some(s=> s.id===id)){ u.invoiceAny(id); return; }
-  try{ const d = await u.db.collection('pos_test_sales').doc(id).get(); if(!d.exists){ u.toast('الفاتورة مش موجودة'); return; } const s = Object.assign({ id:d.id }, d.data()); const k = u.caiKey(u.saleMs(s)); u.dayCache[k] = u.dayCache[k] || { rows:[], done:false }; u.dayCache[k].rows.push(s); u.invoiceAny(id); }
+  try{ const d = await u.db.collection('pos_test_sales').doc(id).get(); if(!d.exists){ u.toast('الفاتورة مش موجودة'); return; } const s = Object.assign({ id:d.id }, d.data()); const k = u.bizKey(u.saleMs(s)); u.dayCache[k] = u.dayCache[k] || { rows:[], done:false }; u.dayCache[k].rows.push(s); u.invoiceAny(id); }
   catch(e){ u.toast('تعذر: ' + (e && (e.code||e.message))); }
 }
 
