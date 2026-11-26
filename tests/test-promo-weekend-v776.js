@@ -40,6 +40,10 @@ cart = [L('832', 400)]; ap(cart, THU, CC); ok(cart[0].price === 340, 'سلبي: 
 cart = [L('772', 350)]; ap(cart, THU, R); ok(cart[0].price === 297.5, 'سلبي: الرحاب كود 772 = 15% بس (السعر الثابت لسيتي سنتر)');
 cart = [L('832', 400)]; ap(cart, THU, 'echarpe Madinaty'); ok(cart[0].price === 299, 'مدينتي كود 832 = 299');
 cart = [L('902', 700)]; ap(cart, THU, CC); ok(cart[0].price === 490, 'سيتي سنتر باقي الأكواد زي ما هي');
+cart = [L('902', 700)]; ap(cart, THU, 'echarpe Madinaty'); ok(cart[0].price === 399, 'مدينتي: 902 = 399');
+cart = [L('902', 700)]; ap(cart, THU, 'echarpe Madinaty-1'); ok(cart[0].price === 399, 'مدينتي-1: 902 = 399');
+cart = [L('902', 700)]; ap(cart, THU, R); ok(cart[0].price === 490, 'سلبي: الرحاب 902 لسه 490');
+cart = [L('832', 400)]; ap(cart, THU, 'echarpe Madinaty'); ok(cart[0].price === 299, 'مدينتي باقي الأكواد زي ما هي (832 = 299)');
 cart = [L('749', 180)]; ap(cart, THU, R); ok(cart[0].price === 99, '749 = 99');
 cart = [L('746', 500)]; ap(cart, THU, R); ok(cart[0].price === 500, 'سلبي: كود سعره أصلًا أقل من سعر العرض → مايغلاش عليها (ولا ياخد 15%)');
 cart = [L('999', 200, 1, { price:150, originalPrice:200, discountName:'خصم الفرع' })]; ap(cart, THU, R);

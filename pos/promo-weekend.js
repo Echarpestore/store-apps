@@ -19,7 +19,11 @@
     // v776 (تصحيح المالك 26-11): السعر الثابت هو اللي بيتطبق (مش 15% حتى لو أرخص) · 832=299 · 749=99
     fixed: { '902':490, '832':299, '60':550, '582':199, '138':595, '749':99, '746':510 },
     // v777: سيتي سنتر بيبيع نفس الصنف بكود 772 (بدل 832) → 772 بـ299 هناك، و832 للفروع التانية
-    fixedByBranch: { 'echarpe City Centre': { add: { '772':299 }, remove: ['832'] } },
+    // المفتاح = جزء من اسم الفرع (من غير حروف كبيرة/صغيرة) — 'madinaty' بيمسك 'echarpe Madinaty' و'echarpe Madinaty-1'
+    fixedByBranch: {
+      'city centre': { add: { '772':299 }, remove: ['832'] },
+      'madinaty':    { add: { '902':399 } }            // v782: مدينتي 902 بـ399 (بدل 490)
+    },
     bundle: { code:'187', qty:4, price:150 }        // البندانة 187: كل 4 بـ150 · الزيادة بالسعر الكامل
   };
   window.PROMO_WEEKEND = PROMO;
@@ -73,7 +77,8 @@
 
   function fixedFor(br){
     var out = {}; Object.keys(PROMO.fixed).forEach(function(k){ out[k] = PROMO.fixed[k]; });
-    var key = Object.keys(PROMO.fixedByBranch || {}).find(function(b){ return b.toLowerCase() === String(br || '').trim().toLowerCase(); });
+    var lb = String(br || '').trim().toLowerCase();
+    var key = Object.keys(PROMO.fixedByBranch || {}).find(function(b){ return lb.indexOf(b.toLowerCase()) >= 0; });
     var o = key ? PROMO.fixedByBranch[key] : null;
     if(o){ (o.remove || []).forEach(function(k){ delete out[k]; }); Object.keys(o.add || {}).forEach(function(k){ out[k] = o.add[k]; }); }
     return out;
