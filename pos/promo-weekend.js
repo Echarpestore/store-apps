@@ -2,7 +2,7 @@
    🏷️ عرض الويك إند — فروع إيشارب (قرار المالك 26-11-2026)
    من الخميس 26-11 لحد الأحد 29-11 (بتوقيت القاهرة) · فروع إيشارب بس (Glow لأ).
    • أكواد بسعر ثابت (PROMO_FIXED)
-   • البندانة 45: كل 4 قطع بـ150
+   • البندانة 187: كل 4 قطع بـ150 (القطعة الزيادة بسعرها الكامل)
    • باقي المحل كله: خصم 15%
    القواعد:
    • السعر بيتحسب من سعر الصنف الأصلي، والعميلة بتاخد الأحسن ليها (العرض أو أي خصم تاني شغال) — مش بيتجمعوا.
@@ -16,8 +16,9 @@
     name: 'عرض الويك إند',
     from: '2026-11-26', to: '2026-11-29',          // شامل اليومين
     pct: 15,                                        // باقي المحل
-    fixed: { '902':490, '832':350, '60':550, '582':199, '138':595, '749':135, '746':510 },
-    bundle: { code:'45', qty:4, price:150 }         // البندانة: كل 4 بـ150
+    // v776 (تصحيح المالك 26-11): السعر الثابت هو اللي بيتطبق (مش 15% حتى لو أرخص) · 832=299 · 749=99
+    fixed: { '902':490, '832':299, '60':550, '582':199, '138':595, '749':99, '746':510 },
+    bundle: { code:'187', qty:4, price:150 }        // البندانة 187: كل 4 بـ150 · الزيادة بالسعر الكامل
   };
   window.PROMO_WEEKEND = PROMO;
 
@@ -81,9 +82,7 @@
       var code = String(c.barcode || '').trim();
       if(code === PROMO.bundle.code){ bundleLines.push(c); return; }
       if(Object.prototype.hasOwnProperty.call(PROMO.fixed, code)){
-        var pct = c.promoBase * (1 - PROMO.pct/100);
-        if(PROMO.fixed[code] <= pct) setPrice(c, PROMO.fixed[code], PROMO.name + ' (' + PROMO.fixed[code] + ' ج)');
-        else setPrice(c, pct, PROMO.name + ' ' + PROMO.pct + '%');     // الأحسن ليها: لو الـ15% أرخص من السعر الثابت
+        setPrice(c, Math.min(c.promoBase, PROMO.fixed[code]), PROMO.name + ' (' + PROMO.fixed[code] + ' ج)');
         return;
       }
       setPrice(c, c.promoBase * (1 - PROMO.pct/100), PROMO.name + ' ' + PROMO.pct + '%');
@@ -92,11 +91,11 @@
       var q = 0, base = 0, eng = Infinity;
       bundleLines.forEach(function(c){ q += Math.max(0, Math.floor(Number(c.qty)||0)); base = Math.max(base, c.promoBase); eng = Math.min(eng, c.promoEng); });
       if(q > 0){
-        var unitOther = Math.min(eng, base * (1 - PROMO.pct/100));         // القطع الزيادة عن مضاعفات 4 = 15%
+        var unitOther = eng;                                               // القطع الزيادة عن مضاعفات 4 = سعرها الكامل (قرار المالك)
         var groups = Math.floor(q / PROMO.bundle.qty), rem = q - groups * PROMO.bundle.qty;
         var groupPrice = Math.min(PROMO.bundle.price, PROMO.bundle.qty * unitOther);
         var total = groups * groupPrice + rem * unitOther;
-        var label = groups ? (PROMO.name + ' — كل ' + PROMO.bundle.qty + ' بـ' + PROMO.bundle.price) : (PROMO.name + ' ' + PROMO.pct + '%');
+        var label = PROMO.name + ' — كل ' + PROMO.bundle.qty + ' بـ' + PROMO.bundle.price;
         bundleLines.forEach(function(c){ setPrice(c, total / q, label); });
       }
     }
