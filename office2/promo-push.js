@@ -1,5 +1,5 @@
 /* ============================================================
-   📣 office2/promo-push.js — v1 — إشعار عرض لكل العميلات
+   📣 office2/promo-push.js — v2 — إشعار عرض لكل العميلات
    ------------------------------------------------------------
    طلب المالك (26-11-2026، الجمعة البيضاء): إشعار واحد لكل عميلات البراند
    على الـPWA وتطبيق جوجل بلاي بكلام العرض.
@@ -7,6 +7,11 @@
      pos_test_settings/promo_push_<براند> ونزوّد seq → الفانكشن
      onCatalogUpdated بتبعت لكل توكنات البراند (نفس طريق الستوري والكتالوج).
    · إشعار واحد في اليوم لكل براند (هنا وفي الفانكشن) — عشان العميلة متتزهقش.
+   · v2 — طريقين للإرسال (واحد بس في كل مرة، عشان الإشعار ميتكررش):
+     ① لو ستوري التطبيق مفتوحة للعميلات (stories_cfg.live_<براند>): بنستخدم طريق إشعار
+        الستوري/الفيديو المنشور من زمان (stories_push_<براند> · kind:'video') — شغال من غير
+        نشر فانكشن جديدة، وبيشارك نفس حد «إشعار واحد في اليوم» مع الستوري.
+     ② غير كده: promo_push_<براند> (فرع جديد في onCatalogUpdated — محتاج نشر الفانكشن مرة).
    ملف مستقل زي stories.js: بيضيف صف في «المزيد» من غير ما يلمس office2.js.
    ============================================================ */
 (function(){
@@ -14,7 +19,7 @@
 if(!window.firebase) return;
 var db = firebase.firestore();
 var BR = [['echarpe', 'إيشارب'], ['glow', 'Glow']];
-var S = { open:false, booted:false, brand:'echarpe', last:{}, busy:false,
+var S = { open:false, booted:false, brand:'echarpe', last:{}, stLast:{}, cfg:null, busy:false,
   title:'الجمعة البيضاء في إيشارب 🤍',
   body:'الحقي عروض الجمعة البيضاء من الخميس للأحد — خصومات على كل المنتجات في كل الفروع 🛍️',
   link:'./?go=wf' };
@@ -27,8 +32,10 @@ function clean(s, n){ return String(s || '').replace(/\s+/g, ' ').trim().slice(0
 
 function boot(){
   if(S.booted) return; S.booted = true;
+  db.collection('pos_test_settings').doc('stories_cfg').onSnapshot(function(d){ S.cfg = d.exists ? (d.data() || {}) : {}; if(S.open) render(); }, function(){ S.cfg = {}; });
   BR.forEach(function(b){
     db.collection('pos_test_settings').doc('promo_push_' + b[0]).onSnapshot(function(d){ S.last[b[0]] = d.exists ? (d.data() || {}) : {}; if(S.open) render(); }, function(){});
+    db.collection('pos_test_settings').doc('stories_push_' + b[0]).onSnapshot(function(d){ S.stLast[b[0]] = d.exists ? (d.data() || {}) : {}; if(S.open) render(); }, function(){});
   });
 }
 function hook(){
@@ -61,11 +68,14 @@ function ensureView(){
 function open(){ boot(); ensureView(); S.open = true; document.getElementById('o2Pp').classList.add('on'); render(); }
 function close(){ S.open = false; var v = document.getElementById('o2Pp'); if(v) v.classList.remove('on'); }
 function keep(){ var t = document.getElementById('ppT'), b = document.getElementById('ppB'); if(t) S.title = t.value; if(b) S.body = b.value; }
-function sentToday(b){ return (S.last[b] || {}).day === dayKey(Date.now()); }
+/* ① ستوري مفتوحة = الطريق المنشور · ② غير كده الفانكشن الجديدة */
+function viaStories(b){ return !!(S.cfg && S.cfg['live_' + b] === true); }
+function lastOf(b){ var a = S.last[b] || {}, c = S.stLast[b] || {}; return (Number(c.ts) || 0) > (Number(a.ts) || 0) ? c : a; }
+function sentToday(b){ var t = dayKey(Date.now()); return (S.last[b] || {}).day === t || (viaStories(b) && (S.stLast[b] || {}).day === t); }
 
 function render(){
   if(!S.open) return;
-  var b = S.brand, done = sentToday(b), last = S.last[b] || {};
+  var b = S.brand, done = sentToday(b), last = lastOf(b);
   var h = '<div class="seg">' + BR.map(function(x){ return '<button class="' + (b === x[0] ? 'on' : '') + '" onclick="O2Promo.brand(\'' + x[0] + '\')">تطبيق ' + x[1] + '</button>'; }).join('') + '</div>';
   h += '<div class="card"><label>العنوان <span class="ppCnt" id="ppTc"></span></label><input type="text" id="ppT" maxlength="60" value="' + esc(S.title) + '" oninput="O2Promo.type()">'
     + '<label>الكلام <span class="ppCnt" id="ppBc"></span></label><textarea id="ppB" maxlength="180" oninput="O2Promo.type()">' + esc(S.body) + '</textarea>'
@@ -74,6 +84,7 @@ function render(){
   h += done
     ? '<div class="alert w">✅ اتبعت إشعار النهارده لتطبيق ' + (b === 'glow' ? 'Glow' : 'إيشارب') + ' — «' + esc(last.title || '') + '». الإشعار الجاي بكرة.</div>'
     : '<button class="btn g" style="width:100%;padding:14px;font-size:15px" id="ppSend" onclick="O2Promo.send()">📣 ابعت لكل عميلات ' + (b === 'glow' ? 'Glow' : 'إيشارب') + '</button>';
+  if(!done && S.cfg !== null && !viaStories(b)) h += '<div class="alert w" style="margin-top:8px;cursor:default">⚠️ ستوري تطبيق ' + (b === 'glow' ? 'Glow' : 'إيشارب') + ' مقفولة — الإشعار بالطريق ده محتاج نشر الفانكشن الجديدة الأول (onCatalogUpdated).</div>';
   if(!done && last.day) h += '<div class="hint">آخر إشعار: ' + esc(last.day) + ' — «' + esc(last.title || '') + '»</div>';
   document.getElementById('o2PpBody').innerHTML = h; type();
 }
@@ -96,7 +107,13 @@ async function send(){
   S.busy = true;
   try{
     var now = Date.now();
-    await db.collection('pos_test_settings').doc('promo_push_' + b).set({ day: dayKey(now), title: title, body: body, link: S.link, seq: firebase.firestore.FieldValue.increment(1), ts: now }, { merge: true });
+    if(S.cfg === null){ try{ var cd = await db.collection('pos_test_settings').doc('stories_cfg').get(); S.cfg = cd.exists ? (cd.data() || {}) : {}; }catch(e0){ S.cfg = {}; } }
+    if(viaStories(b)){
+      // ① الفانكشن المنشورة بتبعت: العنوان = اسم البراند · الكلام = «🎬 » + title
+      await db.collection('pos_test_settings').doc('stories_push_' + b).set({ day: dayKey(now), kind: 'video', promo: true, title: clean(title + ' — ' + body, 200), seq: firebase.firestore.FieldValue.increment(1), ts: now }, { merge: true });
+    }else{
+      await db.collection('pos_test_settings').doc('promo_push_' + b).set({ day: dayKey(now), title: title, body: body, link: S.link, seq: firebase.firestore.FieldValue.increment(1), ts: now }, { merge: true });
+    }
     toast('اتبعت ✅ هيوصل للعميلات خلال دقيقة');
   }catch(e){ toast('تعذر: ' + ((e && e.code) || 'خطأ')); }
   S.busy = false; render();

@@ -17,7 +17,7 @@ function office(opts){
     confirm: () => { ctx._asked++; return opts.confirm !== false; },
     MutationObserver: function(){ this.observe = () => {}; },
     document: { readyState: 'complete', getElementById: id => (id === 'screen' || id === 'hTitle') ? null : ((id === 'o2Pp' && !els.o2Pp) ? null : el(id)), createElement: () => { const e = { classList: { add(){}, remove(){} }, style: {}, set innerHTML(v){}, onclick: null }; Object.defineProperty(e, 'id', { set(v){ els[v] = Object.assign(el(v), { made: true }); }, get(){ return ''; } }); return e; }, head: { appendChild(){} }, body: { appendChild(){} }, addEventListener(){} },
-    firebase: { firestore: Object.assign(() => ({ collection: c => ({ doc: d => ({ onSnapshot: (cb) => { cb({ exists: !!(opts.last && opts.last[d]), data: () => (opts.last || {})[d] }); }, set: async (data, o) => { writes.push({ c, d, data, o }); } }) }) }), { FieldValue: { increment: n => ({ inc: n }) } }) } };
+    firebase: { firestore: Object.assign(() => ({ collection: c => ({ doc: d => ({ onSnapshot: (cb) => { cb({ exists: !!(opts.last && opts.last[d]), data: () => (opts.last || {})[d] }); }, get: async () => ({ exists: !!(opts.last && opts.last[d]), data: () => (opts.last || {})[d] }), set: async (data, o) => { writes.push({ c, d, data, o }); } }) }) }), { FieldValue: { increment: n => ({ inc: n }) } }) } };
   ctx.window = ctx; vm.createContext(ctx); vm.runInContext(read('office2/promo-push.js'), ctx);
   return { ctx, writes, els };
 }
@@ -51,5 +51,12 @@ const NOWMS = Date.UTC(2026, 10, 26, 9, 0);
   out.office.glow = { writes: o.writes, asked: o.ctx._asked };
   o = office({ now: NOWMS }); o.ctx.O2Promo.open(); hydrate(o); o.els.ppT.value = '  '; o.els.ppB.value = 'قصير'; await o.ctx.O2Promo.send();
   out.office.short = { writes: o.writes, asked: o.ctx._asked };
+  const LIVE = { stories_cfg: { live_echarpe: true } };
+  o = office({ now: NOWMS, last: LIVE }); o.ctx.O2Promo.open(); hydrate(o); await o.ctx.O2Promo.send();
+  out.office.live = { writes: o.writes, asked: o.ctx._asked };
+  o = office({ now: NOWMS, last: Object.assign({ stories_push_echarpe: { day: '2026-11-26', title: 'ستوري', ts: 5 } }, LIVE) }); o.ctx.O2Promo.open(); hydrate(o); await o.ctx.O2Promo.send();
+  out.office.liveStoryToday = { writes: o.writes, asked: o.ctx._asked };
+  o = office({ now: NOWMS, last: LIVE }); o.ctx.O2Promo.open(); hydrate(o); o.ctx.O2Promo.brand('glow'); hydrate(o); await o.ctx.O2Promo.send();
+  out.office.liveOtherBrand = { writes: o.writes, asked: o.ctx._asked };
   process.stdout.write(JSON.stringify(out));
 })().catch(e => { process.stdout.write(JSON.stringify({ crash: String(e && e.stack || e) })); });
