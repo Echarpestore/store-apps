@@ -55,10 +55,9 @@
     '.wf-ribbon .wf-t.w{transform:rotate(-2deg)}.wf-ribbon .wf-t.r{transform:rotate(2deg)}',
     '.wf-ribbon .wf-ar{font-size:13px;font-weight:800}',
     '.wf-ribbon .wf-d{font:800 12px "Poppins",Arial,sans-serif;direction:ltr;background:#fff;border-radius:20px;padding:3px 10px}',
-    /* الشارة على الصنف */
-    '.wf-chip{display:inline-flex;vertical-align:middle;margin-inline-start:6px;direction:ltr;font:800 9.5px/1.2 "Poppins",Arial,sans-serif;white-space:nowrap}',
-    '.wf-chip b{background:' + INK + ';color:#fff;padding:2px 5px;font-weight:800}',
-    '.wf-chip i{background:' + RED + ';color:#fff;padding:2px 5px;font-style:normal}',
+    /* الستيكر على الصنف (v781): نفس اللوجو بالظبط — ٣ تيكتات متراصة، صغيرة ومايلة زي ستيكر */
+    '.wf-chip{display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;margin-inline-start:10px;direction:ltr;font-family:"Poppins","Arial Black",Arial,sans-serif;font-size:10.5px;line-height:1;transform:rotate(-6deg);filter:drop-shadow(0 2px 2px rgba(0,0,0,.25));white-space:nowrap}',
+    '.wf-chip .wf-t{padding:.12em .4em .16em}',
     /* الهيرو (شاشة الدخول / التابلت) */
     '.wf-hero{text-align:center;margin:0 auto 16px;padding:18px 26px 16px;background:' + BLUE + ';border-radius:18px;max-width:420px;box-shadow:0 18px 40px -22px rgba(0,0,0,.45)}',
     '.wf-hero .wf-stack{font-size:clamp(30px,5vw,46px)}',
@@ -122,7 +121,7 @@
       tr.classList.toggle('wf-row', on);
       var nm = tr.querySelector('td.item-name'); if(!nm) return;
       var chip = nm.querySelector('.wf-chip');
-      if(on && !chip){ chip = document.createElement('span'); chip.className = 'wf-chip'; chip.innerHTML = '<b>White Friday</b><i>Offers</i>'; nm.appendChild(chip); }
+      if(on && !chip){ chip = document.createElement('span'); chip.className = 'wf-chip'; chip.innerHTML = '<span class="wf-t w">White</span><span class="wf-t b">Friday</span><span class="wf-t r">Offers</span>'; nm.appendChild(chip); }
       if(!on && chip) chip.remove();
     });
   }
