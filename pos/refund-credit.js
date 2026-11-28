@@ -119,7 +119,9 @@
 
     const out = await _origConfirm.apply(this, arguments);
 
-    if (lastCtx) {
+    // 🛡️ v789 (فحص 27-11): الرصيد يتضاف بس لو الفاتورة **اتحفظت فعلًا** — قبل كده أي خروج من الحفظ
+    //    (دوسة مرتين، فحص رفض) كان بيبعت الرصيد بكود الفاتورة اللي قبلها ويضيّع السياق فالحفظ الحقيقي مايبعتوش.
+    if (lastCtx && window._lastConfirmSaved !== false) {
       const ctx = lastCtx; lastCtx = null;
       const code = window._lastInvoiceCode || '';
       try {

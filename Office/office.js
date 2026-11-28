@@ -6215,6 +6215,7 @@ window.ofHubMoney = async function(empId){
     const sd = await db.collection('sales_settings').doc(emp.branch || '').get();
     rate = (sd.exists && (sd.data() || {}).commissionPerPoint) || 0;
   }catch(e){}
+  { const _er = emp && emp.commissionPerPoint; if(_er !== null && _er !== undefined && _er !== '' && Number.isFinite(Number(_er)) && Number(_er) >= 0) rate = Number(_er); }   // سعر نقطة الموظف نفسه الأول
 
   const now = new Date();
   const salR = ofMonthDateRange(now);

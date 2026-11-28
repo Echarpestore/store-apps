@@ -91,13 +91,31 @@ async function countMovementsSince(itemId, branch, sinceMs){
     snap.docs.forEach(d => {
       const s = d.data() || {};
       if(s.branch !== branch) return;
+      /* 🛡️ v789 (فحص 27-11): فاتورة العكس (isReversal) شايلة أصناف الأصلية بكمية موجبة — وهي **رجّعت** البضاعة.
+         كانت بتتحسب بيعة تانية → عجز وهمي في الجرد بقيمة الفاتورة المعكوسة. */
+      const sign = s.isReversal ? -1 : 1;
       (s.items || []).forEach(it => {
         if(it.id !== itemId) return;
         const q = Math.abs(Number(it.qty) || 0);
-        net += it.isReturn ? q : -q;
+        net += sign * (it.isReturn ? q : -q);
       });
     });
   }catch(e){ throw new Error('مقدرناش نقرا فواتير فترة الجرد — ' + (e.message || e)); }
+  /* 📥 v789 (فحص 27-11): التوريد والتسوية اليدوية بيزوّدوا الرصيد مباشرة ومبيتسجلوش في «حركات المخزون» —
+     بيتسجلوا في سجل المخزون بس. قبل كده: صنف اتعد 10 الصبح واتورّد منه 20 بعد الضهر → الاعتماد كان بيعتبر
+     الـ20 فرق جرد ويشيلهم (السيستم 10 والرف 30). بنقراهم من السجل بنوعهم (receipt / adjustment) بس —
+     البيع والمرتجع والعكس متحسوبين فوق من الفواتير نفسها. */
+  try{
+    const lg = await db.collection(TEST_STOCK_LOG).where('productId', '==', itemId).get();
+    lg.docs.forEach(d => {
+      const r = d.data() || {};
+      if(r.branch !== branch) return;
+      if(r.type !== 'receipt' && r.type !== 'adjustment') return;
+      const at = (r.createdAt && typeof r.createdAt.toMillis === 'function') ? r.createdAt.toMillis() : (Number(r.receivedAtMs) || 0);
+      if(!at || at < sinceMs) return;
+      net += Number(r.delta) || 0;
+    });
+  }catch(e){ throw new Error('مقدرناش نقرا سجل التوريد — ' + (e.message || e)); }
   // 📦 حركات المخزون المسجّلة (تحويلات · تسويات سابقة)
   try{
     const snap = await db.collection(STOCK_MOVES)

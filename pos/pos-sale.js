@@ -526,6 +526,7 @@ function _isLastAdded(c){ return !!(lastAddedId && c.id===lastAddedId && !c.isRe
 
 // عروض الكتالوج اللي العميل فعّلها من التطبيق (بتتطبّق تلقائي على المنتج المطابق في السلة)
 let custActivatedOffers = {};
+let custOfferUses = {};   // v789: عدد مرات استخدام كل عرض — بيكتبه الكاشير بس
 function applyCustomerOffers(){
   if(cardCartEditBlockReason()) return;
   if(!custActivatedOffers || !cart.length) return;
@@ -534,11 +535,19 @@ function applyCustomerOffers(){
     const act = custActivatedOffers[line.barcode];
     if(!act) return;
     // 🛡️ فاز 3أ: النوع والقيمة والمرات والمدة من كتالوج المحل الرسمي — مش من كتابة العميل
-    const off = _offerSanitize(act, _offerOfficial(_offCatalog ? _offCatalog[line.barcode] : null));
+    const _offl = _offerOfficial(_offCatalog ? _offCatalog[line.barcode] : null);
+    // 🛡️ v789: عدد المرات الفعلي من عدّاد الكاشير (offerUses) — العميلة متقدرش تصفّره بإعادة التفعيل من التطبيق
+    if(_offl && (Number((custOfferUses||{})[line.barcode]) || 0) >= _offl.maxUses) return;
+    const off = _offerSanitize(act, _offl);
     if(!off) return;
-    const orig = line.price;
+    /* 🛡️ v789 (فحص 27-11): عرض العميلة وعرض المحل (الجمعة البيضاء) **مش بيتجمعوا** — الأحسن ليها بس.
+       قبل كده عرض العميلة كان بيتحسب من السعر بعد عرض المحل (1000 → 850 → 680 بدل 800). */
+    const _promoOn = !!(line.promoOn && line.promoEng != null);
+    const orig = _promoOn ? Number(line.promoEng) : line.price;
     let np = off.type==='percent' ? orig*(1-Number(off.value)/100) : orig-Number(off.value);
     np = Math.max(0, Math.round(np*100)/100);
+    if(_promoOn && Number(line.price) <= np) return;          // عرض المحل أرخص → يفضل هو وعرض العميلة مايتحرقش
+    if(_promoOn){ line.promoOn = false; line.originalPrice = line.promoOrigBefore; line.discountName = line.promoNameBefore; line.promoLocked = true; }
     line.origPrice = orig; line.price = np; line.offerApplied = true;
     showToast('🎁 اتطبّق عرض العميل على ' + (line.name||'المنتج'));
   });
@@ -645,6 +654,7 @@ function revertCustomerOffers(){
       if(line.origPrice != null) line.price = line.origPrice;
       line.offerApplied = false;
       delete line.origPrice;
+      if(line.promoBase != null){ line.promoLocked = false; line.promoSet = line.price; }   // v789: عرض المحل يرجع يتحسب على السطر
     }
   });
 }
@@ -683,8 +693,13 @@ function _saleDraftRestore(){
     if(!raw) return false;
     const d = JSON.parse(raw);
     if(!d || !Array.isArray(d.items) || !d.items.length){ _saleDraftClear(); return false; }
+    /* 🛡️ v789 (فحص 27-11): سطور الاستبدال/المكافأة/الرصيد ملهاش معنى من غير حالتها (pendingRedemption…) —
+       واللي كان بيحصل: السلة ترجع بسطر «−50 استبدال نقط» والفاتورة تتحفظ بالخصم من غير ما النقط تتخصم. */
     const items = d.items.filter(function(x){
-      return x && typeof x === 'object' && Number(x.qty) > 0 && isFinite(Number(x.price));
+      if(!(x && typeof x === 'object' && Number(x.qty) > 0 && isFinite(Number(x.price)))) return false;
+      if(x.isRedemption || x.isRewardDiscount || x.isCreditSpend) return false;
+      if(String(x.id || '').indexOf('__') === 0 && !x.isGiftCard) return false;
+      return true;
     });
     if(!items.length){ _saleDraftClear(); return false; }
     cart = items;
@@ -730,6 +745,7 @@ function clearCustomerContext(){
   if(typeof custPendingRedeem   !== 'undefined') custPendingRedeem   = null;
   if(typeof custReward          !== 'undefined') custReward          = null;
   if(typeof custActivatedOffers !== 'undefined') custActivatedOffers = {};
+  if(typeof custOfferUses !== 'undefined') custOfferUses = {};
 }
 
 function captureSaleState(){
@@ -758,6 +774,8 @@ function clearSaleState(){
   try{ paymobReset(); }catch(e){}
   cart = [];
   selectedCartIdx = null;
+  // 🛡️ v789: السلة اتفضّت من غير حفظ → الأوردر الأونلاين اللي كان محمّل لازم يتفك (كان بيتعلّم «اتسلّم» بأول فاتورة بعدها)
+  try{ if(typeof ordClearDelivering === 'function') ordClearDelivering(); }catch(e){}
   // 💰 v724 — الثغرة اللي المالك شافها: كتب كود الرصيد ثم **مسح الفاتورة** — `pendingCreditSpend` فضل حي، فاتخصم على الفاتورة **اللي بعدها**.
   try{ if(typeof window.pendingCreditSpend !== 'undefined' && window.pendingCreditSpend){ window.pendingCreditSpend = null; } }catch(e){}
   clearCustomerContext();
@@ -867,6 +885,8 @@ window._cartStamp = _cartStamp; window._cartLogRemoval = _cartLogRemoval;
 function cartSetQty(idx, val){
   if(blockCartEditAfterCard()) return;
   const c = cart[idx]; if(!c) return;
+  // 🛡️ v789: كارت الهدية = كارت واحد بقيمته. كمية 2 كانت بتحصّل 1000 وتفعّل كارت واحد بـ500.
+  if(c.isGiftCard && parseInt(val) > 1){ showToast('⛔ كارت الهدية كارت واحد — لو عايزة كارت تاني بيعي كارت جديد', 'err'); renderCart(); return; }
   let nq = parseInt(val);
   if(isNaN(nq) || nq < 1){ if(nq === 0){ cartRemove(idx); return; } nq = 1; }
   const _oq = Number(c.qty) || 1;
@@ -1282,6 +1302,8 @@ function _isSameLocalDay(ms, now){
 function returnItemFromInvoice(itemIdx){
   if(blockCartEditAfterCard()) return;
   if(!returnInvoiceData) return;
+  // 🛡️ v789: فاتورة معكوسة = فلوسها رجعت وبضاعتها رجعت المخزون. مرتجع منها = استرداد تاني.
+  if(returnInvoiceData.reversed || returnInvoiceData.isReversal){ showToast('⛔ الفاتورة دي معكوسة (ملغية) — مينفعش يترجّع منها', 'err'); return; }
   const items = returnInvoiceData.items || [];
   const it = items[itemIdx];
   if(!it){ return; }
@@ -1324,8 +1346,13 @@ function returnItemFromInvoice(itemIdx){
   // نوزّع أي خصم/مكافأة على مستوى الفاتورة بالنسبة → الصنف يرجع بحصته من اللي اتدفع فعلاً
   const gross = items.filter(x=> !x.isRedemption && !x.isRewardDiscount && (x.price||0) > 0)
                      .reduce((s,x)=> s + (x.price||0)*(x.qty||1), 0);
-  const net = (returnInvoiceData.total != null) ? returnInvoiceData.total : gross;
-  const ratio = gross > 0 ? Math.min(1, net / gross) : 1;
+  /* 🛡️ v789 (فحص 27-11): فاتورة التبديل إجماليها = الجديد − المرتجع. قبل كده النسبة كانت بتتحسب من الإجمالي ده
+     على سعر القطع الموجبة → قطعة بـ600 في فاتورة تبديل إجماليها 100 كانت بترجع بـ100 بس (وتبديل متساوي = صفر).
+     بنرجّع قيمة سطور المرتجع للإجمالي الأول: اللي يتوزّع بالنسبة هو خصم الفاتورة/النقط بس. */
+  const _retInInv = items.filter(x=> x && !x.isRedemption && !x.isRewardDiscount && (x.isReturn || (x.price||0) < 0))
+                         .reduce((s,x)=> s + Math.abs(x.price||0)*(x.qty||1), 0);
+  const net = (returnInvoiceData.total != null) ? (Number(returnInvoiceData.total) + _retInInv) : gross;
+  const ratio = gross > 0 ? Math.max(0, Math.min(1, net / gross)) : 1;
   const refundEach = Math.round((Math.abs(it.price||0) * ratio) * 100) / 100;
   if(line){
     line.qty += 1;
@@ -1611,6 +1638,7 @@ function changeQty(idx, delta){
   if(blockCartEditAfterCard()) return;
   const line = cart[idx];
   if(!line) return;
+  if(line.isGiftCard && delta > 0){ showToast('⛔ كارت الهدية كارت واحد — لو عايزة كارت تاني بيعي كارت جديد', 'err'); return; }
   const _oq = Number(line.qty) || 1;
   // 🕵️ v710: المسار ده (− في شريط الأدوات) كان بيقلّل ويشيل **من غير أي تسجيل**
   if(delta < 0){
@@ -1967,7 +1995,7 @@ async function refreshCustomerInfo(){
     const _nm0 = document.getElementById('customerName');
     if(_nm0) _nm0.value = '';
     _custMatchedPhone = '';
-    setCustState(''); custActivatedOffers={}; revertCustomerOffers(); custReward=null;
+    setCustState(''); custActivatedOffers={}; custOfferUses={}; revertCustomerOffers(); custReward=null;
     custPendingRedeem=null; custPointsBalance=0; window.custCreditBalance=0; window.custRequestHit=null; custBaseText=''; renderCart(); return; }
   // 🔴 الرقم الناقص مبقاش يعدّي: قبل كده أي رقم (٤ أرقام مثلاً) كان بيتعامل
   //    معاملة "مش مسجّل" ويفتح التسجيل — فتتسجّل عميلة بمفتاح غلط ونقطها
@@ -2021,6 +2049,7 @@ async function refreshCustomerInfo(){
       const _nm2 = document.getElementById('customerName');
       if(_nm2) _nm2.value = d.name || '';   // الاسم بيبان في الشريط
       custActivatedOffers = d.activatedOffers || {};   // عروض العميل المفعّلة
+      custOfferUses = d.offerUses || {};
       custPointsBalance = Number(d[pointsFieldFor(currentBranch)]) || 0;   // 🛡️ الرصيد الحقيقي
       window._custDocForTier = d;   // 🏅 TIERS-v1: للشارة في setCustState
       // 💳 رصيد الفلوس — منفصل تمامًا عن النقط. للعرض بس؛
@@ -2202,7 +2231,18 @@ async function openGiveDiscount(){
   if(p > cap){ showToast(`⛔ الحد الأقصى للخصم المسموح ليك ${cap}% — اطلب مدير لو محتاج أكتر`, 'err'); return; }
   // الخصم على المنتجات بس — سطور الاستبدال/المكافأة السالبة متتلمسش
   // (خصم نسبة من سطر سالب بيقلل قيمة الاستبدال والعميل خصم نقطه كاملة)
-  cart.forEach(c=>{ if(!c.isRedemption && !c.isRewardDiscount) c.price = c.price * (1 - p/100); });
+  /* 🛡️ v789 (فحص 27-11):
+     • سطر المرتجع ميتخصمش منه (كان بيقلل اللي بيترجع للعميلة ويسجّل استرداد غلط على الفاتورة الأصلية)
+     • كارت الهدية وخصم الرصيد ميتخصمش منهم (كارت بـ500 كان بيتباع بـ450 ويتفعّل بـ500)
+     • الخصم مرة واحدة: المرة التانية بتستبدل الأولى (كان بيتضرب فوق بعضه ويعدّي الحد الأقصى) */
+  const _discOk = (c)=> c && !c.isRedemption && !c.isRewardDiscount && !c.isReturn && !c.isGiftCard && !c.isCreditSpend && !(Number(c.price) < 0);
+  cart.forEach(c=>{
+    if(!_discOk(c)) return;
+    const base = (c.invDiscBase != null) ? Number(c.invDiscBase) : Number(c.price);
+    c.invDiscBase = base; c.invDiscPct = p;
+    c.price = Math.round(base * (1 - p/100) * 100) / 100;
+    if(p === 0){ delete c.invDiscBase; delete c.invDiscPct; }
+  });
   renderCart();
   showToast(`اتحط خصم ${p}% ✅`);
   // 📋 تسجيل الخصم في سجل النشاط
@@ -2425,6 +2465,17 @@ function _redeemMaxUnits(balance, cartTot, per, valPer){
   return Math.min(byBalance, byCart);
 }
 window._redeemMaxUnits = _redeemMaxUnits;
+function _nestDotted(obj){
+  const out = {};
+  Object.keys(obj || {}).forEach(function(k){
+    if(k.indexOf('.') < 0){ out[k] = obj[k]; return; }
+    const parts = k.split('.'); let o = out;
+    for(let i = 0; i < parts.length - 1; i++){ if(!o[parts[i]] || typeof o[parts[i]] !== 'object' || o[parts[i]]._methodName) o[parts[i]] = {}; o = o[parts[i]]; }
+    o[parts[parts.length - 1]] = obj[k];
+  });
+  return out;
+}
+if(typeof window !== 'undefined') window._nestDotted = _nestDotted;
 // شروط العرض الرسمية من بند الكتالوج (اللي انت كاتبه) — مش من كتابة العميل
 function _offerOfficial(catItem){
   if(!catItem || !catItem.discountType || !(Number(catItem.discountValue) > 0)) return null;
@@ -2666,6 +2717,15 @@ async function reverseReceipt(saleId){
     const saleDoc = await db.collection(TEST_SALES).doc(saleId).get();
     if(!saleDoc.exists){ showToast('الفاتورة مش موجودة', 'err'); return; }
     const sale = saleDoc.data();
+    /* 🛡️ v789 (فحص 27-11): العكس بيرجّع **كل** الكميات وكل الفلوس. فلازم نرفضه لو:
+       • الفاتورة اتعكست قبل كده (جهازين فاتحين القايمة → مخزون يتضاف مرتين وفاتورتين سالب)
+       • اترجّع منها حاجة قبل كده (القطعة ترجع المخزون مرتين وفلوسها تترد مرتين)
+       • فيها كارت هدية (الكارت يفضل شغال والفلوس رجعت) */
+    if(sale.reversed || sale.isReversal){ showToast('⛔ الفاتورة دي معكوسة قبل كده', 'err'); return; }
+    const _rq = sale.returnedQty || {};
+    if(Number(sale.refundedValue) > 0 || Object.keys(_rq).some(k=> Number(_rq[k]) > 0)){
+      showToast('⛔ الفاتورة دي اترجّع منها أصناف قبل كده — مينفعش تتعكس كلها. رجّعي الباقي صنف صنف', 'err'); return; }
+    if((sale.items||[]).some(it=> it && it.isGiftCard)){ showToast('⛔ الفاتورة فيها كارت هدية — مينفعش تتعكس من هنا. كلمي الإدارة', 'err'); return; }
 
     // ⏰ عكس فاتورة في نفس يوم بيعها → تأكيد إضافي + تسجيل للصندوق الأسود
     const _rvMs = sale.createdAt && sale.createdAt.toMillis ? sale.createdAt.toMillis() : (sale.createdAt && sale.createdAt.seconds ? sale.createdAt.seconds*1000 : 0);
@@ -3378,6 +3438,10 @@ function paymobCardLegIntegrity(leg){
     return { ok:true };
   }
   if(leg.status === 'manual') return { ok:true, manual:true };
+  /* 🛡️ v789: 'entered' = فيزا اتسجلت في فرع **ماكينته مش مربوطة بالسيستم** (الكاشير بتحفظ بعد إيصال الماكينة).
+     كانت بتترفض هنا في أول دوسة («محاولة الفيزا فاشلة») وتتحفظ في التانية بالغلط؛ ومع إصلاح «اتحفظت فعلًا»
+     كانت هتتقفل خالص. مقبولة بس لو الفرع فعلًا من غير ماكينة مربوطة. */
+  if(leg.status === 'entered' && !(typeof paymobTerminalId === 'function' && paymobTerminalId())) return { ok:true, manual:true, unlinked:true };
   return { ok:false, reason:String(leg.status || 'unknown') };
 }
 async function paymobReconcileCardTxnsBeforeSale(timeoutMs){
@@ -4689,9 +4753,14 @@ async function _confirmPaymentCore(){
   _confirmSaving = true;
   if(_btn){ _btn.dataset.lbl = _btn.textContent; _btn.disabled = true; _btn.textContent = '⏳ بيحفظ...'; }
   let _saved = false;
+  /* 🛡️ v789 (فحص 27-11): `_doConfirmPayment` بيخرج بهدوء في حالات كتير **من غير ما يحفظ** (فحص الكارت رفض، مبلغ ناقص…).
+     قبل كده أي خروج = «اتحفظت» → حالة الكارت بتتمسح والمبلغ يفضل مكتوب، فالدوسة التانية تحفظ فيزا من غير تأكيد الماكينة
+     (الحارس بيتعدّى)، وشاشة الباقي تظهر بكود الفاتورة اللي قبلها. دلوقتي «اتحفظت» = الحفظ حصل فعلًا. */
+  _confirmDidSave = false; window._lastConfirmSaved = false;
   try{
     await _doConfirmPayment();
-    _saved = true;
+    _saved = _confirmDidSave === true;
+    window._lastConfirmSaved = _saved;
   }catch(e){
     console.error('confirmPayment', e);
     showToast('فشل حفظ الفاتورة: ' + (e && e.message ? e.message : e), 'err');
@@ -4769,6 +4838,7 @@ async function _resolveSaleIdentity(){
 }
 window._resolveSaleIdentity = _resolveSaleIdentity;
 
+let _confirmDidSave = false;
 async function _doConfirmPayment(){
   _offlineQueued = false;   // 📴 نبدأ صفحة جديدة لكل فاتورة
   const total = cartTotal();
@@ -5128,7 +5198,7 @@ window.returnPointsDeduction = returnPointsDeduction;
             //    اتخصم ولا كارت هدية اتفعّل** من ساعة v724. الفاتورة نفسها كانت بتتحفظ عادي (عشان كده ظهرت في تطبيق العميلة).
             await commitCreditSpend(invoiceCode, total, _savedItemsForCredit, _savedPaymentsForCredit);
           if(typeof activatePendingGiftCards === 'function'){
-            const _cards = await activatePendingGiftCards(invoiceCode);
+            const _cards = await activatePendingGiftCards(invoiceCode, _savedItemsForCredit);
             if(_cards && _cards.length && typeof printGiftCardSlips === 'function')
               await printGiftCardSlips(_cards);
             /* 📤 عرض المشاركة — **دلوقتي بس**. الكود مش متخزّن عندنا
@@ -5244,10 +5314,20 @@ window.returnPointsDeduction = returnPointsDeduction;
     // 2) خصم من المخزون التجريبي (باستثناء سطور مش منتجات فعلية: استبدال نقط، مكافأة، أي id محجوز)
     const stockLines = cart.filter(c=> !c.isRedemption && !c.isRewardDiscount && c.id && !String(c.id).startsWith('__'));
     const batch = db.batch();
+    /* 🛡️ v789 (فحص 27-11): `batch.update` على صنف **مستنده اتمسح** بيرفض الدفعة كلها — ومعاها نقطة البياعة ونقط
+       العميلة وخصم الاستبدال (الفاتورة بتتحفظ وتتطبع وكل ده بيضيع في صمت). بيحصل في مرتجع/تبديل صنف اتمسح أو اتدمج.
+       دلوقتي: الصنف المدموج بيروح للصنف الباقي، والممسوح بيتشال من الدفعة ويتسجّل للمالك. */
+    const _invById = {}; try{ (typeof allInventory !== 'undefined' ? allInventory : []).forEach(p=>{ if(p && p.id) _invById[p.id] = p; }); }catch(_e){}
+    const _invKnown = Object.keys(_invById).length > 0;
+    const _missingStock = [];
     stockLines.forEach(c=>{
-      const ref = db.collection(TEST_INVENTORY).doc(c.id);
+      let id = c.id; const p = _invById[id];
+      if(p && p.status === 'merged' && p.mergedInto && _invById[p.mergedInto]) id = p.mergedInto;
+      else if(_invKnown && !p){ _missingStock.push({ id: String(c.id), name: c.name || '', qty: c.qty, isReturn: !!c.isReturn }); return; }
+      const ref = db.collection(TEST_INVENTORY).doc(id);
       batch.update(ref, { ['qtyByBranch.'+currentBranch]: firebase.firestore.FieldValue.increment(c.isReturn ? c.qty : -c.qty) });
     });
+    if(_missingStock.length){ try{ if(typeof _logActivity === 'function') _logActivity('stock_line_missing_item', { invoiceCode, lines: _missingStock.slice(0, 20) }); }catch(_e){} }
     /* ⭐🔴🔴🔴 نقطة الموظف بقت **جوه نفس الـbatch** بتاع خصم المخزون —
        مش نداء منفصل بعد الطباعة زي ما كانت. السبب: كانت بتتسجل في
        نداء لوحده بعد الطباعة (شوف التعليق التاريخي تحت)، وأي مقاطعة
@@ -5322,16 +5402,16 @@ window.returnPointsDeduction = returnPointsDeduction;
       if(appliedReward) custUpdate.rewards = firebase.firestore.FieldValue.arrayRemove(appliedReward);   // نمسح المكافأة اللي اتستخدمت
       cart.forEach(l=>{
         if(l.offerApplied && l.barcode){
-          const _off = custActivatedOffers[l.barcode] || {};
-          if(((_off.uses||0) + 1) >= (_off.maxUses||1)){
-            custUpdate['activatedOffers.'+l.barcode] = firebase.firestore.FieldValue.delete();   // خلصت مرّاته → يتشال
-          }else{
-            custUpdate['activatedOffers.'+l.barcode+'.uses'] = firebase.firestore.FieldValue.increment(1);   // لسه ليه مرّات → نزوّد العدّاد
-          }
+          // v789: العدّاد بيتزوّد دايمًا (مش بنمسح التفعيل) + عدّاد الكاشير offerUses اللي العميلة متقدرش تغيّره
+          custUpdate['activatedOffers.'+l.barcode+'.uses'] = firebase.firestore.FieldValue.increment(1);
+          custUpdate['offerUses.'+l.barcode] = firebase.firestore.FieldValue.increment(1);
         }
       });
       if(custName) custUpdate.name = custName;
-      batch.set(custRef, custUpdate, { merge: true });
+      /* 🛡️ v789 (فحص 27-11): مع set(merge) المفتاح اللي فيه نقطة ('activatedOffers.123.uses' · 'tierPts_x.2026-11')
+         بيتكتب **حقل باسمه الحرفي** مش مسار → عدّاد العرض مكانش بيتزوّد خالص (عرض المرة الواحدة شغال كل مرة)
+         ونقط المستوى كانت بتتكتب في حقل غلط. بنحوّل المفاتيح دي لخرايط متداخلة. */
+      batch.set(custRef, _nestDotted(custUpdate), { merge: true });
     }
     // 🖨️ الورقة هنا بالظبط — بعد ما خصم المخزون (ونقطة الموظف ونقط العميلة
     //    دلوقتي) **اتقيّدوا** وقبل ما نستنى تأكيد السيرفر.
@@ -5345,7 +5425,11 @@ window.returnPointsDeduction = returnPointsDeduction;
     const _stockP = batch.commit();
     _printNow();
     const _stockW = await _waitWrite(_stockP);
-    if(_stockW.error) console.error('خصم المخزون + نقطة الموظف + نقط العميلة', _stockW.error);
+    if(_stockW.error){
+      console.error('خصم المخزون + نقطة الموظف + نقط العميلة', _stockW.error);
+      // 🛡️ v789: الفاتورة اتحفظت بس المخزون/النقط ماتسجلوش — مبنسكتش: المالك لازم يعرف
+      try{ if(typeof _logActivity === 'function') _logActivity('sale_post_batch_failed', { invoiceCode, error: String((_stockW.error && (_stockW.error.code || _stockW.error.message)) || _stockW.error).slice(0, 160) }); }catch(_e){}
+    }
     // سجل الحركة: من غير انتظار (جواه catch بتاعه) — أوفلاين بيتقيد محليًا ويترفع بعدين
     stockLines.forEach(c=>{ logStockMovement(c.id, c.name, c.isReturn ? c.qty : -c.qty, c.isReturn ? 'return' : 'sale', c.isReturn ? 'مرتجع داخل فاتورة بيع' : 'بيع'); });
     // 📸 القطع اللي الكاشير أكّدت إنها اللي في الصورة — المتاح في التطبيق بيقل (برّه الـbatch عمدًا)
@@ -5389,6 +5473,7 @@ window.returnPointsDeduction = returnPointsDeduction;
       showToast('تم حفظ الفاتورة ✔ — متبقى تقييم العميل من صفحة التقييم', 'ok');
     }
     _saleJustSaved = true;   // 🕵️ المسح الجاي طبيعي (بعد حفظ)
+    _confirmDidSave = true;  // 🛡️ v789: علامة النجاح الوحيدة اللي `_confirmPaymentCore` بيصدّقها
     _saleAttempt = null;     // v742: الفاتورة خلصت — السلة الجاية تاخد رقم جديد
     try{ _saleDraftClear(); }catch(e){}   // ✅ الفاتورة اتحفظت؛ ممنوع ترجع كمسودة بعد restart
     // 💳 الفاتورة اتحفظت واتطبعت وبيانات الكروت اتسجلت جواها — الشرائح بتتصفّر هنا

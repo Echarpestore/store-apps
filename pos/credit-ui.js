@@ -112,10 +112,33 @@ async function sellGiftCard(){
 window.sellGiftCard = sellGiftCard;
 
 /* ✅ تفعيل كروت الفاتورة — بيتنادى بعد ما الفاتورة تتقفل بنجاح */
-async function activatePendingGiftCards(invoiceCode){
+/* 🛡️ v789 (فحص 27-11): الكارت بيتفعّل **بس لو سطره موجود في الفاتورة اللي اتحفظت** بقيمته وكمية 1.
+   قبل كده: كارت اتضاف والعميلة غيّرت رأيها والسطر اتمسح → الكارت فضل في القايمة واتفعّل ببلاش مع أي فاتورة بعدها.
+   الكروت اللي سطرها لسه في فاتورة «هولد» بتفضل مستنية؛ الباقي بيتشال من غير تفعيل. */
+function giftCardsToActivate(pending, savedItems, heldItems){
+  const has = function(list, g, strict){
+    return (list || []).some(function(it){
+      return it && it.isGiftCard && it.giftCardId === g.cardId
+        && (!strict || (Number(it.qty) === 1 && Math.abs(Number(it.price) - Number(g.value)) < 0.005));
+    });
+  };
+  const out = { activate:[], keep:[], drop:[] };
+  (pending || []).forEach(function(g){
+    if(has(savedItems, g, true)) out.activate.push(g);
+    else if(has(heldItems, g, false)) out.keep.push(g);
+    else out.drop.push(g);
+  });
+  return out;
+}
+window.giftCardsToActivate = giftCardsToActivate;
+async function activatePendingGiftCards(invoiceCode, savedItems){
   if(!pendingGiftCards.length) return [];
+  let _held = [];
+  try{ (typeof holdSlots !== 'undefined' ? holdSlots : []).forEach(function(h){ if(h && Array.isArray(h.items)) _held = _held.concat(h.items); }); }catch(e){}
+  const _plan = giftCardsToActivate(pendingGiftCards, savedItems || [], _held);
+  if(_plan.drop.length){ try{ if(typeof _logActivity === 'function') _logActivity('gift_card_not_paid_dropped', { cards: _plan.drop.map(function(g){ return g.display; }), invoiceCode: invoiceCode }); }catch(e){} }
   const done = [];
-  for(const g of pendingGiftCards){
+  for(const g of _plan.activate){
     const r = await callCredit('giftCardActivate', {
       cardId: g.cardId, invoiceCode: invoiceCode
     });
@@ -127,7 +150,7 @@ async function activatePendingGiftCards(invoiceCode){
       showToast('⚠️ الكارت ' + g.display + ' مااتفعّلش — فعّليه من سجل الكروت', 'err');
     }
   }
-  pendingGiftCards = [];
+  pendingGiftCards = _plan.keep;
   return done;
 }
 window.activatePendingGiftCards = activatePendingGiftCards;

@@ -500,7 +500,7 @@
     const out = await _origConfirmPay.apply(this, arguments);
     // 🔗 تثبيت بعد الحفظ: بيحجز الرقم المرجعي عشان نفس الإيصال
     //    ميتقبلش على فاتورة تانية.
-    if (usingInsta && approved && S && !finalizing) {
+    if (usingInsta && approved && S && !finalizing && window._lastConfirmSaved !== false) {   // 🛡️ v789: التثبيت بعد حفظ حقيقي بس
       finalizing = true;
       const code = window._lastInvoiceCode || '';
       try {

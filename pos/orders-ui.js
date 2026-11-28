@@ -26,6 +26,10 @@ const ORD_COL = 'online_orders';
 
 /* 🛡️ تهريب HTML — نفس درس `reqEsc`: اسم خاص بالملف مش `esc` العام،
    والملف بينادي عليه بنفسه مش على دالة موجودة في ملف تاني. */
+/* 🛡️ v789 (فحص 27-11): الأوردر بيكتبه تطبيق العميلة → أي حاجة منه بتدخل الصفحة لازم تتنضّف.
+   الصورة: data URL صور بس وبحروف base64 فقط (كان بيتقبل أي نص يبدأ بـdata:image/ → حقن كود على الكاشير). */
+function ordSafeImg(v){ v = String(v == null ? '' : v); return /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+\/=]+$/.test(v) ? v : ''; }
+function ordSafeId(v){ v = String(v == null ? '' : v); return /^[A-Za-z0-9_-]{1,80}$/.test(v) ? v : ''; }
 function ordEsc(s){
   return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
@@ -153,7 +157,7 @@ function renderOrdersScreen(){
     var soon = orderNearExpiry(o, now);
     var items = (o.items || []).map(function(it){
       return '<div style="display:flex; justify-content:space-between; gap:10px; font-size:13px; padding:3px 0;">'
-        + '<span style="display:flex;align-items:center;gap:8px;">' + (it.img && /^data:image\//.test(String(it.img)) ? '<img src="' + it.img + '" alt="" style="width:44px;height:54px;object-fit:cover;border-radius:8px;">' : '') + ordEsc(it.name || 'صنف') + ' × ' + (Number(it.qty)||0) + (it.pieceId ? ' <b style="color:#c62828;">📸 قطعة الصورة</b>' : '') + '</span>'
+        + '<span style="display:flex;align-items:center;gap:8px;">' + (ordSafeImg(it.img) ? '<img src="' + ordSafeImg(it.img) + '" alt="" style="width:44px;height:54px;object-fit:cover;border-radius:8px;">' : '') + ordEsc(it.name || 'صنف') + ' × ' + (Number(it.qty)||0) + (it.pieceId ? ' <b style="color:#c62828;">📸 قطعة الصورة</b>' : '') + '</span>'
         + '<span style="font-weight:700;">' + ((Number(it.price)||0) * (Number(it.qty)||0)).toFixed(2) + '</span>'
         + '</div>';
     }).join('');
@@ -179,11 +183,11 @@ function renderOrdersScreen(){
       : '';
 
     var btns = '';
-    if(st === 'placed')    btns += '<button class="btn-newsale" onclick="ordMove(\'' + o.id + '\',\'preparing\')">🎁 بدأنا التجهيز</button>';
-    if(st === 'preparing') btns += '<button class="btn-newsale" onclick="ordMove(\'' + o.id + '\',\'ready\')">✅ جاهز</button>';
-    if(st === 'ready')     btns += '<button class="btn-newsale" onclick="ordDeliver(\'' + o.id + '\')">'
+    if(st === 'placed')    btns += '<button class="btn-newsale" onclick="ordMove(\'' + ordSafeId(o.id) + '\',\'preparing\')">🎁 بدأنا التجهيز</button>';
+    if(st === 'preparing') btns += '<button class="btn-newsale" onclick="ordMove(\'' + ordSafeId(o.id) + '\',\'ready\')">✅ جاهز</button>';
+    if(st === 'ready')     btns += '<button class="btn-newsale" onclick="ordDeliver(\'' + ordSafeId(o.id) + '\')">'
       + (del ? '🚚 اشحن — حمّل السلة' : '🛍️ تسليم — حمّل السلة') + '</button>';
-    if(st !== 'expired')   btns += '<button class="logout-btn" onclick="ordCancel(\'' + o.id + '\')">✖️ إلغاء</button>';
+    if(st !== 'expired')   btns += '<button class="logout-btn" onclick="ordCancel(\'' + ordSafeId(o.id) + '\')">✖️ إلغاء</button>';
 
     return '<div style="border:1.5px solid ' + (soon ? 'var(--warn)' : 'var(--border)') + '; border-radius:12px;'
       + ' padding:14px; margin-bottom:12px; background:var(--panel2);">'

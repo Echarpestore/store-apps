@@ -140,9 +140,12 @@
     var wrapped = function(){
       try{
         if(typeof cardCartEditBlockReason !== 'function' || !cardCartEditBlockReason()){
-          if(typeof staffPurchase === 'undefined' || !staffPurchase){
-            applyWeekendPromo(typeof cart !== 'undefined' ? cart : [], Date.now(), typeof currentBranch !== 'undefined' ? currentBranch : '');
-          }
+          var _c = typeof cart !== 'undefined' ? cart : [];
+          /* v789 (فحص 27-11): شراء الموظف وأوردر الأونلاين ليهم سعرهم — العرض بيتشال منهم بالكامل.
+             قبل كده لو الأصناف اتمسحت قبل كارت الموظف كان بياخد الـ15% + خصم الموظف فوقها (ترتيب المسح بيغيّر الإجمالي). */
+          var _skip = (typeof staffPurchase !== 'undefined' && staffPurchase) || !!window._ordDelivering;
+          if(_skip) applyWeekendPromo(_c, 0, '');
+          else applyWeekendPromo(_c, Date.now(), typeof currentBranch !== 'undefined' ? currentBranch : '');
         }
       }catch(e){ console.warn('weekend promo', e); }
       return _orig.apply(this, arguments);

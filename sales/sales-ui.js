@@ -826,10 +826,17 @@ window.graceCloseTsFor = function(shift, emp, cfg){
   let endTs = null;
   if(/^\d{1,2}:\d{2}$/.test(endHM)){
     const parts = String(endHM).split(':').map(Number);
-    const base = new Date(shift.clockInTs);
-    const e = new Date(base.getFullYear(), base.getMonth(), base.getDate(), parts[0], parts[1], 0, 0);
-    if(e.getTime() <= shift.clockInTs) e.setDate(e.getDate() + 1);   // شيفت بيعدّي نص الليل
-    endTs = e.getTime();
+    /* v662 (فحص 27-11): الوقت بتوقيت القاهرة مش توقيت الجهاز — المالك بيقفل من برّه مصر فكان الانصراف بيتسجل بفرق ساعات */
+    if(typeof window.cai === 'function' && typeof window.caiStamp === 'function'){
+      const b = window.cai(shift.clockInTs);
+      endTs = window.caiStamp(b.getFullYear(), b.getMonth()+1, b.getDate(), parts[0], parts[1], 0, 0);
+      if(endTs <= shift.clockInTs){ const n = window.cai(endTs + 86400000); endTs = window.caiStamp(n.getFullYear(), n.getMonth()+1, n.getDate(), parts[0], parts[1], 0, 0); }
+    }else{
+      const base = new Date(shift.clockInTs);
+      const e = new Date(base.getFullYear(), base.getMonth(), base.getDate(), parts[0], parts[1], 0, 0);
+      if(e.getTime() <= shift.clockInTs) e.setDate(e.getDate() + 1);   // شيفت بيعدّي نص الليل
+      endTs = e.getTime();
+    }
   }
   if(!endTs) endTs = shift.clockInTs + (8*60 + 15) * 60000;          // فولباك: الشيفت القياسي
   return endTs;
@@ -902,7 +909,7 @@ window.graceCloseShift = async function(shiftId){
   if(s.clockOutTs){ alert('الشيفت ده مقفول خلاص'); window.renderGraceDay(); return; }
   const emp = (window.employees||[]).filter(function(e){ return e.id === s.employeeId; })[0];
   const endTs = window.graceCloseTsFor(s, emp, window.complianceCfg);
-  const tTxt = new Date(endTs).toLocaleTimeString('ar-EG', { hour:'2-digit', minute:'2-digit' });
+  const tTxt = new Date(endTs).toLocaleTimeString('ar-EG', { hour:'2-digit', minute:'2-digit', timeZone:'Africa/Cairo' });
   if(!confirm('🚪 قفل شيفت: ' + ((emp && emp.name) || 'الموظف') + '\n\n'
     + 'الانصراف هيتسجل الساعة ' + tTxt + ' (نهاية شيفته الرسمية) — مش وقت دلوقتي.\n'
     + 'مفيش وقت إضافي ومفيش خصم انصراف بدري.\n\nتكمّل؟')) return;

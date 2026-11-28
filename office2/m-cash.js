@@ -447,6 +447,8 @@ function data(){
 function ledger(ahead){ return ofCashLedger(S.base, data(), S.days, S.cfg, Date.now(), ahead == null ? 5 : ahead); }
 function autoFreeze(L){
   try{
+    /* فحص 27-11: ممنوع التجميد والبيانات ناقصة (تحميل لسه شغال أو فيه خطأ) — كان ممكن يثبّت أرقام ناقصة للأبد */
+    if(!S.docsLoaded || !S.dataLoaded || S.loading || S.err) return;
     ofFreezeDue(L, S.days, Date.now()).forEach(x=>{
       if(frozenOnce[x.key]) return; frozenOnce[x.key] = 1;
       u.db.collection('office_cash_days').doc(x.key).set({ frozen: x.frozen, updatedAt: Date.now() }, { merge:true }).catch(e=> console.warn('freeze ' + x.key, e && e.code));

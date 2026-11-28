@@ -657,6 +657,13 @@ async function confirmReceiveCart(){
         {barcode:r.barcode,receivedAtMs:r.receivedAtMs,entryId:r.entryId});
       receiveGoodsTodayLog.unshift({ id:r.entryId, barcode:r.barcode||'', name:r.name, qtyChange:r.qty, ts:Number(r.receivedAtMs)||Date.now(), employeeName:currentEmployee?(currentEmployee.name||''):'' });
       _recvLogSave();                       // يفضل موجود بعد قفل التطبيق
+      /* 🛡️ v789 (فحص 27-11): السطر اللي اتأكد بيتشال من القايمة ومسودتها **فورًا**. قبل كده القايمة كانت بتتفضّى
+         بعد ما كل السطور تخلص — فلو سطر في النص وقع (نت/خطأ) والكاشير أكّد تاني، السطور الأولى كانت بتتورّد مرتين. */
+      try{
+        const _ix = receiveCart.indexOf(r);
+        if(_ix >= 0) receiveCart.splice(_ix, 1);
+        saveReceiveDraft();
+      }catch(_e){}
     }
     showToast(`اتأكد استلام ${rows.length} حركة ✅`);
     await loadInventory();

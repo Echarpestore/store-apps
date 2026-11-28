@@ -344,8 +344,11 @@ function getReportDateBounds(){
   }else if(currentReportRange === 'custom'){
     const fromVal = document.getElementById('repFrom').value;
     const toVal = document.getElementById('repTo').value;
-    if(fromVal) { from = new Date(fromVal + 'T00:00:00'); }
-    if(toVal) { to = new Date(toVal + 'T23:59:59'); }
+    /* 🛡️ v789 (فحص 27-11): المدى المخصّص بيوم الشغل (من الساعة الفاصلة) زي «النهاردة/امبارح» والتقفيل.
+       كان من 12 بالليل لـ12 بالليل → تقرير يوم واحد بيختلف عن تقفيله بأي فواتير بين 12 والساعة الفاصلة. */
+    const _bz = (v)=> (typeof bizDayStartMs === 'function') ? bizDayStartMs(new Date(v + 'T12:00:00').getTime()) : new Date(v + 'T00:00:00').getTime();
+    if(fromVal) { from = new Date(_bz(fromVal)); }
+    if(toVal) { to = new Date(_bz(toVal) + 24*3600000 - 1); }
   }
   return { from, to };
 }
@@ -376,7 +379,8 @@ function repAggregate(sales){
       const qty = it.qty||0, line = (it.price||0)*qty;
       if(!it.isReturn && (it.price||0) >= 0) itemsSold += qty;
       if(!itemAgg[it.name]) itemAgg[it.name] = { qty:0, revenue:0 };
-      itemAgg[it.name].qty += qty;
+      // 🛡️ v789: المرتجع كميته موجبة وسعره سالب → كان بيتجمع على المباع (بيعت 1 ورجّعت 1 = «2 قطعة»)
+      itemAgg[it.name].qty += (it.isReturn || (it.price||0) < 0) ? -qty : qty;
       itemAgg[it.name].revenue += line;
     });
   });
@@ -1541,8 +1545,9 @@ function reprintSale(id){
       // 🧾 نفس تصميم الفاتورة الأصلية بالظبط — بسعر الوحدة وبيانات الكارت
       items: (s.items||[]).map(it=> ({
         name: it.name, qty: it.qty, barcode: it.barcode || '',
-        unit: Math.abs(Number(it.price||0)).toFixed(2),
-        line: Math.abs((it.price||0)*(it.qty||1)).toFixed(2)
+        // 🛡️ v789: بالإشارة زي الفاتورة الأصلية — إعادة طباعة تبديل كانت بتطبع المرتجع موجب والسطور متجمعش على الإجمالي
+        unit: Number(it.price||0).toFixed(2),
+        line: ((Number(it.price)||0)*(Number(it.qty)||1)).toFixed(2)
       })),
       totalStr: Number(s.total||0).toFixed(2),
       payStr,
@@ -1848,13 +1853,21 @@ let dcData = {};   // بيانات النهاردة من السيستم (للح�
 /* 💵 v737 — فئات عدّ الدرج (اتضاف الجنيه). مكان واحد للقايمة — الرسم والحساب والإيصال بيقروا منها. */
 const DC_DENOMS = [200, 100, 50, 20, 10, 5, 1];
 window.DC_DENOMS = DC_DENOMS;
+/* 🛡️ v789 (فحص 27-11): مستند التقفيل بيتسمّى بـ**يوم الشغل** (نفس الأرقام اللي جواه) مش تاريخ التقويم.
+   قبل كده: تقفيل الخميس الساعة 12:20 بعد نص الليل اتسمّى «الجمعة»، وتقفيل الجمعة بالليل كتب فوقه →
+   عدّ الخميس وعجزه اتمسحوا، ولو كان اتعلّم «اتستلم» كاش الجمعة يبان متستلم. */
+function dcDayKey(ts){ return (typeof bizDayKey === 'function') ? bizDayKey(ts == null ? Date.now() : ts) : todayISO(); }
+window.dcDayKey = dcDayKey;
 function dcAggregate(sales){
   const systemTotal = (sales||[]).reduce((s,x)=> s + (x.total||0), 0);
   let cashSales=0, visaSales=0, instaSales=0, salarySales=0, creditSales=0, pointsSales=0, rewardSales=0;
   // 🎁 points/reward (§4هـ): استبدال النقط والمكافأة بقوا طرق دفع — لازم يتجمعوا هنا
   //    وفي التسوية، وإلا كل فاتورة فيها استبدال تطلّع **عجز وهمي** بقيمته.
   (sales||[]).forEach(s=>{ const p=s.payments||{}; cashSales+=(p.cash||0); visaSales+=(p.visa||0); instaSales+=(p.instapay||0); salarySales+=(p.salary||0);  creditSales+=(p.credit||0); pointsSales+=(p.points||0); rewardSales+=(p.reward||0);});
-  return { systemTotal, cashSales, visaSales, instaSales, salarySales, creditSales, pointsSales, rewardSales };
+  /* 🛡️ v789 (فحص 27-11): «الباقي اتساب رصيد للعميلة» — الفاتورة بتتسجل كاش صافي (من غير الباقي) بس الباقي نفسه
+     **فضل في الدرج**. من غيره كل مرة عميلة تسيب الباقي رصيد التقفيل يطلّع «أوفر» بقيمته ومبيتصفّرش أبدًا. */
+  const changeKept = (sales||[]).reduce((n,x)=> n + (x && !x.reversed && !x.isReversal ? (Number(x.changeKept)||0) : 0), 0);
+  return { systemTotal, cashSales, visaSales, instaSales, salarySales, creditSales, pointsSales, rewardSales, changeKept };
 }
 window.dcAggregate = dcAggregate;
 
@@ -1936,7 +1949,7 @@ async function goToEndOfDay(){
   // 🔴 كان بياخد 5 مفاتيح بس ويرمي `creditSales` — فـ`dcData.creditSales` كان دايمًا
   //    undefined والتسوية بتجمع صفر: كل مرتجع بالرصيد = أوفر وهمي رغم إن
   //    `dcAggregate` نفسها سليمة ومتختبرة. لازم **كل** مفاتيح الدفع توصل لـdcData.
-  const { systemTotal, cashSales, visaSales, instaSales, salarySales, creditSales, pointsSales, rewardSales } = dcAggregate(sales);
+  const { systemTotal, cashSales, visaSales, instaSales, salarySales, creditSales, pointsSales, rewardSales, changeKept } = dcAggregate(sales);
 
   // 🕵️ السبب الأول للأوفر اليومي: فواتير اتعملت **بعد تقفيل امبارح وقبل بداية
   // يوم الشغل الحالي** — دي مش داخلة في مبيعات النهاردة ولا دخلت تقفيل امبارح
@@ -1971,7 +1984,7 @@ async function goToEndOfDay(){
     });
   }catch(e){ console.warn('advances', e); }
 
-  dcData = { systemTotal, cashSales, visaSales, instaSales, salarySales, creditSales, pointsSales, rewardSales, staffOrdersCount: staffOrdersToday.length, staffOrdersTotal, advancesTotal, invoiceCount: sales.length, lateTotal, lateCash, lateCount: lateSales.length, lastCloseTs, pendingCount: _pendingCount, fromCache: _fromCache };
+  dcData = { systemTotal, cashSales, visaSales, instaSales, salarySales, creditSales, pointsSales, rewardSales, changeKept: +(changeKept||0), staffOrdersCount: staffOrdersToday.length, staffOrdersTotal, advancesTotal, invoiceCount: sales.length, lateTotal, lateCash, lateCount: lateSales.length, lastCloseTs, pendingCount: _pendingCount, fromCache: _fromCache };
   const lastFloat = parseFloat(localStorage.getItem('dc_float_'+currentBranch)) || '';
 
   const denoms = DC_DENOMS;
@@ -2094,7 +2107,8 @@ async function dcFinish(){
   const promoOut = +((dcData.pointsSales || 0) + (dcData.rewardSales || 0));
   // المفروض يتجمّع = (كاش معدود − عهدة) + مصروفات + سلف + فيزا + انستا + راتب + رصيد + نقط/مكافآت
   const accounted = (counted - flt) + exp + adv + visa + insta + salary + creditOut + promoOut;
-  const overShort = +(accounted - dcData.systemTotal).toFixed(2);
+  const _kept = +(dcData.changeKept || 0);      // باقي اتساب رصيد = كاش زيادة في الدرج متوقّع
+  const overShort = +(accounted - dcData.systemTotal - _kept).toFixed(2);
   // ⚠️ الأوفر المتوقع من فواتير ما بعد آخر تقفيل (كاشها في الدرج ومش في مبيعات النهاردة)
   const _lateCash = +(dcData.lateCash || 0);
   const overShortReal = +(overShort - _lateCash).toFixed(2);
@@ -2122,7 +2136,7 @@ async function dcFinish(){
           ${creditOut!==0?`<div><span>+ 💳 رصيد عميلات (صرف − مرتجع)</span><b>${creditOut.toFixed(2)}</b></div>`:''}
           ${promoOut!==0?`<div><span>+ 🎁 استبدال نقط ومكافآت</span><b>${promoOut.toFixed(2)}</b></div>`:''}
           <div class="dc-res-sep"><span>= إجمالي محسوب</span><b>${accounted.toFixed(2)}</b></div>
-          <div><span>مبيعات السيستم</span><b>${dcData.systemTotal.toFixed(2)}</b></div>${_lateBlock}
+          <div><span>مبيعات السيستم</span><b>${dcData.systemTotal.toFixed(2)}</b></div>${_kept > 0.009 ? `<div><span>💳 باقي اتساب رصيد للعميلات (في الدرج)</span><b>+${_kept.toFixed(2)}</b></div>` : ''}${_lateBlock}
         </div>
       </div>`;
   }else{
@@ -2146,9 +2160,9 @@ async function dcFinish(){
 
   // نحفظ سجل التقفيل (جوه pos_test_settings عشان القواعد الحالية تسمح بيه)
   const rec = {
-    type:'dayclose', branch: currentBranch, date: todayISO(),
+    type:'dayclose', branch: currentBranch, date: dcDayKey(),
     countedCash: counted, float: flt, expenses: exp, advances: adv, visa, instapay: insta, salaryDeferred: salary,
-    systemTotal: dcData.systemTotal, cashSales: dcData.cashSales, visaSales: dcData.visaSales, instaSales: dcData.instaSales,
+    systemTotal: dcData.systemTotal, changeKept: +(dcData.changeKept||0), cashSales: dcData.cashSales, visaSales: dcData.visaSales, instaSales: dcData.instaSales,
     creditSales: +(dcData.creditSales||0), pointsSales: +(dcData.pointsSales||0), rewardSales: +(dcData.rewardSales||0),
     accounted, overShort, overShortReal, lateCash: _lateCash, lateTotal: +(dcData.lateTotal||0), lateCount: dcData.lateCount||0, invoiceCount: dcData.invoiceCount,
     pendingCount: dcData.pendingCount||0, closedFromCache: !!dcData.fromCache,
@@ -2156,7 +2170,7 @@ async function dcFinish(){
     closedBy: (typeof currentEmployee!=='undefined' && currentEmployee) ? (currentEmployee.name||'') : '',
     ts: Date.now()
   };
-  db.collection(TEST_SETTINGS).doc('dayclose_'+currentBranch+'_'+todayISO()).set(rec, {merge:true})
+  db.collection(TEST_SETTINGS).doc('dayclose_'+currentBranch+'_'+dcDayKey()).set(rec, {merge:true})
     .then(()=> showToast('اتقفل اليوم واتسجل ✅'))
     .catch(e=> console.warn('dayclose save', e));
 }

@@ -99,14 +99,32 @@
     var c = cfgOf(cfg); var rows = [], plus = 0, minus = 0, lateCount = 0, lateMin = 0, forgot = 0, counted = 0;
     (shifts || []).forEach(function(s){
       var r = shiftDelta(s, reqFn ? reqFn(s) : 0, c);
-      rows.push(Object.assign({ id: s && s.id, clockInTs: s && s.clockInTs, clockOutTs: s && s.clockOutTs, day: s && s.clockInTs ? keyOf(s.clockInTs) : '' }, r));
+      rows.push(Object.assign({ id: s && s.id, clockInTs: s && s.clockInTs, clockOutTs: s && s.clockOutTs, day: s && s.clockInTs ? keyOf(s.clockInTs) : '',
+        _adj: Number(s && s.bankAdjustMin) || 0, _forgot: !!(s && (s.forgotClockOut || s.bankAutoEnd)) }, r));
+    });
+    rows.sort(function(a, b){ return (Number(a.clockInTs) || 0) - (Number(b.clockInTs) || 0); });
+    /* v662 (فحص 27-11): شيفتين في نفس اليوم (مشيت ورجعت سجّلت حضور) = يوم واحد.
+       قبل كده كل شيفت كان بيتحاسب على شيفت كامل لوحده → خصم ساعات مش حقيقي.
+       دلوقتي: دقايق اليوم بتتجمع، والمطلوب مرة واحدة، والتأخير بتاع أول حضور بس. */
+    var byDay = {};
+    rows.forEach(function(r){ if(r.counted && r.reason !== 'manual' && r.day){ (byDay[r.day] = byDay[r.day] || []).push(r); } });
+    Object.keys(byDay).forEach(function(k){
+      var g = byDay[k]; if(g.length < 2) return;
+      var worked = 0, req = 0, adj = 0, fg = false;
+      g.forEach(function(r){ worked += r.workedMin; if(r.requiredMin > req) req = r.requiredMin; adj += r._adj; if(r._forgot) fg = true; });
+      if(worked > c.bankMaxShiftMin) worked = c.bankMaxShiftMin;
+      var d = worked - req; if(Math.abs(d) <= c.bankGraceMin) d = 0;
+      d += adj; if(fg && d > 0) d = 0;
+      g.forEach(function(r, i){ r.delta = i === 0 ? d : 0; if(i > 0){ r.lateMin = 0; r.reason = 'same_day'; } r.dayMerged = true; });
+    });
+    rows.forEach(function(r){
+      var f = r._forgot; delete r._adj; delete r._forgot;
       if(!r.counted) return;
       counted++;
       if(r.delta > 0) plus += r.delta; else minus += -r.delta;
       if(r.lateMin > 0){ lateCount++; lateMin += r.lateMin; }
-      if(s.forgotClockOut || s.bankAutoEnd) forgot++;
+      if(f) forgot++;
     });
-    rows.sort(function(a, b){ return (Number(a.clockInTs) || 0) - (Number(b.clockInTs) || 0); });
     return { balanceMin: plus - minus, plusMin: plus, minusMin: minus, lateCount: lateCount, lateMinTotal: lateMin, forgotCount: forgot, countedShifts: counted, rows: rows };
   }
   // سعر الدقيقة = الأساسي ÷ 30 ÷ 8 ÷ 60 (نفس hourlyRate بتاع المرتب)

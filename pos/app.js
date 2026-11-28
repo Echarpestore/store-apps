@@ -265,6 +265,7 @@ function goToSale(){
   editingHeldId = null;
   cart = [];
   selectedCartIdx = null;
+  try{ if(typeof ordClearDelivering === 'function') ordClearDelivering(); }catch(e){}   // 🛡️ v789: فاتورة جديدة = مفيش أوردر أونلاين متعلّق
   clearCustomerContext();   // نصفّي سياق العميل بالكامل (استبدال/مكافأة/عروض) عشان الفاتورة الجديدة تبدأ نضيفة
   // تحميل الخصومات السارية عشان تتطبق تلقائي وقت إضافة الأصناف
   if(typeof loadActiveDiscounts === 'function') loadActiveDiscounts();

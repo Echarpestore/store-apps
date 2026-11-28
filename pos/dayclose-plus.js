@@ -19,7 +19,8 @@ function _dcpEsc(s){
 function _dcpN(v){ const n = +(v || 0); return Number.isInteger(n) ? n.toLocaleString('en-US') : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function _dcpDenomList(){ return (typeof DC_DENOMS !== 'undefined' && Array.isArray(DC_DENOMS)) ? DC_DENOMS : [200, 100, 50, 20, 10, 5, 1]; }
 function _dcpVal(id){ const el = document.getElementById(id); return el ? (parseFloat(el.value) || 0) : 0; }
-function _dcpDayId(){ return 'dayclose_' + currentBranch + '_' + todayISO(); }
+function _dcpDay(){ return (typeof dcDayKey === 'function') ? dcDayKey() : todayISO(); }   // v789: يوم الشغل مش تاريخ التقويم
+function _dcpDayId(){ return 'dayclose_' + currentBranch + '_' + _dcpDay(); }
 function _dcpCanReceive(){ return (typeof hasPerm === 'function') ? !!hasPerm('canViewReports') : false; }
 
 /* الفئات من الشاشة → { "200": 3, ... } */
@@ -131,7 +132,7 @@ async function dcpAfterFinish(pre){
   const { denoms, counted, float: flt } = snap0;
   const snap = { expenses: snap0.expenses, advances: snap0.advances, expNote: snap0.expNote, visa: snap0.visa, instapay: snap0.instapay, salary: snap0.salary };
   const who = (typeof currentEmployee !== 'undefined' && currentEmployee) || {};
-  const branch = currentBranch, date = todayISO(), docId = _dcpDayId();
+  const branch = currentBranch, date = _dcpDay(), docId = _dcpDayId();
   const dayMs = (typeof bizDayStartMs === 'function') ? bizDayStartMs() : new Date(new Date().setHours(0, 0, 0, 0)).getTime();
   const staff = await dcpStaffToday(branch, dayMs);
   const r = Object.assign({

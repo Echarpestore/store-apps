@@ -11144,10 +11144,11 @@ async function ownerCloseShift(shiftId){
       // ⛔ مفيش خصم انصراف بدري — الوقت اتحدد يدوي مش من الجهاز
       earlyMin: 0, earlyHours: 0,
       forgotClockOut: false, autoClosedAt1: false, needsClockOutReview: false,
+      bankAutoEnd: false, bankAutoReason: null,   // v662: المالك حدد الوقت الحقيقي → الأوفرتايم يتحسب في الرصيد (كان بيفضل «منسي» = صفر)
       closedByOwner: true, closedAt: Date.now(),
       ...(sh.clockOutTs ? { prevClockOutTs: sh.clockOutTs, clockOutEditedAt: Date.now() } : {})
     });
-    try{ Object.assign(sh, { clockOutTs: out.getTime(), shiftMinutes: totalMin, overtimeMinutes, overtimeApprovedMin: overtimeMinutes, closedByOwner: true }); }catch(_e){}
+    try{ Object.assign(sh, { clockOutTs: out.getTime(), shiftMinutes: totalMin, overtimeMinutes, overtimeApprovedMin: overtimeMinutes, closedByOwner: true, forgotClockOut: false, bankAutoEnd: false, needsClockOutReview: false }); }catch(_e){}
     try{ renderOvertimeApprovals(); }catch(_e){}
     try{ renderSalaryPanel(); }catch(_e){}
     return true;

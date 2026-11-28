@@ -13,7 +13,7 @@ const app = firebase.apps.length ? firebase.app() : firebase.initializeApp(CFG);
 const auth = firebase.auth(app); const db = firebase.firestore(app);
 try{ db.settings({ cacheSizeBytes: 60*1024*1024, merge:true }); db.enablePersistence({ synchronizeTabs:true }).catch(()=>{}); }catch(e){}
 const GATE_DOC = 'office_gate', SESS_KEY = 'office2_gate_sess', SESS_HOURS = 10;
-const DAY = 86400000; const WINDOW_DAYS = 45;
+const DAY = 86400000; const WINDOW_DAYS = 45; const PAY_WINDOW_DAYS = 75;   // v17: الحضور/الإجازات/الرصيد لازم يغطوا الشهر اللي فات كله — وإلا مرتب الشهر اللي فات بيطلع فيه غياب وهمي
 const GLOW = ['Glow'];
 
 /* ---------- 🕒 القاهرة ---------- */
@@ -127,16 +127,16 @@ function watch(col, field, sinceMs, key, after){
 }
 function boot(){
   if(booted) return; booted = true;
-  const since = Date.now() - WINDOW_DAYS*DAY;
+  const since = Date.now() - WINDOW_DAYS*DAY; const paySince = Date.now() - PAY_WINDOW_DAYS*DAY;
   db.collection('sales_settings').get().then(s=>{ s.forEach(d=>{ D.settings[d.id] = d.data(); }); render(); }).catch(()=>{});
   unsub.push(db.collection('sales_employees').onSnapshot(s=>{ D.employees = s.docs.map(d=> Object.assign({ id:d.id }, d.data())); render(); }));
-  watch('sales_shifts', 'clockInTs', since, 'shifts', fixForgotten);
+  watch('sales_shifts', 'clockInTs', paySince, 'shifts', fixForgotten);
   watch('sales_breaks', 'startTs', Date.now() - 2*DAY, 'breaks');
   watch('sales_points', 'ts', Date.now() - 75*DAY, 'points');
   watch('entries', 'ts', since, 'ratings');
-  watch('sales_leave_requests', 'ts', since, 'leaves');
+  watch('sales_leave_requests', 'ts', paySince, 'leaves');
   watch('sales_bonus_week', 'ts', Date.now() - 120*DAY, 'bonus');
-  watch('sales_time_credit', 'ts', since, 'credits');
+  watch('sales_time_credit', 'ts', paySince, 'credits');
   watch('sales_staff_orders', 'ts', since, 'staffOrders');
   // 💼 المرتبات والفلوس — نافذة 75 يوم (شهر حالي + سابق + دورة القبض)
   watch('sales_advances', 'ts', Date.now() - 75*DAY, 'advances');
@@ -503,7 +503,7 @@ function salaryOf(e, r){
   return O2Pay.compute(e, r.start, r.end, { shifts: D.shifts, timeCredit: D.credits, deductions: D.deductions.filter(d=>!d.deleted), advances: D.advances, leaves: D.leaves, timeCfg: timeCfg(e.branch), shiftDefs: shiftDefs(e.branch), payDay: payDay() });
 }
 function bonusesOf(e, r){ return isSetup(e) ? 0 : monthBonuses(e, { start: r.start.getTime(), end: r.end.getTime() }).reduce((n,x)=> n + x.paid, 0); }
-function commOf(e, r){ const label = O2Pay.monthLabel(r.start); const rate = Number(salesCfg(e.branch).commissionPerPoint) || 0; return Object.assign({ label, rate }, O2Pay.commission(D.points, D.commPays, e.id, r.start.getTime(), r.end.getTime(), label, rate)); }
+function commOf(e, r){ const label = O2Pay.monthLabel(r.start); const _er = e && e.commissionPerPoint; const rate = (_er !== null && _er !== undefined && _er !== '' && Number.isFinite(Number(_er)) && Number(_er) >= 0) ? Number(_er) : (Number(salesCfg(e.branch).commissionPerPoint) || 0); /* v17: سعر نقطة الموظف نفسه الأول (زي برنامج المبيعات) */ return Object.assign({ label, rate }, O2Pay.commission(D.points, D.commPays, e.id, r.start.getTime(), r.end.getTime(), label, rate)); }
 function paidOf(e, label){ return D.salaryPays.find(p=> p.employeeId===e.id && p.periodLabel===label); }
 function rMoney(){
   head('الفلوس', 'المبيعات · المصاريف · المرتبات');
@@ -559,7 +559,8 @@ async function paySalary(empId, amount){
   try{ await db.runTransaction(async tx=>{ const s = await tx.get(ref); if(s.exists) throw new Error('__PAID__'); tx.set(ref, { employeeId:e.id, employeeName:e.name, branch:e.branch, periodLabel:label, amount, paidAt: Date.now(), paidFrom:'office2' }); }); toast('اتصرف ✅'); closeSheet(); }
   catch(err){ toast(err && err.message==='__PAID__' ? 'اتصرف قبل كده — مش هيتسجل مرتين' : 'تعذر: ' + (err && err.code)); }
 }
-async function payComm(empId, pts, amount, label){ const e = empById(empId); if(!e) return; if(!confirm('دفع ' + n0(amount) + ' ج عمولة لـ ' + e.name + ' عن ' + pts + ' نقطة (' + label + ')؟')) return; try{ await db.collection('sales_commission_payments').add({ employeeId:e.id, employeeName:e.name, branch:e.branch, monthLabel:label, pointsCount:pts, commissionAmount:amount, paidAt: Date.now(), paidFrom:'office2' }); toast('اتدفعت ✅'); closeSheet(); }catch(err){ toast('تعذر: ' + (err && err.code)); } }
+let _payCommBusy = {};
+async function payComm(empId, pts, amount, label){ const e = empById(empId); if(!e) return; const _k = empId + '|' + label; if(_payCommBusy[_k]){ toast('العمولة دي لسه بتتسجل…'); return; } if(!(Number(amount) > 0)){ toast('مفيش عمولة مستحقة'); return; } if(!confirm('دفع ' + n0(amount) + ' ج عمولة لـ ' + e.name + ' عن ' + pts + ' نقطة (' + label + ')؟')) return; _payCommBusy[_k] = true; setTimeout(()=>{ delete _payCommBusy[_k]; }, 8000); /* v17: ضغطتين ورا بعض = دفعة واحدة */ try{ await db.collection('sales_commission_payments').add({ employeeId:e.id, employeeName:e.name, branch:e.branch, monthLabel:label, pointsCount:pts, commissionAmount:amount, paidAt: Date.now(), paidFrom:'office2' }); toast('اتدفعت ✅'); closeSheet(); }catch(err){ toast('تعذر: ' + (err && err.code)); } }
 function addAdvance(empId){ const e = empById(empId); if(!e) return; const v = prompt('مبلغ السلفة لـ ' + e.name + ':'); if(v===null) return; const amount = Math.round((Number(v)||0)*100)/100; if(!(amount>0)){ toast('مبلغ مش صح'); return; } const reason = prompt('السبب:') || ''; if(!reason){ toast('لازم سبب'); return; }
   db.collection('sales_advances').add({ employeeId:e.id, employeeName:e.name, branch:e.branch, amount, date: caiKey(Date.now()), ts: Date.now(), reason, manual:true, source:'owner_manual' }).then(()=>{ toast('اتسجلت السلفة ✅'); closeSheet(); }).catch(err=> toast('تعذر: ' + (err && err.code))); }
 function addDeduction(empId){ const e = empById(empId); if(!e) return; const v = prompt('مبلغ الخصم بالجنيه لـ ' + e.name + ':'); if(v===null) return; const amount = Math.round((Number(v)||0)*100)/100; if(!(amount>0)){ toast('مبلغ مش صح'); return; } const reason = prompt('السبب (بيظهر في كشف المرتب):') || ''; if(!reason){ toast('لازم سبب'); return; }

@@ -319,8 +319,9 @@
       t._h = setTimeout(function(){ t.style.opacity = '0'; }, 2600);
     }catch(e){ console.warn('cc toast', msg); }
   }
-  function esc2(s){ return String(s == null ? '' : s).replace(/[&<>"]/g,
-    function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  // 🛡️ v789 (فحص 27-11): لازم يتنضّف الـ ' كمان — معرّف المحادثة (بيكتبه تطبيق العميلة) بيدخل جوه onclick='…'
+  function esc2(s){ return String(s == null ? '' : s).replace(/[&<>"'`\\]/g,
+    function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','`':'&#96;','\\':'&#92;'}[c]; }); }
 
   /* ============================================================
      ١) الحقن — زرار عايم + شاشة
@@ -591,6 +592,8 @@
       var t = c.lastAt ? ((typeof window.chatListStamp === 'function')
                 ? window.chatListStamp(Number(c.lastAt), now)
                 : new Date(Number(c.lastAt)).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })) : '';
+      // 🛡️ v789: المعرّف بيدخل جوه نص JS في onclick → لازم يبقى حروف آمنة بس (تنضيف HTML مش كفاية هنا: المتصفح بيفكّه قبل التنفيذ)
+      if(!/^[A-Za-z0-9_+.:@-]{1,80}$/.test(String(c.id))) return;
       html += '<div class="ccConv" onclick="ccOpenConv(\'' + esc2(c.id) + '\')">'
         + '<div class="ci"><div class="cn">' + esc2(c.name || c.phone || c.id) + ' ' + brand
         + (c.blocked === true ? ' <span class="ccChip" style="background:#3a2222;color:#E5484D;">محظورة</span>' : '')

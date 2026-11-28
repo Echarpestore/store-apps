@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pos-shell-v788';
+const CACHE_NAME = 'pos-shell-v790';
 
 // ⚠️ مفيش skipWaiting تلقائي.
 // النسخة الجديدة بتنزل في الخلفية وتستنى، والصفحة هي اللي بتقرر

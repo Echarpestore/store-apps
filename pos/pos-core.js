@@ -1542,6 +1542,9 @@ function enterDashboard(){
   const roleLabel = myPerms().label || 'كاشير';
   // 💾 لو البرنامج اتقفل أو حصل Logout وفيه فاتورة غير مكتملة، رجّع أصنافها للفرع نفسه.
   try{ if(typeof restoreSaleDraft === 'function') restoreSaleDraft(); }catch(e){}
+  // 🛍️ v789 (فحص 27-11): الأوردرات الأونلاين كانت بتتسمّع بس لما حد يفتح شاشتها → أوردر جديد ميبانش على الكاشير
+  //    لحد ما ينتهي بعد 24 ساعة. دلوقتي المستمع بيبدأ مع الدخول والبادچ بيظهر لوحده.
+  try{ if(typeof startOrdersListener === 'function') startOrdersListener(); }catch(e){}
   document.getElementById('dashWho').textContent = (currentEmployee.name || currentEmployee.id) + ' — ' + roleLabel + ' · 🏬 ' + currentBranch;
   refreshHeldCount();
 
