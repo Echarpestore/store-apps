@@ -1,0 +1,11 @@
+{
+  "name": "راضي؟ — تقييم العملاء",
+  "short_name": "راضي؟",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#101216",
+  "theme_color": "#2370cd",
+  "lang": "ar",
+  "dir": "rtl",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>راضي؟ — شاشة التقييم</title>
+<meta name="theme-color" content="#101216">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#101216; --panel:#1a1d23; --panel2:#242830; --ink:#f1f2f4; --sub:#9aa0ab; --line:#2c3038;
+    --f1:#dc3c3d; --f2:#c98f12; --f3:#2a9c8a; --f4:#338ced;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;margin:0}
+  body{background:var(--bg);color:var(--ink);font-family:'Cairo',system-ui,sans-serif;overflow:hidden;user-select:none;-webkit-user-select:none}
+  .screen{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;padding:5vh 5vw;text-align:center}
+  .screen.on{display:flex;animation:in .25s ease}
+  @keyframes in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  #brand{position:absolute;top:18px;inset-inline-start:24px;font-size:15px;color:var(--sub);font-weight:600}
+  #net{position:absolute;top:20px;inset-inline-end:24px;font-size:13px;color:var(--sub);display:none}
+  #net.off{display:block}
+  #corner{position:absolute;top:0;inset-inline-end:0;width:90px;height:90px;z-index:5}
+  h1{font-size:clamp(28px,5vw,60px);font-weight:900;line-height:1.3;margin:0 0 6vh;max-width:1000px}
+  h2{font-size:clamp(24px,3.8vw,44px);font-weight:900;margin:0 0 4vh;line-height:1.35}
+  .faces{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(12px,2.4vw,32px);width:100%;max-width:1150px}
+  .face{background:var(--panel);border:2px solid var(--line);border-radius:28px;padding:3vh 1vw 2.4vh;cursor:pointer;
+    display:flex;flex-direction:column;align-items:center;gap:1.6vh;transition:transform .12s ease,border-color .12s;font:inherit;color:inherit}
+  .face svg{width:min(17vw,30vh);height:min(17vw,30vh);display:block}
+  .face span{font-size:clamp(17px,2.4vw,28px);font-weight:700}
+  .face:active{transform:scale(.95)}
+  .face.picked{border-color:var(--ink);transform:scale(1.04)}
+  .chips{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;max-width:1000px}
+  .chip{background:var(--panel2);border:2px solid var(--line);color:var(--ink);font:inherit;font-size:clamp(18px,2.4vw,26px);font-weight:700;
+    padding:16px 28px;border-radius:999px;cursor:pointer;min-height:64px}
+  .chip:active{transform:scale(.96)}
+  .skip{margin-top:5vh;background:none;border:none;color:var(--sub);font:inherit;font-size:clamp(16px,2vw,22px);text-decoration:underline;cursor:pointer;padding:12px 20px}
+  .row{display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
+  .btn{background:var(--ink);color:var(--bg);border:none;font:inherit;font-size:clamp(18px,2.2vw,24px);font-weight:900;padding:16px 40px;border-radius:16px;cursor:pointer;min-height:64px}
+  .btn.ghost{background:var(--panel2);color:var(--ink)}
+  .phone{font-size:clamp(30px,5vw,54px);font-weight:900;letter-spacing:.08em;direction:ltr;min-height:1.4em;margin-bottom:2vh;font-variant-numeric:tabular-nums}
+  .phone.err{color:var(--f1)}
+  .pad{display:grid;grid-template-columns:repeat(3,minmax(80px,120px));gap:12px;direction:ltr}
+  .pad button{background:var(--panel2);border:none;color:var(--ink);font:inherit;font-size:30px;font-weight:700;height:min(11vh,84px);border-radius:16px;cursor:pointer}
+  .pad button:active{background:var(--line)}
+  .hint{color:var(--sub);font-size:clamp(14px,1.7vw,19px);margin-top:2vh}
+  .thanks-face svg{width:min(26vw,34vh);height:min(26vw,34vh)}
+  .bar{position:absolute;bottom:0;inset-inline-start:0;height:5px;background:var(--sub);opacity:.5;width:0}
+  .bar.run{animation:shrink linear forwards}
+  @keyframes shrink{from{width:100%}to{width:0}}
+  #lock .pad button{height:70px}
+  .menu{display:flex;flex-direction:column;gap:14px;min-width:min(420px,90vw)}
+  @media (max-width:640px) and (orientation:portrait){
+    .faces{grid-template-columns:repeat(2,1fr)}
+    .face svg{width:30vw;height:30vw}
+  }
+</style>
+</head>
+<body>
+<div id="brand"></div>
+<div id="net">⚠️ مفيش نت — التقييمات محفوظة وهتتبعت لوحدها</div>
+<div id="corner" aria-hidden="true"></div>
+
+<section class="screen" id="s-ask">
+  <h1 id="q"></h1>
+  <div class="faces" id="faces"></div>
+</section>
+
+<section class="screen" id="s-reason">
+  <h2 id="reasonQ"></h2>
+  <div class="chips" id="chips"></div>
+  <button class="skip" id="skipReason">مفيش حاجة معيّنة</button>
+</section>
+
+<section class="screen" id="s-call">
+  <h2>نأسف جدًا 🙏<br>تحب مدير الفرع يكلّمك ويحل المشكلة؟</h2>
+  <div class="row">
+    <button class="btn" id="callYes">أيوه، كلّمني</button>
+    <button class="btn ghost" id="callNo">لا، شكرًا</button>
+  </div>
+</section>
+
+<section class="screen" id="s-phone">
+  <h2>اكتب رقم موبايلك</h2>
+  <div class="phone" id="phoneOut">&nbsp;</div>
+  <div class="pad" id="pad"></div>
+  <div class="row" style="margin-top:3vh">
+    <button class="btn" id="phoneOk">ابعت</button>
+    <button class="btn ghost" id="phoneSkip">رجوع</button>
+  </div>
+  <div class="hint">رقمك مش هيظهر لحد غير الإدارة، ومش هنبعتلك إعلانات.</div>
+</section>
+
+<section class="screen" id="s-thanks">
+  <div class="thanks-face" id="thanksFace"></div>
+  <h2 id="thanksMsg" style="margin-top:3vh"></h2>
+</section>
+
+<section class="screen" id="s-empty">
+  <h2 id="emptyMsg">الشاشة دي مش متوصّلة بنقطة تقييم</h2>
+  <a class="btn" href="index.html" style="text-decoration:none">افتح لوحة التحكم</a>
+</section>
+
+<section class="screen" id="lock">
+  <h2 id="lockTitle">رقم سري الإدارة</h2>
+  <div class="phone" id="pinOut">&nbsp;</div>
+  <div class="pad" id="pinPad"></div>
+  <button class="skip" id="lockCancel">إلغاء</button>
+</section>
+
+<section class="screen" id="s-menu">
+  <h2>إعدادات الشاشة</h2>
+  <div class="menu">
+    <button class="btn" id="mFull">ملء الشاشة</button>
+    <a class="btn ghost" id="mDash" href="index.html" style="text-decoration:none">لوحة التحكم</a>
+    <button class="btn ghost" id="mBack">رجوع للتقييم</button>
+  </div>
+</section>
+
+<div class="bar" id="bar"></div>
+
+<script src="rady-config.js"></script>
+<script src="rady-core.js"></script>
+<script src="rady-store.js"></script>
+<script>
+(function(){
+  'use strict';
+  var C = RadyCore, store = RadyStore.create(), P = RadyStore.params();
+  var point = null, tenant = null, cur = null, timer = null;
+  var RECENT_KEY = 'rady_recent_' + (P.p || '');
+  var $ = function(id){ return document.getElementById(id); };
+
+  /* ---------- الوشوش (رسم أصلي، SVG) ---------- */
+  var MOUTH = {
+    1: 'M34 76 Q50 60 66 76',
+    2: 'M36 72 Q50 66 64 72',
+    3: 'M35 66 Q50 76 65 66',
+    4: 'M30 62 Q50 86 70 62 Z'
+  };
+  function faceSVG(v){
+    var col = 'var(--f' + v + ')';
+    var brows = v === 1 ? '<path d="M30 36 L43 41 M70 36 L57 41" stroke="#101216" stroke-width="5" stroke-linecap="round"/>' : '';
+    var eyes = v === 4
+      ? '<path d="M31 46 Q37 38 43 46 M57 46 Q63 38 69 46" stroke="#101216" stroke-width="5" fill="none" stroke-linecap="round"/>'
+      : '<circle cx="37" cy="47" r="5.5" fill="#101216"/><circle cx="63" cy="47" r="5.5" fill="#101216"/>';
+    var mouth = v === 4
+      ? '<path d="' + MOUTH[4] + '" fill="#101216"/>'
+      : '<path d="' + MOUTH[v] + '" stroke="#101216" stroke-width="5.5" fill="none" stroke-linecap="round"/>';
+    return '<svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46" fill="' + col + '"/>' + brows + eyes + mouth + '</svg>';
+  }
+
+  function show(id){
+    Array.prototype.forEach.call(document.querySelectorAll('.screen'), function(s){ s.classList.toggle('on', s.id === id); });
+  }
+  function countdown(ms, fn){
+    clearTimeout(timer);
+    var b = $('bar'); b.classList.remove('run'); void b.offsetWidth;
+    if (ms) { b.style.animationDuration = ms + 'ms'; b.classList.add('run'); timer = setTimeout(fn, ms); }
+  }
+
+  function recent(){ try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch(e){ return []; } }
+  function pushRecent(ts){
+    var r = recent().filter(function(t){ return ts - t < 60000; }); r.push(ts);
+    try { localStorage.setItem(RECENT_KEY, JSON.stringify(r.slice(-20))); } catch(e){}
+  }
+
+  /* ---------- الدورة ---------- */
+  function ask(){
+    cur = null; countdown(0);
+    Array.prototype.forEach.call(document.querySelectorAll('.face'), function(f){ f.classList.remove('picked'); });
+    show('s-ask');
+  }
+  function pick(v){
+    var now = Date.now();
+    cur = C.buildVote({ v: v }, { now: now, pointId: point.id, cutoffHour: tenant.cutoffHour, recentTs: recent() });
+    pushRecent(now);
+    document.querySelector('.face[data-v="' + v + '"]').classList.add('picked');
+    if (cur.flag) return finish();          // ضغط سريع/متكرر: بنسجّله ومنطوّلش
+    var list = v <= 2 ? (point.bad || []) : (point.good || []);
+    if (list.length) setTimeout(function(){ reasons(list, v); }, 180);
+    else afterReason();
+  }
+  function reasons(list, v){
+    $('reasonQ').textContent = v <= 2 ? 'إيه أكتر حاجة ضايقتك؟' : 'إيه أكتر حاجة عجبتك؟';
+    var box = $('chips'); box.innerHTML = '';
+    list.forEach(function(r){
+      var b = document.createElement('button'); b.className = 'chip'; b.textContent = r;
+      b.onclick = function(){ cur.reason = r; afterReason(); };
+      box.appendChild(b);
+    });
+    show('s-reason');
+    countdown(12000, afterReason);
+  }
+  function afterReason(){
+    if (cur.v === 1 && point.callback) { show('s-call'); countdown(15000, finish); }
+    else finish();
+  }
+  var digits = '';
+  function phoneScreen(){
+    digits = ''; renderPhone(false); show('s-phone'); countdown(45000, finish);
+  }
+  function renderPhone(err){
+    var o = $('phoneOut'); o.textContent = digits || '01x xxxx xxxx'; o.style.opacity = digits ? 1 : .35;
+    o.classList.toggle('err', !!err);
+  }
+  function finish(){
+    countdown(0);
+    var v = cur.v;
+    store.addVote(cur).catch(function(e){ console.error(e); });
+    $('thanksFace').innerHTML = faceSVG(v);
+    $('thanksMsg').textContent = cur.phone ? 'تمام، هنكلّمك في أقرب وقت. شكرًا إنك قلتلنا 🙏'
+      : v <= 2 ? 'شكرًا إنك قلتلنا، هنصلّحها ✋' : 'شكرًا! نوّرتنا 💙';
+    show('s-thanks');
+    setTimeout(ask, cur.phone ? 3500 : 2400);
+  }
+
+  /* ---------- لوحة الأرقام ---------- */
+  function buildPad(el, onKey){
+    ['1','2','3','4','5','6','7','8','9','⌫','0','✓'].forEach(function(k){
+      var b = document.createElement('button'); b.textContent = k; b.type = 'button';
+      if (k === '✓') b.style.visibility = 'hidden';
+      b.onclick = function(){ onKey(k); }; el.appendChild(b);
+    });
+  }
+  buildPad($('pad'), function(k){
+    countdown(45000, finish);
+    if (k === '⌫') digits = digits.slice(0, -1);
+    else if (digits.length < 11) digits += k;
+    renderPhone(false);
+  });
+  $('callYes').onclick = phoneScreen;
+  $('callNo').onclick = finish;
+  $('phoneSkip').onclick = function(){ show('s-call'); countdown(15000, finish); };
+  $('phoneOk').onclick = function(){
+    var p = C.normalizeEgPhone(digits);
+    if (!p) { renderPhone(true); $('phoneOut').textContent = 'الرقم ناقص أو غلط'; setTimeout(function(){ renderPhone(true); }, 1400); return; }
+    cur.phone = p; finish();
+  };
+  $('skipReason').onclick = afterReason;
+
+  /* ---------- قفل الإدارة: دوس مطوّل على الركن ---------- */
+  var pin = '', holdT = null;
+  var corner = $('corner');
+  corner.addEventListener('pointerdown', function(){ holdT = setTimeout(openLock, 2000); });
+  ['pointerup','pointerleave','pointercancel'].forEach(function(e){ corner.addEventListener(e, function(){ clearTimeout(holdT); }); });
+  function openLock(){ pin = ''; $('pinOut').textContent = ' '; countdown(20000, ask); show('lock'); }
+  buildPad($('pinPad'), function(k){
+    countdown(20000, ask);
+    if (k === '⌫') pin = pin.slice(0, -1); else if (pin.length < 8) pin += k;
+    $('pinOut').textContent = pin.replace(/./g, '•') || ' ';
+    if (pin === String(tenant.pin || '1234')) { countdown(30000, ask); show('s-menu'); }
+  });
+  $('lockCancel').onclick = ask;
+  $('mBack').onclick = ask;
+  $('mFull').onclick = function(){ var d = document.documentElement; (d.requestFullscreen || d.webkitRequestFullscreen || function(){}).call(d); ask(); };
+
+  /* ---------- الشاشة مفتوحة على طول + حالة النت ---------- */
+  var wl = null;
+  function keepAwake(){ if (navigator.wakeLock && !wl) navigator.wakeLock.request('screen').then(function(l){ wl = l; l.addEventListener('release', function(){ wl = null; }); }).catch(function(){}); }
+  document.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'visible') keepAwake(); });
+  document.addEventListener('pointerdown', keepAwake, { once: true });
+  function net(){ $('net').classList.toggle('off', store.mode === 'cloud' && !navigator.onLine); }
+  addEventListener('online', net); addEventListener('offline', net);
+
+  /* ---------- تشغيل ---------- */
+  store.ready('kiosk').then(function(){ return P.p ? store.getPoint(P.p) : null; }).then(function(r){
+    if (!r) { show('s-empty'); return; }
+    point = r.point; tenant = r.tenant || {};
+    document.title = (tenant.name || 'راضي؟') + ' — ' + point.name;
+    $('brand').textContent = (tenant.name || '') + (store.mode === 'demo' ? ' · وضع عرض' : '');
+    $('q').textContent = point.question;
+    var box = $('faces');
+    C.FACES.slice().forEach(function(f){
+      var b = document.createElement('button'); b.className = 'face'; b.dataset.v = f.v;
+      b.setAttribute('aria-label', f.label);
+      b.innerHTML = faceSVG(f.v) + '<span>' + f.label + '</span>';
+      b.onclick = function(){ if (!cur) pick(f.v); };
+      box.appendChild(b);
+    });
+    net(); ask();
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function(){});
+  }).catch(function(e){ console.error(e); $('emptyMsg').textContent = 'حصلت مشكلة في التحميل — اتأكد من النت وجرّب تاني'; show('s-empty'); });
+})();
+</script>
+</body>
+</html>

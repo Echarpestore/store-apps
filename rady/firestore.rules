@@ -1,0 +1,45 @@
+rules_version = '2';
+// «راضي؟» — كل صاحب شغل يشوف بياناته بس. التابلت يكتب تقييم جديد بس.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(t) {
+      return request.auth != null && request.auth.uid == t
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
+    match /rady_tenants/{t} {
+      allow read, write: if isOwner(t);
+      // التابلت محتاج اسم المحل والساعة الفاصلة
+      allow get: if request.auth != null;
+
+      match /points/{p} {
+        allow read: if request.auth != null;
+        allow write: if isOwner(t);
+      }
+
+      // سر التابلت — المالك بس
+      match /keys/{p} {
+        allow read, write: if isOwner(t);
+      }
+
+      match /votes/{v} {
+        allow read, delete: if isOwner(t);
+        // المالك يعلّم الشكوى «اتكلمت معاه» بس
+        allow update: if isOwner(t)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['done', 'doneAt']);
+        // أي تابلت معاه السر الصح للنقطة
+        allow create: if request.auth != null
+          && request.resource.data.keys().hasOnly(['pointId','v','ts','workday','hour','reason','phone','flag','k'])
+          && request.resource.data.v is int && request.resource.data.v >= 1 && request.resource.data.v <= 4
+          && request.resource.data.ts is int
+          && request.resource.data.ts < request.time.toMillis() + 600000
+          && request.resource.data.k is string
+          && exists(/databases/$(database)/documents/rady_tenants/$(t)/keys/$(request.resource.data.pointId))
+          && get(/databases/$(database)/documents/rady_tenants/$(t)/keys/$(request.resource.data.pointId)).data.k
+             == request.resource.data.k
+          && (!('reason' in request.resource.data) || request.resource.data.reason.size() <= 60)
+          && (!('phone' in request.resource.data) || request.resource.data.phone.matches('^01[0125][0-9]{8}$'));
+      }
+    }
+  }
+}

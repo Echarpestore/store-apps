@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>راضي؟ — لوحة التحكم</title>
+<meta name="theme-color" content="#2370cd">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    color-scheme:light;
+    --page:#f6f7f9; --surface:#ffffff; --ink:#191919; --sub:#666666; --grid:#e7e7e7; --axis:#c2c2c2;
+    --border:rgba(11,11,11,.10); --wash:#f0f2f5; --accent:#2370cd;
+    --f1:#dc3c3d; --f2:#f39a3d; --f3:#4cb7a5; --f4:#2370cd;
+    --crit:#dc3c3d; --good-ink:#006c10;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      color-scheme:dark;
+      --page:#0b0b0b; --surface:#191919; --ink:#efefef; --sub:#9c9c9c; --grid:#303030; --axis:#474747;
+      --border:rgba(255,255,255,.10); --wash:#232323; --accent:#338ced;
+      --f1:#dc3c3d; --f2:#c98f12; --f3:#2a9c8a; --f4:#338ced; --good-ink:#53c556;
+    }
+  }
+  :root[data-theme="dark"]{
+    color-scheme:dark;
+    --page:#0b0b0b; --surface:#191919; --ink:#efefef; --sub:#9c9c9c; --grid:#303030; --axis:#474747;
+    --border:rgba(255,255,255,.10); --wash:#232323; --accent:#338ced;
+    --f1:#dc3c3d; --f2:#c98f12; --f3:#2a9c8a; --f4:#338ced; --good-ink:#53c556;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--page);color:var(--ink);font-family:'Cairo',system-ui,sans-serif;font-size:15px;line-height:1.5}
+  button,input,select,textarea{font:inherit;color:inherit}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 16px 48px}
+  header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:18px 0 10px}
+  .logo{display:flex;align-items:center;gap:10px;font-weight:900;font-size:22px}
+  .logo svg{width:34px;height:34px}
+  .biz{color:var(--sub);font-weight:600}
+  .badge{font-size:12px;background:var(--wash);border:1px solid var(--border);padding:2px 10px;border-radius:999px;color:var(--sub)}
+  .sp{flex:1}
+  .tabs{display:flex;gap:4px;background:var(--wash);border-radius:12px;padding:4px}
+  .tabs button{border:none;background:none;padding:6px 14px;border-radius:9px;cursor:pointer;font-weight:700;color:var(--sub)}
+  .tabs button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px var(--border)}
+  .filters{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0 16px}
+  select,input[type=text],input[type=email],input[type=password],input[type=number],textarea{
+    background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:7px 12px;min-height:38px}
+  .btn{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-weight:700;cursor:pointer;min-height:38px;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+  .btn.ghost{background:var(--surface);color:var(--ink);border:1px solid var(--border)}
+  .btn.sm{padding:4px 12px;min-height:32px;font-size:14px}
+  .grid{display:grid;gap:14px}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  .g2{grid-template-columns:1fr 1fr}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px 18px;min-width:0}
+  .card h3{margin:0 0 2px;font-size:16px}
+  .card .cap{color:var(--sub);font-size:13px;margin:0 0 12px}
+  .tile .lbl{color:var(--sub);font-size:13px;font-weight:600}
+  .tile .val{font-size:34px;font-weight:900;line-height:1.2}
+  .tile .delta{font-size:13px;color:var(--sub)}
+  .tile .delta.up{color:var(--good-ink)} .tile .delta.down{color:var(--crit)}
+  .hero .val{font-size:46px}
+  .alert{display:none;background:color-mix(in srgb,var(--crit) 12%,var(--surface));border:1px solid var(--crit);border-radius:14px;padding:12px 16px;margin-bottom:14px;font-weight:700}
+  .alert.on{display:flex;gap:10px;align-items:center}
+  /* توزيع الوشوش */
+  .dist{display:flex;height:34px;gap:2px;border-radius:8px;overflow:hidden;margin:6px 0 10px}
+  .dist div{min-width:2px;transition:flex .3s}
+  .legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--sub)}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-inline-end:6px;vertical-align:middle}
+  .legend b{color:var(--ink)}
+  /* الرسوم */
+  .chart{position:relative;width:100%}
+  .chart svg{width:100%;display:block;overflow:visible}
+  .chart text{fill:var(--sub);font-size:11px;font-variant-numeric:tabular-nums}
+  .tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    padding:8px 10px;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,.12);display:none;z-index:3;min-width:140px;white-space:nowrap}
+  .tip .t{font-weight:700;margin-bottom:2px}
+  .tip i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-inline-end:6px}
+  /* الأسباب */
+  .rlist{display:flex;flex-direction:column;gap:8px}
+  .rrow{display:grid;grid-template-columns:minmax(90px,38%) 1fr 34px;gap:10px;align-items:center;font-size:14px}
+  .rrow .b{height:12px;border-radius:0 4px 4px 0;min-width:2px}
+  [dir=rtl] .rrow .b{border-radius:4px 0 0 4px}
+  .rrow .n{color:var(--sub);text-align:end;font-variant-numeric:tabular-nums}
+  .empty{color:var(--sub);font-size:14px;padding:12px 0}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:start;padding:8px 6px;border-bottom:1px solid var(--grid)}
+  th{color:var(--sub);font-weight:600;font-size:13px}
+  td.num{font-variant-numeric:tabular-nums}
+  tr.done td{opacity:.5}
+  details summary{cursor:pointer;color:var(--sub);font-size:13px;margin-top:8px}
+  .toast{position:fixed;bottom:20px;inset-inline-start:50%;transform:translateX(50%);background:var(--ink);color:var(--surface);
+    padding:10px 18px;border-radius:12px;font-weight:700;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9}
+  .toast.on{opacity:1}
+  /* الإعدادات */
+  .pt{border:1px solid var(--border);border-radius:14px;padding:14px;display:grid;gap:10px;background:var(--surface)}
+  .pt .r{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--sub);font-weight:600}
+  label.f input,label.f select,label.f textarea{color:var(--ink);font-weight:400;font-size:15px}
+  textarea{min-height:84px;resize:vertical}
+  .link{direction:ltr;font-size:12px;color:var(--sub);word-break:break-all;background:var(--wash);border-radius:8px;padding:6px 10px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  #login{max-width:380px;margin:12vh auto;display:none}
+  .hidden{display:none!important}
+  @media (max-width:900px){ .g4{grid-template-columns:1fr 1fr} .g2{grid-template-columns:1fr} }
+  @media (max-width:520px){ .hero .val{font-size:38px} .tile .val{font-size:28px} .pt .r{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="login" class="card">
+    <h3 style="font-size:22px;margin-bottom:8px">راضي؟ — دخول صاحب الشغل</h3>
+    <div class="grid" style="gap:10px">
+      <input type="text" id="lBiz" placeholder="اسم المحل (للحساب الجديد بس)">
+      <input type="email" id="lEmail" placeholder="الإيميل" autocomplete="email">
+      <input type="password" id="lPass" placeholder="الباسورد" autocomplete="current-password">
+      <div class="row"><button class="btn" id="lIn">دخول</button><button class="btn ghost" id="lUp">حساب جديد</button></div>
+      <div id="lErr" style="color:var(--crit);font-size:14px"></div>
+    </div>
+  </div>
+
+  <div id="app" class="hidden">
+  <header>
+    <div class="logo"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46" fill="var(--f4)"/><circle cx="37" cy="45" r="6" fill="#fff"/><circle cx="63" cy="45" r="6" fill="#fff"/><path d="M33 62 Q50 78 67 62" stroke="#fff" stroke-width="6" fill="none" stroke-linecap="round"/></svg>راضي؟</div>
+    <span class="biz" id="bizName"></span>
+    <span class="badge" id="modeBadge"></span>
+    <span class="sp"></span>
+    <div class="tabs" role="tablist">
+      <button class="on" data-tab="dash">التقارير</button>
+      <button data-tab="setup">النقاط والإعدادات</button>
+    </div>
+  </header>
+
+  <section id="tab-dash">
+    <div class="filters">
+      <div class="tabs" id="range">
+        <button data-r="today" class="on">النهارده</button>
+        <button data-r="yesterday">امبارح</button>
+        <button data-r="7">7 أيام</button>
+        <button data-r="30">30 يوم</button>
+      </div>
+      <select id="pointSel" aria-label="النقطة"></select>
+      <span class="sp"></span>
+      <button class="btn ghost sm" id="csv">⬇︎ تصدير Excel (CSV)</button>
+    </div>
+
+    <div class="alert" id="alert" role="alert"></div>
+
+    <div class="grid g4">
+      <div class="card tile hero"><div class="lbl">مؤشر الرضا (من 100)</div><div class="val" id="kIndex">—</div><div class="delta" id="kIndexD"></div></div>
+      <div class="card tile"><div class="lbl">عدد التقييمات</div><div class="val" id="kTotal">—</div><div class="delta" id="kTotalD"></div></div>
+      <div class="card tile"><div class="lbl">نسبة الراضيين</div><div class="val" id="kHappy">—</div><div class="delta" id="kHappyD"></div></div>
+      <div class="card tile"><div class="lbl">محتاجين حد يكلّمهم</div><div class="val" id="kCalls">—</div><div class="delta" id="kFlag"></div></div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h3>الناس قالت إيه</h3>
+      <div class="dist" id="dist"></div>
+      <div class="legend" id="distLegend"></div>
+    </div>
+
+    <div class="grid g2" style="margin-top:14px">
+      <div class="card">
+        <h3 id="trendTitle">مؤشر الرضا يوم بيوم</h3>
+        <p class="cap" id="trendCap"></p>
+        <div class="chart" id="trend"></div>
+        <details><summary>عرض كجدول</summary><div id="trendTable"></div></details>
+      </div>
+      <div class="card">
+        <h3>التقييمات بالساعة</h3>
+        <p class="cap">إمتى الناس بتتضايق؟ الساعات بتوقيت القاهرة</p>
+        <div class="chart" id="hours"></div>
+        <div class="legend" id="hoursLegend" style="margin-top:8px"></div>
+      </div>
+    </div>
+
+    <div class="grid g2" style="margin-top:14px">
+      <div class="card"><h3>إيه اللي بيضايق الناس</h3><p class="cap">من التقييمات «وحش جدًا» و«مش حلو»</p><div class="rlist" id="rBad"></div></div>
+      <div class="card"><h3>إيه اللي عاجب الناس</h3><p class="cap">من التقييمات «كويس» و«ممتاز»</p><div class="rlist" id="rGood"></div></div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h3>شكاوي عايزة اتصال</h3>
+      <p class="cap">ناس قيّمت «وحش جدًا» وسابت رقمها. كلّمهم النهارده — العميل اللي بتحل مشكلته بيرجع.</p>
+      <div id="calls"></div>
+    </div>
+
+    <div class="card" style="margin-top:14px" id="pointsCard">
+      <h3>مقارنة النقاط</h3>
+      <p class="cap">كل تابلت أو مكان تقييم لوحده</p>
+      <div id="pointsTable"></div>
+    </div>
+  </section>
+
+  <section id="tab-setup" class="hidden">
+    <div class="card">
+      <h3>بيانات الشغل</h3>
+      <div class="grid g4" style="margin-top:10px">
+        <label class="f">اسم المحل / الشركة<input type="text" id="sName"></label>
+        <label class="f">الرقم السري للتابلت<input type="text" id="sPin" inputmode="numeric" maxlength="8"></label>
+        <label class="f">يوم الشغل بيبدأ الساعة<select id="sCut"></select></label>
+        <div class="row" style="align-items:flex-end"><button class="btn" id="saveCfg">حفظ</button></div>
+      </div>
+      <p class="cap" style="margin-top:10px">الرقم السري بيقفل التابلت: دوس مطوّل على الركن الشمال فوق ثانيتين عشان تفتح الإعدادات. يوم الشغل: لو المحل بيقفل بعد نص الليل، التقييمات لحد الساعة دي بتتحسب على اليوم اللي قبله.</p>
+    </div>
+
+    <div class="row" style="margin:18px 0 10px"><h3 style="margin:0">نقاط التقييم</h3><span class="sp"></span><button class="btn ghost sm" id="addPt">+ نقطة جديدة</button></div>
+    <div class="grid" id="pts"></div>
+
+    <div class="card" style="margin-top:18px" id="demoBox">
+      <h3>وضع العرض</h3>
+      <p class="cap">كل البيانات على الجهاز ده بس. افتح التابلت في تاب تاني وقيّم — هتشوف اللوحة بتتحدّث لايف.</p>
+      <div class="row"><button class="btn ghost" id="seed">املا بيانات تجريبية (30 يوم)</button><button class="btn ghost" id="clear">امسح كل التقييمات</button></div>
+    </div>
+    <div class="row" style="margin-top:18px"><button class="btn ghost sm" id="logout">خروج</button></div>
+  </section>
+  </div>
+</div>
+<div class="tip" id="tip"></div>
+<div class="toast" id="toast"></div>
+
+<script src="rady-config.js"></script>
+<script src="rady-core.js"></script>
+<script src="rady-store.js"></script>
+<script>
+(function(){
+  'use strict';
+  var C = RadyCore, store = RadyStore.create();
+  var $ = function(id){ return document.getElementById(id); };
+  var cfg = null, votes = [], range = 'today', pointFilter = '', callsAll = false;
+  var FACES = C.FACES;
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function nf(n){ return n == null ? '—' : Number(n).toLocaleString('en-US'); }
+  function pointsById(){ var o = {}; (cfg.points || []).forEach(function(p){ o[p.id] = p; }); return o; }
+  function toast(msg){ var t = $('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(t._h); t._h = setTimeout(function(){ t.classList.remove('on'); }, 2200); }
+
+  /* ---------- المدة ---------- */
+  function today(){ return C.workday(Date.now(), cfg.cutoffHour); }
+  function span(r){
+    var t = today();
+    if (r === 'today') return { from: t, to: t };
+    if (r === 'yesterday') { var y = C.addDays(t, -1); return { from: y, to: y }; }
+    var n = +r; return { from: C.addDays(t, -(n - 1)), to: t };
+  }
+  function prevSpan(s){
+    var days = C.dayRange(s.from, s.to).length;
+    return { from: C.addDays(s.from, -days), to: C.addDays(s.from, -1) };
+  }
+
+  /* ---------- الرسم ---------- */
+  function render(){
+    if (!cfg) return;
+    var s = span(range), ps = prevSpan(s);
+    var opt = { fromDay: s.from, toDay: s.to, pointId: pointFilter || null, cutoffHour: cfg.cutoffHour };
+    var a = C.aggregate(votes, opt);
+    var b = C.aggregate(votes, { fromDay: ps.from, toDay: ps.to, pointId: pointFilter || null, cutoffHour: cfg.cutoffHour });
+    var vs = range === 'today' ? 'عن امبارح' : range === 'yesterday' ? 'عن اليوم اللي قبله' : 'عن المدة اللي قبلها';
+
+    $('kIndex').textContent = a.index == null ? '—' : nf(a.index);
+    delta($('kIndexD'), a.index, b.index, vs, '');
+    $('kTotal').textContent = nf(a.total);
+    delta($('kTotalD'), a.total, b.total, vs, '', true);
+    $('kHappy').textContent = a.happy == null ? '—' : nf(a.happy) + '%';
+    delta($('kHappyD'), a.happy, b.happy, vs, ' نقطة');
+    var open = a.callbacks.filter(function(v){ return !v.done; }).length;
+    $('kCalls').textContent = nf(open);
+    $('kFlag').textContent = a.flagged ? nf(a.flagged) + ' ضغطة سريعة مستبعدة من المؤشر' : 'مفيش تلاعب ملحوظ';
+
+    // التوزيع
+    var dist = $('dist'), leg = $('distLegend'); dist.innerHTML = ''; leg.innerHTML = '';
+    FACES.slice().reverse().forEach(function(f){
+      var c = a.counts[f.v] || 0, pct = a.total ? Math.round(c / a.total * 100) : 0;
+      var d = document.createElement('div'); d.style.flex = a.total ? c : 1; d.style.background = a.total ? 'var(--f' + f.v + ')' : 'var(--wash)';
+      d.title = f.label + ': ' + c; dist.appendChild(d);
+      leg.insertAdjacentHTML('beforeend', '<span><i style="background:var(--f' + f.v + ')"></i>' + f.label + ' <b>' + nf(pct) + '%</b> (' + nf(c) + ')</span>');
+    });
+
+    // الاتجاه
+    if (s.from === s.to) {
+      $('trendTitle').textContent = 'مؤشر الرضا ساعة بساعة';
+      $('trendCap').textContent = 'كل نقطة = متوسط الساعة (الساعات اللي فيها 3 تقييمات أو أكتر)';
+      var hrs = hourOrder(), pts = hrs.map(function(h){ var c = a.byHour[h]; var t = c ? c[1]+c[2]+c[3]+c[4] : 0; return { k: h, label: hourLabel(h), n: t, y: t >= 3 ? C.satisfactionIndex(c) : null }; });
+      lineChart($('trend'), pts);
+      trendTable(pts, 'الساعة');
+    } else {
+      $('trendTitle').textContent = 'مؤشر الرضا يوم بيوم';
+      $('trendCap').textContent = 'من 100 — كل ما يعلى أحسن';
+      var pts2 = C.dayRange(s.from, s.to).map(function(d){ var c = a.byDay[d]; var t = c ? c[1]+c[2]+c[3]+c[4] : 0;
+        return { k: d, label: C.weekdayAr(d) + ' ' + +d.slice(8) + '/' + +d.slice(5, 7), short: +d.slice(8) + '/' + +d.slice(5, 7), n: t, y: t ? C.satisfactionIndex(c) : null }; });
+      lineChart($('trend'), pts2);
+      trendTable(pts2, 'اليوم');
+    }
+
+    hourChart($('hours'), a);
+    reasons($('rBad'), C.topReasons(a.reasonsBad, 6), 'var(--f1)');
+    reasons($('rGood'), C.topReasons(a.reasonsGood, 6), 'var(--f4)');
+    calls(a.callbacks);
+    pointsTable(a);
+  }
+
+  function delta(el, cur, prev, vs, unit, isCount){
+    el.className = 'delta';
+    if (cur == null || prev == null || (isCount && !prev)) { el.textContent = prev == null ? 'مفيش بيانات للمقارنة' : ''; return; }
+    var d = cur - prev;
+    if (isCount) { var p = Math.round(d / prev * 100); el.textContent = (p >= 0 ? '▲ ' : '▼ ') + nf(Math.abs(p)) + '% ' + vs; return; }
+    el.classList.add(d > 0 ? 'up' : d < 0 ? 'down' : '');
+    el.textContent = d === 0 ? 'زي ' + vs.replace('عن ', '') : (d > 0 ? '▲ ' : '▼ ') + nf(Math.abs(d)) + unit + ' ' + vs;
+  }
+
+  function hourOrder(){ var out = [], c = cfg.cutoffHour || 0; for (var i = 0; i < 24; i++) out.push((c + i) % 24); return out; }
+  function hourLabel(h){ var x = h % 12 || 12; return x + (h < 12 ? 'ص' : 'م'); }
+
+  var tip = $('tip');
+  function showTip(host, x, y, html){
+    tip.innerHTML = html; tip.style.display = 'block';
+    var r = host.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
+    var left = r.left + window.scrollX + x - tw / 2, top = r.top + window.scrollY + y - th - 12;
+    left = Math.max(8, Math.min(left, window.scrollX + document.documentElement.clientWidth - tw - 8));
+    if (top < window.scrollY + 4) top = r.top + window.scrollY + y + 16;
+    tip.style.left = left + 'px'; tip.style.top = top + 'px';
+  }
+  function hideTip(){ tip.style.display = 'none'; }
+
+  /* خط واحد (مؤشر الرضا) — المحور الأفقي بيتعكس عشان الوقت يمشي من اليمين للشمال */
+  function lineChart(host, pts){
+    var W = Math.max(280, host.clientWidth || 500), H = 200, L = 12, R = 34, T = 12, B = 26;
+    var n = pts.length, iw = W - L - R, ih = H - T - B;
+    var X = function(i){ return W - R - (n === 1 ? iw / 2 : i * iw / (n - 1)); };
+    var Y = function(v){ return T + ih - v / 100 * ih; };
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" height="' + H + '" role="img" aria-label="مؤشر الرضا">';
+    [0, 50, 100].forEach(function(g){ svg += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(g) + '" y2="' + Y(g) + '" stroke="var(--' + (g ? 'grid' : 'axis') + ')" stroke-width="1"/><text x="' + (W - R + 6) + '" y="' + (Y(g) + 4) + '" text-anchor="start">' + g + '</text>'; });
+    var seg = '', any = false;
+    pts.forEach(function(p, i){
+      if (p.y == null) { seg += ' '; return; }
+      any = true;
+      seg += (i === 0 || pts[i - 1].y == null ? 'M' : 'L') + X(i).toFixed(1) + ' ' + Y(p.y).toFixed(1);
+    });
+    svg += '<path d="' + seg + '" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+    pts.forEach(function(p, i){ if (p.y != null && (n <= 31)) svg += '<circle cx="' + X(i) + '" cy="' + Y(p.y) + '" r="4" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>'; });
+    var step = Math.ceil(n / 7);
+    pts.forEach(function(p, i){ if (i % step === 0 || i === n - 1) svg += '<text x="' + X(i) + '" y="' + (H - 6) + '" text-anchor="middle">' + esc(p.short || p.label) + '</text>'; });
+    svg += '<line id="xh" y1="' + T + '" y2="' + (T + ih) + '" stroke="var(--axis)" stroke-width="1" style="display:none"/>';
+    svg += '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="transparent"/></svg>';
+    host.innerHTML = any ? svg : '<div class="empty">مفيش تقييمات كفاية في المدة دي</div>';
+    if (!any) return;
+    var el = host.querySelector('svg'), xh = el.querySelector('#xh');
+    el.onpointermove = function(e){
+      var r = el.getBoundingClientRect(), x = (e.clientX - r.left) * W / r.width;
+      var i = n === 1 ? 0 : Math.round((W - R - x) / (iw / (n - 1))); i = Math.max(0, Math.min(n - 1, i));
+      var p = pts[i]; xh.setAttribute('x1', X(i)); xh.setAttribute('x2', X(i)); xh.style.display = '';
+      showTip(host, X(i) * r.width / W, (p.y == null ? Y(50) : Y(p.y)) * r.height / H,
+        '<div class="t">' + esc(p.label) + '</div>' + (p.y == null ? 'مفيش تقييمات كفاية' : 'المؤشر: <b>' + nf(p.y) + '</b>') + '<br>' + nf(p.n) + ' تقييم');
+    };
+    el.onpointerleave = function(){ xh.style.display = 'none'; hideTip(); };
+  }
+  function trendTable(pts, head){
+    var h = '<table><tr><th>' + head + '</th><th>المؤشر</th><th>عدد التقييمات</th></tr>';
+    pts.forEach(function(p){ if (p.n) h += '<tr><td>' + esc(p.label) + '</td><td class="num">' + (p.y == null ? '—' : nf(p.y)) + '</td><td class="num">' + nf(p.n) + '</td></tr>'; });
+    $('trendTable').innerHTML = h + '</table>';
+  }
+
+  /* أعمدة متكدّسة بالساعة — ترتيب الطبقات ثابت: وحش جدًا تحت … ممتاز فوق */
+  function hourChart(host, a){
+    var hrs = hourOrder().filter(function(h){ return a.byHour[h]; });
+    if (!hrs.length) { host.innerHTML = '<div class="empty">مفيش تقييمات في المدة دي</div>'; $('hoursLegend').innerHTML = ''; return; }
+    // من أول ساعة فيها تقييمات لآخر ساعة، من غير فجوات
+    var all = hourOrder(), i0 = all.indexOf(hrs[0]), i1 = all.indexOf(hrs[hrs.length - 1]);
+    hrs = all.slice(i0, i1 + 1);
+    var W = Math.max(280, host.clientWidth || 500), H = 200, L = 6, R = 30, T = 10, B = 26;
+    var iw = W - L - R, ih = H - T - B, n = hrs.length, bw = iw / n, gap = Math.min(6, bw * .25);
+    var max = 0; hrs.forEach(function(h){ var c = a.byHour[h]; if (c) max = Math.max(max, c[1] + c[2] + c[3] + c[4]); });
+    var nice = Math.max(4, Math.ceil(max / 4) * 4);
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" height="' + H + '" role="img" aria-label="التقييمات بالساعة">';
+    [0, nice / 2, nice].forEach(function(g){ var y = T + ih - g / nice * ih; svg += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y + '" y2="' + y + '" stroke="var(--' + (g ? 'grid' : 'axis') + ')"/><text x="' + (W - R + 6) + '" y="' + (y + 4) + '">' + nf(g) + '</text>'; });
+    hrs.forEach(function(h, i){
+      var c = a.byHour[h] || C.emptyCounts(), x = W - R - (i + 1) * bw + gap / 2, w = bw - gap, y = T + ih;
+      FACES.forEach(function(f, k){
+        var hh = c[f.v] / nice * ih; if (!hh) return;
+        var top = y - hh;
+        var isTop = FACES.slice(k + 1).every(function(g){ return !c[g.v]; });
+        svg += isTop && hh > 4
+          ? '<path d="M' + x + ' ' + y + 'V' + (top + 4) + 'q0 -4 4 -4h' + (w - 8) + 'q4 0 4 4V' + y + 'Z" fill="var(--f' + f.v + ')"/>'
+          : '<rect x="' + x + '" y="' + top + '" width="' + w + '" height="' + Math.max(0, hh - (isTop ? 0 : 2)) + '" fill="var(--f' + f.v + ')"/>';
+        y = top;
+      });
+      if (n <= 14 || i % 2 === 0) svg += '<text x="' + (x + w / 2) + '" y="' + (H - 6) + '" text-anchor="middle">' + hourLabel(h) + '</text>';
+      svg += '<rect class="hit" data-h="' + h + '" x="' + (x - gap / 2) + '" y="' + T + '" width="' + bw + '" height="' + ih + '" fill="transparent"/>';
+    });
+    host.innerHTML = svg + '</svg>';
+    $('hoursLegend').innerHTML = FACES.map(function(f){ return '<span><i style="background:var(--f' + f.v + ')"></i>' + f.label + '</span>'; }).join('');
+    var el = host.querySelector('svg');
+    Array.prototype.forEach.call(el.querySelectorAll('.hit'), function(r){
+      r.addEventListener('pointerenter', function(){
+        var h = +r.dataset.h, c = a.byHour[h] || C.emptyCounts(), t = c[1] + c[2] + c[3] + c[4];
+        var box = el.getBoundingClientRect(), x = (+r.getAttribute('x') + +r.getAttribute('width') / 2) * box.width / W;
+        showTip(host, x, T * box.height / H + 20, '<div class="t">الساعة ' + hourLabel(h) + ' — ' + nf(t) + ' تقييم</div>' +
+          FACES.slice().reverse().map(function(f){ return '<div><i style="background:var(--f' + f.v + ')"></i>' + f.label + ': ' + nf(c[f.v]) + '</div>'; }).join('') +
+          (t ? '<div style="margin-top:4px">المؤشر: <b>' + nf(C.satisfactionIndex(c)) + '</b></div>' : ''));
+      });
+      r.addEventListener('pointerleave', hideTip);
+    });
+  }
+
+  function reasons(host, list, color){
+    if (!list.length) { host.innerHTML = '<div class="empty">لسه مفيش أسباب متسجّلة</div>'; return; }
+    var max = list[0].count;
+    host.innerHTML = list.map(function(r){
+      return '<div class="rrow"><span>' + esc(r.reason) + '</span><div class="b" style="width:' + (r.count / max * 100) + '%;background:' + color + '"></div><span class="n">' + nf(r.count) + '</span></div>';
+    }).join('');
+  }
+
+  function fmtTime(ts){ var p = C.cairoParts(ts); return p.d + '/' + p.m + ' ' + hourLabel(p.h).replace(/(\d+)/, '$1:' + (p.min < 10 ? '0' : '') + p.min); }
+  function calls(list){
+    var host = $('calls'), byId = pointsById();
+    if (!list.length) { host.innerHTML = '<div class="empty">مفيش شكاوي فيها رقم في المدة دي 👌</div>'; return; }
+    list = list.filter(function(v){ return !v.done; }).concat(list.filter(function(v){ return v.done; }));
+    var shown = callsAll ? list.slice(0, 200) : list.slice(0, 8);
+    var h = '<div style="overflow-x:auto"><table><tr><th>الوقت</th><th>النقطة</th><th>السبب</th><th>الموبايل</th><th></th></tr>';
+    shown.forEach(function(v){
+      var msg = 'أهلًا، معاك ' + (cfg.name || '') + '. شفنا تقييمك وإنك مكنتش مبسوط' + (v.reason ? ' بسبب «' + v.reason + '»' : '') + '، وعايزين نعرف حصل إيه ونصلّحه.';
+      h += '<tr class="' + (v.done ? 'done' : '') + '"><td class="num">' + fmtTime(v.ts) + '</td><td>' + esc((byId[v.pointId] || {}).name || '—') + '</td><td>' + esc(v.reason || '—') +
+        '</td><td class="num" dir="ltr" style="text-align:end">' + esc(v.phone) + '</td><td><div class="row">' +
+        '<a class="btn sm" target="_blank" rel="noopener" href="' + esc(C.waLink(v.phone, msg)) + '">واتساب</a>' +
+        '<a class="btn ghost sm" href="tel:' + esc(v.phone) + '">اتصال</a>' +
+        (v.done ? '<span class="badge">اتكلمنا ✓</span>' : '<button class="btn ghost sm" data-done="' + esc(v.id) + '">اتكلمنا</button>') + '</div></td></tr>';
+    });
+    if (list.length > 8) h += '</table></div><button class="btn ghost sm" id="callsMore" style="margin-top:10px">' + (callsAll ? 'أقل' : 'عرض الكل (' + nf(list.length) + ')') + '</button>';
+    host.innerHTML = h + (list.length > 8 ? '' : '</table></div>');
+    var more = $('callsMore'); if (more) more.onclick = function(){ callsAll = !callsAll; render(); };
+    Array.prototype.forEach.call(host.querySelectorAll('[data-done]'), function(b){
+      b.onclick = function(){
+        var id = b.dataset.done, at = Date.now();
+        store.updateVote(id, { done: true, doneAt: at }).then(function(){
+          votes.forEach(function(v){ if (v.id === id) { v.done = true; v.doneAt = at; } }); render();
+        });
+      };
+    });
+  }
+
+  function pointsTable(a){
+    var pts = cfg.points || [];
+    $('pointsCard').classList.toggle('hidden', pts.length < 2 || !!pointFilter);
+    var h = '<table><tr><th>النقطة</th><th>المؤشر</th><th>التقييمات</th><th>نسبة الراضيين</th><th>وحش جدًا</th></tr>';
+    pts.forEach(function(p){
+      var c = a.byPoint[p.id] || C.emptyCounts(), t = c[1] + c[2] + c[3] + c[4];
+      h += '<tr><td>' + esc(p.name) + '</td><td class="num"><b>' + (t ? nf(C.satisfactionIndex(c)) : '—') + '</b></td><td class="num">' + nf(t) +
+        '</td><td class="num">' + (t ? nf(C.happyShare(c)) + '%' : '—') + '</td><td class="num">' + nf(c[1]) + '</td></tr>';
+    });
+    $('pointsTable').innerHTML = h + '</table>';
+  }
+
+  /* ---------- التنبيه اللايف ---------- */
+  function checkAlerts(){
+    var now = Date.now(), msgs = [];
+    (cfg.points || []).forEach(function(p){
+      var r = C.checkAlert(votes, p.id, now);
+      if (r) msgs.push('«' + p.name + '»: ' + nf(r.bad) + ' تقييمات وحشة من ' + nf(r.all) + ' في آخر 10 دقايق');
+    });
+    var el = $('alert');
+    el.classList.toggle('on', !!msgs.length);
+    el.innerHTML = msgs.length ? '<span aria-hidden="true">⚠️</span><span>خلّي بالك — ' + esc(msgs.join(' · ')) + '. شوف إيه اللي بيحصل في المكان دلوقتي.</span>' : '';
+  }
+
+  /* ---------- الإعدادات ---------- */
+  function renderSetup(){
+    $('sName').value = cfg.name || ''; $('sPin').value = cfg.pin || '';
+    var cut = $('sCut'); cut.innerHTML = '';
+    for (var h = 0; h <= 8; h++) cut.insertAdjacentHTML('beforeend', '<option value="' + h + '"' + (h === (cfg.cutoffHour || 0) ? ' selected' : '') + '>' + (h ? hourLabel(h) : '12 بالليل') + '</option>');
+    var host = $('pts'); host.innerHTML = '';
+    cfg.points.forEach(function(p, i){
+      var types = Object.keys(C.BUSINESS_TYPES).map(function(k){ return '<option value="' + k + '"' + (k === p.type ? ' selected' : '') + '>' + C.BUSINESS_TYPES[k].label + '</option>'; }).join('');
+      var url = new URL(store.kioskUrl(p), location.href).href;
+      var d = document.createElement('div'); d.className = 'pt';
+      d.innerHTML =
+        '<div class="r"><label class="f">اسم النقطة<input type="text" data-k="name" value="' + esc(p.name) + '"></label>' +
+        '<label class="f">نوع الشغل<select data-k="type">' + types + '</select></label></div>' +
+        '<label class="f">السؤال اللي هيظهر<input type="text" data-k="question" value="' + esc(p.question) + '"></label>' +
+        '<div class="r"><label class="f">أسباب الزعل (كل سبب في سطر)<textarea data-k="bad">' + esc((p.bad || []).join('\n')) + '</textarea></label>' +
+        '<label class="f">أسباب الرضا (كل سبب في سطر، ممكن تسيبها فاضية)<textarea data-k="good">' + esc((p.good || []).join('\n')) + '</textarea></label></div>' +
+        '<label class="row" style="font-size:14px"><input type="checkbox" data-k="callback"' + (p.callback ? ' checked' : '') + '> لو حد قيّم «وحش جدًا» نسأله يسيب رقمه عشان المدير يكلّمه</label>' +
+        '<div class="link">' + esc(url) + '</div>' +
+        '<div class="row"><a class="btn sm" target="_blank" href="' + esc(url) + '">افتح شاشة التابلت</a><button class="btn ghost sm" data-copy>انسخ اللينك</button>' +
+        '<span class="sp"></span><button class="btn ghost sm" data-del>امسح النقطة</button></div>';
+      d.querySelector('[data-k=type]').onchange = function(){
+        var t = C.BUSINESS_TYPES[this.value];
+        if (confirm('نحط السؤال والأسباب الجاهزة لـ«' + t.label + '»؟')) {
+          d.querySelector('[data-k=question]').value = t.question;
+          d.querySelector('[data-k=bad]').value = t.bad.join('\n');
+          d.querySelector('[data-k=good]').value = t.good.join('\n');
+        }
+      };
+      d.querySelector('[data-copy]').onclick = function(){ (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(function(){ toast('اتنسخ ✓'); }, function(){ prompt('انسخ اللينك', url); }); };
+      d.querySelector('[data-del]').onclick = function(){ if (cfg.points.length > 1 && confirm('تمسح «' + p.name + '»؟ التقييمات القديمة هتفضل في التقارير.')) { readSetup(); cfg.points.splice(i, 1); save(); } };
+      d._p = p; host.appendChild(d);
+    });
+    $('demoBox').classList.toggle('hidden', store.mode !== 'demo');
+  }
+  function lines(s){ return s.split(/\n|،|,/).map(function(x){ return x.trim(); }).filter(Boolean).slice(0, 8); }
+  function readSetup(){
+    cfg.name = $('sName').value.trim() || 'شغلي';
+    cfg.pin = C.toLatinDigits($('sPin').value).replace(/\D/g, '') || '1234';
+    cfg.cutoffHour = +$('sCut').value;
+    Array.prototype.forEach.call($('pts').children, function(d){
+      var p = d._p;
+      p.name = d.querySelector('[data-k=name]').value.trim() || 'نقطة';
+      p.type = d.querySelector('[data-k=type]').value;
+      p.question = d.querySelector('[data-k=question]').value.trim() || C.BUSINESS_TYPES[p.type].question;
+      p.bad = lines(d.querySelector('[data-k=bad]').value);
+      p.good = lines(d.querySelector('[data-k=good]').value);
+      p.callback = d.querySelector('[data-k=callback]').checked;
+    });
+  }
+  function save(){
+    return store.saveConfig(cfg).then(function(){ toast('اتحفظ ✓'); afterCfg(); renderSetup(); }).catch(function(e){ alert('محصلش حفظ: ' + e.message); });
+  }
+  $('saveCfg').onclick = function(){ readSetup(); save(); };
+  $('addPt').onclick = function(){
+    readSetup();
+    var p = RadyStore.defaultPoint(cfg.points[0] ? cfg.points[0].type : 'shop', 'نقطة ' + (cfg.points.length + 1));
+    if (store.mode === 'cloud') p.k = RadyStore.uid(16);
+    cfg.points.push(p); save();
+  };
+  $('seed').onclick = function(){ store.seedDemo(30).then(function(n){ toast('اتملت ' + nf(n) + ' تقييم'); return reload(); }); };
+  $('clear').onclick = function(){ if (confirm('تمسح كل التقييمات؟')) store.clearVotes().then(reload); };
+  $('logout').onclick = function(){ store.signOut().then(function(){ location.reload(); }); };
+
+  /* ---------- التنقل ---------- */
+  Array.prototype.forEach.call(document.querySelectorAll('header .tabs button'), function(b){
+    b.onclick = function(){
+      document.querySelectorAll('header .tabs button').forEach(function(x){ x.classList.toggle('on', x === b); });
+      $('tab-dash').classList.toggle('hidden', b.dataset.tab !== 'dash');
+      $('tab-setup').classList.toggle('hidden', b.dataset.tab !== 'setup');
+      if (b.dataset.tab === 'setup') renderSetup(); else render();
+    };
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('#range button'), function(b){
+    b.onclick = function(){ range = b.dataset.r; document.querySelectorAll('#range button').forEach(function(x){ x.classList.toggle('on', x === b); }); try { localStorage.setItem('rady_range', range); } catch(e){} render(); };
+  });
+  $('pointSel').onchange = function(){ pointFilter = this.value; render(); };
+  $('csv').onclick = function(){
+    var s = span(range);
+    var list = votes.filter(function(v){ return v.workday >= s.from && v.workday <= s.to && (!pointFilter || v.pointId === pointFilter); });
+    var blob = new Blob([C.toCSV(list, pointsById())], { type: 'text/csv;charset=utf-8' });
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'rady-' + s.from + '_' + s.to + '.csv'; a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+  };
+  var rz; addEventListener('resize', function(){ clearTimeout(rz); rz = setTimeout(render, 150); });
+
+  function afterCfg(){
+    $('bizName').textContent = cfg.name || '';
+    $('modeBadge').textContent = store.mode === 'demo' ? 'وضع عرض — البيانات على الجهاز ده بس' : 'متوصّل بالسحابة';
+    var sel = $('pointSel'), keep = pointFilter;
+    sel.innerHTML = '<option value="">كل النقاط</option>' + cfg.points.map(function(p){ return '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>'; }).join('');
+    sel.value = keep; if (sel.value !== keep) pointFilter = '';
+  }
+  function reload(){
+    return store.loadVotes(C.addDays(today(), -62)).then(function(v){ votes = v; render(); checkAlerts(); });
+  }
+
+  function start(){
+    $('login').style.display = 'none'; $('app').classList.remove('hidden');
+    store.getConfig().then(function(c){
+      cfg = c;
+      var fresh = false;
+      if (!cfg.points || !cfg.points.length) { cfg.points = [RadyStore.defaultPoint('shop', 'المدخل')]; fresh = true; }
+      if (store.mode !== 'cloud') return fresh ? store.saveConfig(cfg) : null;
+      return store.getKeys(cfg.points).then(function(made){ if (fresh || made) return store.saveConfig(cfg); });
+    }).then(function(){
+      try { var r = localStorage.getItem('rady_range'); if (r) { range = r; document.querySelectorAll('#range button').forEach(function(x){ x.classList.toggle('on', x.dataset.r === r); }); } } catch(e){}
+      afterCfg();
+      return reload();
+    }).then(function(){
+      store.onVotes(function(fresh){
+        var have = {}; votes.forEach(function(v){ have[v.id] = 1; });
+        fresh = fresh.filter(function(v){ return !have[v.id]; });
+        if (!fresh.length) return;
+        votes = votes.concat(fresh); render(); checkAlerts();
+        var f = FACES[fresh[fresh.length - 1].v - 1];
+        toast('تقييم جديد: ' + f.label);
+      });
+      setInterval(checkAlerts, 60000);
+    }).catch(function(e){ console.error(e); alert('حصلت مشكلة: ' + e.message); });
+  }
+
+  function authErr(e){
+    var m = { 'auth/invalid-credential': 'الإيميل أو الباسورد غلط', 'auth/email-already-in-use': 'الإيميل ده عليه حساب — دوس دخول',
+      'auth/weak-password': 'الباسورد لازم 6 حروف أو أكتر', 'auth/invalid-email': 'الإيميل مش مظبوط' };
+    $('lErr').textContent = m[e.code] || e.message;
+  }
+  store.ready('owner').then(function(r){
+    if (r.signedIn) return start();
+    $('login').style.display = 'block';
+    $('lIn').onclick = function(){ store.signIn($('lEmail').value.trim(), $('lPass').value).then(start, authErr); };
+    $('lUp').onclick = function(){ store.signUp($('lEmail').value.trim(), $('lPass').value, $('lBiz').value.trim()).then(start, authErr); };
+  });
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function(){});
+})();
+</script>
+</body>
+</html>
