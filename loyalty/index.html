@@ -30,6 +30,8 @@
 <script src="../pos/chat-core.js"></script>
 <script src="../pos/tiers-core.js?v=1"></script>
 <script src="../pos/stories-app.js?v=6"></script>
+<script src="../pos/color-match-core.js?v=1"></script>
+<script src="../pos/color-match-app.js?v=1"></script>
 <!-- 🌐 محرك اللغتين — مشترك مع Glow. لازم **قبل** أي رسم عشان
      الشاشة متبدأش عربي وتقلب قدام العميلة (ومضة اللغة). -->
 <script src="../pos/i18n-core.js"></script>
@@ -2507,6 +2509,7 @@ function renderCard(){
     '</div></div>'+
     wfBannerHtml()+
     tiersSectionHtml()+
+    cmHomeHtml()+
     homeShopHtml()+
     (window.StoriesApp ? StoriesApp.storiesHtml() : '')+
     (window.StoriesApp ? StoriesApp.homeHtml() : '')+
@@ -2517,6 +2520,29 @@ function renderCard(){
   if(code){
     try{ drawBarcode('cardBarcode', code); }catch(e){ console.warn('barcode', e); }
   }
+}
+
+/* 🎨 «ألوانك» — اختبار الألوان اللي تليق على العميلة (pos/color-match-*.js · كله على الموبايل، من غير AI).
+   القطع = كل ألوان موديلات «اطلبي» · عائلة اللون من اسم اللون/القطعة. */
+var _cmInit = false, _cmMap = {};
+function cmItems(){
+  var out = []; _cmMap = {};
+  if(typeof shopModels !== 'function') return out;
+  shopModels().forEach(function(m){
+    (m.items || []).forEach(function(p){
+      if(!p || !p.img) return;
+      var id = String(p.barcode); _cmMap[id] = m;
+      out.push({ id: id, title: m.title || p.name, img: p.img, price: p.price, toneText: (p.colorName || '') + ' ' + (p.baseName || p.name || '') });
+    });
+  });
+  return out;
+}
+function cmHomeHtml(){
+  if(!window.ColorMatchApp || !currentCustomer) return '';
+  if(!_cmInit){ _cmInit = true; ColorMatchApp.init({ brand: CATALOG_BRAND, phone: currentCustomer.phone, getItems: cmItems,
+    openItem: function(id){ var m = _cmMap[id]; if(m && typeof shopOpenModel === 'function') shopOpenModel(m, id); },
+    rerender: function(){ if(currentTab === 'card') renderCard(); } }); }
+  return ColorMatchApp.homeHtml();
 }
 
 /* 🤍 الجمعة البيضاء — من الخميس 26 للأحد 29 نوفمبر 2026 (بتوقيت القاهرة).
@@ -4244,6 +4270,7 @@ setTimeout(function(){
   function topLayer(){
     if(isOn('tryonOverlay')) return 'tryon';
     if(isOn('wfOverlay','on')) return 'wf';
+    if(isOn('cmWrap','on')) return 'cm';
     if(isOn('stvWrap','on')) return 'story';
     if(isOn('invOverlay','on')) return 'invoice';
     if(isOn('crOverlay','on')) return 'sheet';
@@ -4255,6 +4282,7 @@ setTimeout(function(){
   function closeTop(kind){
     if(kind==='tryon' && typeof tryonOverlayClose==='function') return tryonOverlayClose();
     if(kind==='wf' && typeof wfClose==='function') return wfClose();
+    if(kind==='cm' && window.ColorMatchApp) return ColorMatchApp.close();
     if(kind==='story' && window.StoriesApp) return StoriesApp.close();
     if(kind==='invoice' && typeof closeInvoiceDetail==='function') return closeInvoiceDetail();
     if(kind==='sheet' && typeof closeSheet==='function') return closeSheet();
@@ -4302,6 +4330,7 @@ setTimeout(function(){
   wrapOpen('openQuickCheckout','checkout');
   wrapOpen('tryonOverlayOpen','tryon');
   wrapOpen('wfOpen','wf');   // 🤍 فيديو الجمعة البيضاء: الرجوع بيقفله
+  if(window.ColorMatchApp){ ['open','show'].forEach(function(k){ var o = ColorMatchApp[k]; ColorMatchApp[k] = function(){ var r = o.apply(this, arguments); push('cm'); return r; }; }); }   // 🎨 ألوانك
   // 📸 الستوري: زرار الرجوع بيقفلها (مش بيخرج من التطبيق)
   if(window.StoriesApp){ ['open','openHome'].forEach(function(k){ var o = StoriesApp[k]; StoriesApp[k] = function(){ var r = o.apply(this, arguments); push('story'); return r; }; }); }
 
