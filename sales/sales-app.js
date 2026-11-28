@@ -8433,9 +8433,9 @@ function _bankShiftEmp(shift, emp){
 function _bankReqMin(shift, emp){
   try{ return scheduledShiftMinutes(_bankShiftEmp(shift, emp), complianceCfg, caiDayKey(shift.clockInTs)); }catch(e){ return 0; }
 }
-function bankMonthFor(emp, startMs, endMs, shiftsSrc){
+function bankMonthFor(emp, startMs, endMs, shiftsSrc, opt){
   const rows = (shiftsSrc || allShifts).filter(s=> s && s.employeeId===emp.id && s.clockInTs >= startMs && s.clockInTs <= endMs);
-  return TimeBank.monthSummary(rows, _timeCfgNow(), s=> _bankReqMin(s, emp));
+  return TimeBank.monthSummary(rows, _timeCfgNow(), s=> _bankReqMin(s, emp), opt);
 }
 function bankLastSaleTs(empId, fromTs, toTs){
   let best = 0;
@@ -8691,6 +8691,18 @@ function computeSalary(emp, periodStart, end){
     const _calMonthEnd = new Date(caiDayEnd(_pc.getFullYear(), _pc.getMonth()+1, _lastDay));
     const advEnd = _fullPeriod ? _calMonthEnd : end;
     periodAdvances = allAdvances.filter(a=> a.employeeId===emp.id && a.ts >= start.getTime() && a.ts <= advEnd.getTime());
+    /* v663 (قرار المالك 28-11): سلف أيام 1→يوم القبض بتتبع مرتب الشهر **اللي قبله** (advPayCycleOf) وبتتخصم هناك.
+       التصفية كانت بتخصمها تاني. بنشيلها من التصفية — إلا لو الموظف ملوش شهر قبل ده (اتعيّن الشهر ده) فتفضل هنا. */
+    if(!_fullPeriod && _payDay > 0 && typeof advPayCycleOf === 'function'){
+      const _hk = String(emp.hireDate || '').slice(0,10);
+      const _startKey = caiDayKey(periodStart.getTime());
+      const _hadPrev = _hk ? (_hk < _startKey) : (allShifts || []).some(s=> s && s.employeeId===emp.id && s.clockInTs < periodStart.getTime());
+      if(_hadPrev){
+        const _mine = periodAdvances.filter(a=> advPayCycleOf(a, _payDay) === _periodKey);
+        advPrevCycle = Math.round(periodAdvances.filter(a=> _mine.indexOf(a) < 0).reduce((n,a)=> n + (Number(a.amount)||0), 0) * 100)/100;
+        periodAdvances = _mine;
+      }
+    }
   }
   const advancesTotal = periodAdvances.reduce((sum,a)=> sum + a.amount, 0);
   // تفصيلة: سلف كاش عادية vs أوردرات شراء الموظفة (source بيبدأ بـ staff_order)
@@ -8702,7 +8714,7 @@ function computeSalary(emp, periodStart, end){
   let bank = null, bonus = null, weeklyBonusAmount = 0;
   let _otMin = overtimeMinutes, _otPay = overtimePay, _otPend = overtimePendingMin, _tcH = timeCreditHours, _tcD = timeCreditDays, _tcDed = timeCreditDeduction;
   if((typeof _bankOn==='function'?_bankOn:()=>false)(start.getTime()) && !isSetupShift(emp)){
-    bank = bankMonthFor(emp, start.getTime(), end.getTime());
+    bank = bankMonthFor(emp, start.getTime(), end.getTime(), undefined, { dayOffKeys: (attendance.workedDayOffDates || []).map(x=> x.date) });   // v663
     const bm = TimeBank.money(bank.balanceMin, hourlyRate);
     const otherSum = monthlyTimeSummary(tcEntries.filter(x=> x.type !== 'late' && x.type !== 'early'), _tcfg);
     _otMin = bm.overtimeMin; _otPay = bm.overtimePay; _otPend = 0;

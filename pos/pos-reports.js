@@ -363,7 +363,7 @@ function reportRangeLabel(){
 // وفاتورة العكس السالبة بتتحسب → المبلغ بيتخصم مرتين والتقرير بينقص بقيمة كل عكس.
 function repAggregate(sales){
   const clean = (sales||[]).filter(s=> !s.reversed && !s.isReversal);
-  let salesTotal=0, returnsTotal=0, itemsSold=0, loyaltyDiscount=0;
+  let salesTotal=0, returnsTotal=0, itemsSold=0, loyaltyDiscount=0, giftCardsSold=0;
   const byMethod = {}, methodCount = {}, itemAgg = {};
   clean.forEach(s=>{
     /* 🎁 فواتير v696→v704 (يوم-يومين) اتحفظت فيها النقط والمكافأة كـ`payments.points/
@@ -372,11 +372,15 @@ function repAggregate(sales){
     const _p = s.payments||{};
     const _loy = (Number(_p.points)||0) + (Number(_p.reward)||0);
     loyaltyDiscount += _loy;
-    const tot = (s.total||0) - _loy;
+    /* 🎁 v791 (قرار المالك 28-11): بيع كارت الهدية **مش مبيعات** — ده فلوس مدفوعة مقدّم. المبيعات بتتحسب لما الكارت يتصرف
+       (فاتورة مدفوعة «رصيد»). قبل كده كانت بتتحسب مرتين: مرة عند بيع الكارت ومرة عند صرفه. بتظهر في سطر لوحدها. */
+    const _gc = (s.items||[]).reduce((n,it)=> n + ((it && it.isGiftCard && !it.isReturn && Number(it.price) > 0) ? Number(it.price) * (Number(it.qty)||1) : 0), 0); giftCardsSold += _gc;
+    const tot = (s.total||0) - _loy - _gc;
     if(tot >= 0) salesTotal += tot; else returnsTotal += tot;
     Object.entries(_p).forEach(([m,amt])=>{ if(m==='points'||m==='reward') return; byMethod[m]=(byMethod[m]||0)+amt; methodCount[m]=(methodCount[m]||0)+1; });
     (s.items||[]).forEach(it=>{
       const qty = it.qty||0, line = (it.price||0)*qty;
+      if(it.isGiftCard) return;   // v791: الكارت مش قطعة مباعة
       if(!it.isReturn && (it.price||0) >= 0) itemsSold += qty;
       if(!itemAgg[it.name]) itemAgg[it.name] = { qty:0, revenue:0 };
       // 🛡️ v789: المرتجع كميته موجبة وسعره سالب → كان بيتجمع على المباع (بيعت 1 ورجّعت 1 = «2 قطعة»)
@@ -386,8 +390,10 @@ function repAggregate(sales){
   });
   const netTotal = salesTotal + returnsTotal;
   const invoiceCount = clean.filter(s=> (s.total||0) >= 0).length;
-  return { sales: clean, salesTotal, returnsTotal, netTotal, itemsSold, byMethod, methodCount, itemAgg, invoiceCount, loyaltyDiscount };
+  return { sales: clean, salesTotal, returnsTotal, netTotal, itemsSold, byMethod, methodCount, itemAgg, invoiceCount, loyaltyDiscount, giftCardsSold };
 }
+function saleGiftCardValue(s){ return ((s && s.items) || []).reduce((n,it)=> n + ((it && it.isGiftCard && !it.isReturn && Number(it.price) > 0) ? Number(it.price) * (Number(it.qty)||1) : 0), 0); }
+window.saleGiftCardValue = saleGiftCardValue;
 window.repAggregate = repAggregate;
 
 async function loadReportSales(from, to){
@@ -465,7 +471,7 @@ async function renderReportsScreen(){
     html = `<div id="repPrintArea"><div class="rep-receipt">
       <div class="rc-h">إيصال المبيعات</div>
       <div class="rc-sub">${currentBranch||''} · ${reportRangeLabel()}</div>
-      <div class="rc-line"><span>إجمالي المبيعات</span><span>${salesTotal.toFixed(2)}</span></div>
+      <div class="rc-line"><span>إجمالي المبيعات</span><span>${salesTotal.toFixed(2)}</span></div>${_agg.giftCardsSold > 0 ? `<div class="rc-line"><span>🎁 كروت هدية اتباعت (مش محسوبة مبيعات)</span><span>${_agg.giftCardsSold.toFixed(2)}</span></div>` : ''}
       <div class="rc-line"><span>المرتجعات</span><span>${returnsTotal.toFixed(2)}</span></div>
       <div class="rc-sep"></div>
       <div class="rc-line rc-big"><span>صافي المبيعات</span><span>${netTotal.toFixed(2)} ج.م</span></div>

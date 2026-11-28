@@ -93,9 +93,48 @@
     });
     return out;
   }
+  /* v791 (قرار المالك 28-11): مرتجع **من غير فاتورة** في الـ14 يوم اللي بعد العرض بيرجع بسعر العرض مش السعر الكامل
+     (قطعة اتباعت بـ85 كانت بترجع بـ100). المرتجع من الفاتورة نفسها مش بيتلمس — بيرجع باللي اتدفع فعلًا.
+     لو الكاشير عدّلت السعر بإيدها (edited) سعرها هو اللي يمشي. */
+  var RETURN_DAYS = 14;
+  function addDays(key, n){ var p = key.split('-').map(Number); var d = new Date(Date.UTC(p[0], p[1]-1, p[2] + n)); return d.toISOString().slice(0,10); }
+  function returnWindow(now, br){
+    if(!now || !isEcharpeBranch(br)) return false;
+    var d = cairoDay(now); return d > PROMO.to && d <= addDays(PROMO.to, RETURN_DAYS);
+  }
+  function promoUnitPrice(code, base, br){
+    var PCT = pctFor(br), FIX = fixedFor(br);
+    if(code === PROMO.bundle.code) return Math.min(base, PROMO.bundle.price / PROMO.bundle.qty);
+    if(Object.prototype.hasOwnProperty.call(PCT, code)) return base * (1 - PCT[code]/100);
+    if(Object.prototype.hasOwnProperty.call(FIX, code)) return Math.min(base, FIX[code]);
+    return base * (1 - PROMO.pct/100);
+  }
+  function applyReturnWindow(cart, now, br){
+    var win = returnWindow(now, br);
+    (cart || []).forEach(function(c){
+      if(!c) return;
+      if(c.retPromoFull != null && (!win || !c.isReturn || c.fromInvoice || c.edited)){   // رجع بيع عادي / اتعدّل بإيدها
+        if(!c.edited && Math.abs(Math.abs(Number(c.price)) - c.retPromoSet) < 0.005) c.price = (c.isReturn ? -1 : 1) * c.retPromoFull;
+        if(c.discountName === RETURN_LABEL) c.discountName = c.retPromoNameBefore;
+        c.retPromoFull = null; c.retPromoSet = null; return;
+      }
+      if(!win || !c.isReturn || c.fromInvoice || c.fromInvoiceId || c.edited) return;
+      if(c.isRedemption || c.isRewardDiscount || c.isGiftCard || c.isCreditSpend || String(c.id || '').startsWith('__')) return;
+      if(c.retPromoFull != null) return;
+      var full = Math.abs(Number(c.price) || 0); if(!(full > 0)) return;
+      var p = r2(promoUnitPrice(String(c.barcode || '').trim(), full, br));
+      if(!(p < full - 0.004)) return;
+      c.retPromoFull = full; c.retPromoSet = p; c.retPromoNameBefore = c.discountName == null ? null : c.discountName;
+      c.price = -p; c.discountName = RETURN_LABEL;
+    });
+    return win;
+  }
+  var RETURN_LABEL = 'مرتجع من غير فاتورة — بسعر الجمعة البيضاء';
+  window.weekendPromoReturnWindow = returnWindow;
   function applyWeekendPromo(cart, now, br){
     cart = cart || [];
     var on = promoActive(now, br);
+    applyReturnWindow(cart, now, br);
     var FIX = fixedFor(br);
     var bundleLines = [];
     cart.forEach(function(c){

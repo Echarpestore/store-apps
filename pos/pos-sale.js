@@ -2754,6 +2754,7 @@ async function reverseReceipt(saleId){
     const _rvW = await _waitWrite(batch.commit());
     if(_rvW.error) throw _rvW.error;
     (sale.items||[]).forEach(it=>{ logStockMovement(it.id, it.name, it.isReturn ? -it.qty : it.qty, 'reversal', 'عكس فاتورة كاملة'); });
+    voidStaffPointForInvoice(sale, 'reversal');   // v791: الفاتورة اتلغت = نقطة البياعة تتسحب
 
     // 2) سجل عملية عكس منفصلة (رقم سالب) عشان التقارير تفضل دقيقة
     const _rvW2 = await _waitWrite(db.collection(TEST_SALES).add({
@@ -2900,6 +2901,47 @@ function staffPieceCount(lines){
   return Math.max(0, sold - ret);
 }
 if(typeof window !== 'undefined') window.staffPieceCount = staffPieceCount;
+/* 🛡️ v791 (قرار المالك 28-11): نقطة الموظف بتتسحب لو الفاتورة اتعكست، أو اترجّع منها لحد ما القطع الباقية نزلت عن حد النقطة.
+   قبل كده: 4 قطع = نقطة → ترجيع 3 منهم تاني يوم والنقطة تفضل (فلوس عمولة على بيع محصلش). */
+function staffPiecesLeft(orig, returnedMap){
+  const sold = staffPieceCount((orig && orig.items) || []);
+  let ret = 0; Object.keys(returnedMap || {}).forEach(function(k){ ret += Math.max(0, Number(returnedMap[k]) || 0); });
+  return Math.max(0, sold - ret);
+}
+function staffPointShouldVoid(orig, returnedMap, minItems){
+  const need = Number(minItems); const gate = (isNaN(need) || need <= 0) ? 1 : need;
+  return staffPiecesLeft(orig, returnedMap) < gate;
+}
+// بيختار مستندات النقطة بتاعة الفاتورة دي بالظبط (نفس الرقم + نفس الفرع + نفس البياعة + قريبة من وقت الفاتورة) — نقط يدوية = ممنوع اللمس
+function staffPointDocsFor(orig, pointDocs){
+  const no = String((orig && orig.invoiceNo) || '');
+  const ms = Number(orig && orig.createdAtMs) || 0;
+  return (pointDocs || []).filter(function(p){
+    if(!p || !p.auto || !no || String(p.invoiceNumber) !== no) return false;
+    if(p.branch && orig.branch && p.branch !== orig.branch) return false;
+    if(orig.sellerEmployeeId && p.employeeId && p.employeeId !== orig.sellerEmployeeId) return false;
+    if(ms && Number(p.ts) && Math.abs(Number(p.ts) - ms) > 2 * 86400000) return false;
+    return true;
+  });
+}
+async function voidStaffPointForInvoice(orig, reason){
+  try{
+    const no = String((orig && orig.invoiceNo) || ''); if(!no) return 0;
+    const q = await db.collection('sales_points').where('invoiceNumber', '==', no).get();
+    const all = []; q.forEach(function(d){ all.push(Object.assign({ _ref: d.ref }, d.data() || {})); });
+    const hit = staffPointDocsFor(orig, all); if(!hit.length) return 0;
+    const b = db.batch();
+    hit.forEach(function(p){
+      b.delete(p._ref);
+      if(p.employeeId) b.set(db.collection(TEST_EMPLOYEE_POINTS).doc(p.employeeId), {
+        points: firebase.firestore.FieldValue.increment(-1), salesCount: firebase.firestore.FieldValue.increment(-1) }, { merge: true });
+    });
+    await b.commit();
+    try{ if(typeof _logActivity === 'function') _logActivity('staff_point_voided', { invoiceNo: no, reason: reason || '', points: hit.map(function(p){ return { employeeId: p.employeeId || '', employeeName: p.employeeName || '', value: p.value == null ? 1 : p.value }; }) }); }catch(_e){}
+    return hit.length;
+  }catch(e){ console.warn('void staff point', e); return 0; }
+}
+if(typeof window !== 'undefined'){ window.staffPiecesLeft = staffPiecesLeft; window.staffPointShouldVoid = staffPointShouldVoid; window.staffPointDocsFor = staffPointDocsFor; window.voidStaffPointForInvoice = voidStaffPointForInvoice; }
 function calcStaffPoint(itemCount, total, minItems, minInvoice, enabled, isRefund){
   if(enabled === false) return 0;
   if(isRefund) return 0;                                   // المرتجع مبياخدش نقط
@@ -4929,10 +4971,23 @@ function returnPointsDeduction(origEarned, origTotal, refundedBefore, thisRefund
   return Math.max(0, Math.min(due, earned - already));
 }
 window.returnPointsDeduction = returnPointsDeduction;
+function exchangeEarnedPoints(lines, total, rate){
+  rate = Number(rate) || 100; total = Number(total) || 0;
+  const raw = Math.floor(Math.abs(total) / rate);
+  const real = function(c){ return c && !c.isRedemption && !c.isRewardDiscount && !c.isGiftCard && !c.isCreditSpend && !String(c.id || '').startsWith('__'); };
+  const hasNew = (lines || []).some(function(c){ return real(c) && !c.isReturn && Number(c.price) > 0 && Number(c.qty) > 0; });
+  const retAbs = (lines || []).reduce(function(n, c){ return n + ((real(c) && c.isReturn) ? Math.abs(Number(c.price) || 0) * (Number(c.qty) || 0) : 0); }, 0);
+  if(hasNew && retAbs > 0) return Math.max(0, Math.floor((total + retAbs) / rate));
+  return total < 0 ? -raw : raw;   // المرتجع بيخصم نقط بالسالب
+}
+window.exchangeEarnedPoints = exchangeEarnedPoints;
 
   const _rate = loyaltyRedemptionConfig.pointsPerEGP || 100;
   const _rawPts = Math.floor(Math.abs(total) / _rate);
-  const loyaltyPointsEarned = phone ? (total < 0 ? -_rawPts : _rawPts) : 0;   // المرتجع بيخصم نقط بالسالب
+  /* 🛡️ v791 (قرار المالك 28-11): فاتورة التبديل (قطع جديدة + مرتجع). الإجمالي = الجديد − المرتجع، فالكسب كان بيتحسب
+     على الصافي **وبعدين** نقط المرتجع تتخصم تاني تحت → قيمة المرتجع بتتخصم مرتين (جديد 500 + مرتجع 300 = −1 نقطة بدل +2).
+     في التبديل: الكسب على قيمة القطع الجديدة، وخصم المرتجع بيتحسب لوحده تحت. المرتجع الصافي (من غير قطع جديدة) زي ما هو. */
+  const loyaltyPointsEarned = phone ? exchangeEarnedPoints(cart, total, _rate) : 0;
   // 📸 v426: لقطة لحظة بدء حفظ الفاتورة، قبل أي انتظار لإنشاء الرقم/Firestore.
   try{ if(_cartSid && typeof cctvCaptureInvoiceStage === 'function') cctvCaptureInvoiceStage('saving', {
     sid:_cartSid, branch:currentBranch, atMs:Date.now()
@@ -5220,6 +5275,7 @@ window.returnPointsDeduction = returnPointsDeduction;
     // ↩️🎁 لازم يعيش بره الـtry: بيتحسب هنا وبيتخصم تحت في كتلة النقط.
     //    لو جوه، أي استثناء بيضيّعه والنقط مبتتخصمش.
     let _retPointsDeduct = 0;
+    const _retOtherCust = {};   // v791: نقط المرتجع بتتخصم من صاحبة الفاتورة الأصلية حتى لو المرتجع اتسجل برقم تاني/من غير رقم
     const _retInvoiceUpdates = [];
     try{
       const retLines = cart.filter(c=> c.isReturn && c.fromInvoice);
@@ -5248,7 +5304,9 @@ window.returnPointsDeduction = returnPointsDeduction;
               const _ptsDeduct = returnPointsDeduction(
                 orig.loyaltyPointsEarned, orig.total,
                 orig.refundedValue, _thisRefund, orig.pointsRefunded);
-              _retPointsDeduct += _ptsDeduct;
+              { const _op = String(orig.customerPhone || '').trim();
+                if(_op && _op !== phone){ if(_ptsDeduct > 0){ const _o = _retOtherCust[_op] = _retOtherCust[_op] || { pts: 0, branch: orig.branch || currentBranch }; _o.pts += _ptsDeduct; } }
+                else _retPointsDeduct += _ptsDeduct; }
               _retInvoiceUpdates.push({
                 ref: origRef,
                 refundedValue: (Number(orig.refundedValue)||0) + _thisRefund,
@@ -5267,6 +5325,8 @@ window.returnPointsDeduction = returnPointsDeduction;
               }
               const _rqW = await _waitWrite(origRef.update(_upd));
               if(_rqW.error) console.warn('update returnedQty', invCode, _rqW.error);
+              // v791: القطع الباقية في الفاتورة الأصلية نزلت عن حد النقطة → نقطة البياعة تتسحب
+              try{ if(staffPointShouldVoid(orig, returnedMap, _spMinItems)) voidStaffPointForInvoice(orig, 'return'); }catch(_e){}
             }
             else console.warn('↩️ الفاتورة الأصلية للمرتجع مالقيناهاش', invCode);
           }catch(e){ console.warn('update returnedQty', invCode, e); }
@@ -5413,6 +5473,11 @@ window.returnPointsDeduction = returnPointsDeduction;
          ونقط المستوى كانت بتتكتب في حقل غلط. بنحوّل المفاتيح دي لخرايط متداخلة. */
       batch.set(custRef, _nestDotted(custUpdate), { merge: true });
     }
+    Object.keys(_retOtherCust).forEach(function(_op){
+      const _o = _retOtherCust[_op]; if(!(_o.pts > 0)) return;
+      const _u = {}; _u[pointsFieldFor(_o.branch)] = firebase.firestore.FieldValue.increment(-_o.pts);
+      batch.set(db.collection(TEST_CUSTOMERS).doc(_op), _u, { merge: true });
+    });
     // 🖨️ الورقة هنا بالظبط — بعد ما خصم المخزون (ونقطة الموظف ونقط العميلة
     //    دلوقتي) **اتقيّدوا** وقبل ما نستنى تأكيد السيرفر.
     // ⚠️ الترتيب ده مقصود ومهم للكل مع بعض دلوقتي:

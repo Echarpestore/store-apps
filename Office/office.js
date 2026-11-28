@@ -6002,7 +6002,7 @@ function ofComputeSalary(emp, periodStart, end, data){
     const _req=function(sh){ const d=((data.shiftDefs||{})[sh.attendanceShiftKey])||{}; const st=sh.scheduledStartTime||d.start, en=sh.scheduledEndTime||d.end;
       if(!/^\d{1,2}:\d{2}$/.test(String(st))||!/^\d{1,2}:\d{2}$/.test(String(en))) return 0;
       const m=function(x){ const a=String(x).split(':').map(Number); return a[0]*60+(a[1]||0); }; let v=m(en)-m(st); if(v<=0) v+=1440; return v>16*60?0:v; };
-    bank=TimeBank.monthSummary(rangeShifts,cfg,_req); const bm=TimeBank.money(bank.balanceMin,hourlyRate); bank.money=bm;
+    bank=TimeBank.monthSummary(rangeShifts,cfg,_req,{dayOffKeys:((att&&att.workedDayOffDates)||[]).map(function(x){return x.date;})}); const bm=TimeBank.money(bank.balanceMin,hourlyRate); bank.money=bm;
     _otMin=bm.overtimeMin; _otPay=bm.overtimePay;
     tcSummary=ofMonthlyTimeSummary(tcEntries.filter(function(x){ return x.type!=='late'&&x.type!=='early'; }),cfg);
   } else tcSummary=ofMonthlyTimeSummary(tcEntries,cfg);

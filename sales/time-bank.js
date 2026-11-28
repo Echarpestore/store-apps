@@ -95,7 +95,9 @@
 
   /* ---------- الشهر ---------- */
   // reqFn(shift) → requiredMin
-  function monthSummary(shifts, cfg, reqFn){
+  // opt.dayOffKeys: أيام إجازة اتشتغلت ('YYYY-MM-DD') — بتتدفع كبونص يوم الإجازة، فالناقص فيها مبيتخصمش من الرصيد
+  function monthSummary(shifts, cfg, reqFn, opt){
+    var offSet = {}; ((opt && opt.dayOffKeys) || []).forEach(function(k){ offSet[String(k)] = 1; });
     var c = cfgOf(cfg); var rows = [], plus = 0, minus = 0, lateCount = 0, lateMin = 0, forgot = 0, counted = 0;
     (shifts || []).forEach(function(s){
       var r = shiftDelta(s, reqFn ? reqFn(s) : 0, c);
@@ -120,6 +122,8 @@
     rows.forEach(function(r){
       var f = r._forgot; delete r._adj; delete r._forgot;
       if(!r.counted) return;
+      /* v663 (قرار المالك 28-11): يوم الإجازة اللي اتشتغل بيتدفع بالساعة كبونص — مينفعش الناقص عن الشيفت يتخصم كمان */
+      if(offSet[r.day] && r.delta < 0){ r.delta = 0; r.dayOff = true; }
       counted++;
       if(r.delta > 0) plus += r.delta; else minus += -r.delta;
       if(r.lateMin > 0){ lateCount++; lateMin += r.lateMin; }

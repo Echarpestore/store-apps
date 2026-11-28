@@ -214,7 +214,9 @@ function todaySales(branch, dayStartMs){ const end = dayStartMs + DAY - 1; retur
 /* 👤 v16 — مين اللي باع: الفاتورة بتتحفظ بـ sellerEmployeeName (البياعة) و employeeName (اللي فاتح الكاشير).
    الكود القديم كان بيقرا حقول مش موجودة (employee / seller) → كل المبيعات كانت بتتجمع تحت «—». */
 function sellerOf(s){ return (s && (s.sellerEmployeeName || s.employeeName || s.employee || s.seller)) || '—'; }
-function saleNet(s){ const p = (s && s.payments) || {}; return (Number(s && s.total)||0) - (Number(p.points)||0) - (Number(p.reward)||0); }
+// 🎁 v18: بيع كارت الهدية مش مبيعات (فلوس مقدّم) — بيتحسب لما يتصرف. كان بيتحسب مرتين.
+function gcSoldOf(s){ return ((s && s.items) || []).reduce((n,it)=> n + ((it && it.isGiftCard && !it.isReturn && Number(it.price) > 0) ? Number(it.price) * (Number(it.qty)||1) : 0), 0); }
+function saleNet(s){ const p = (s && s.payments) || {}; return (Number(s && s.total)||0) - (Number(p.points)||0) - (Number(p.reward)||0) - gcSoldOf(s); }
 function sumTotal(list){ return list.reduce((n,s)=> n + saleNet(s), 0); }
 function payBreak(list){ const o = {}; list.forEach(s=>{ Object.entries(s.payments||{}).forEach(([k,v])=>{ if(k==='points'||k==='reward') return; o[k] = (o[k]||0) + (Number(v)||0); }); }); return o; }
 const SHIFT_AR = { morning:'صباحي', evening:'مسائي', setup:'تجهيز' };
@@ -344,7 +346,7 @@ function rBranch(){
   if(list === null) return nav + '<div class="card"><div class="skel"></div><div class="skel" style="width:60%;margin-top:8px"></div></div>';
   const ok = list.filter(s=> !s.reversed && !s.isReversal); const inv = ok.filter(s=> Number(s.total) >= 0); const ret = ok.filter(s=> Number(s.total) < 0); const pb = payBreak(ok);
   const pieces = ok.reduce((n,s)=> n + (s.items||[]).reduce((m,it)=> m + (it && !it.isRedemption ? (it.isReturn?-1:1)*(Number(it.qty)||0) : 0), 0), 0);
-  const kpis = `<div class="card"><h3>💰 ${dayKey===bizKey(Date.now())?'النهاردة':'اليوم ده'} <small>${inv.length} فاتورة${ret.length?' · '+ret.length+' مرتجع':''}</small></h3><div class="kpis"><div class="kpi"><small>المبيعات</small><b>${n0(sumTotal(ok))}</b></div><div class="kpi"><small>القطع</small><b>${n0(pieces)}</b></div><div class="kpi"><small>متوسط الفاتورة</small><b>${inv.length?n0(sumTotal(inv)/inv.length):'—'}</b></div></div></div>` + paymentSummaryHtml(list);
+  const kpis = `<div class="card"><h3>💰 ${dayKey===bizKey(Date.now())?'النهاردة':'اليوم ده'} <small>${inv.length} فاتورة${ret.length?' · '+ret.length+' مرتجع':''}</small></h3><div class="kpis"><div class="kpi"><small>المبيعات</small><b>${n0(sumTotal(ok))}</b></div><div class="kpi"><small>القطع</small><b>${n0(pieces)}</b></div><div class="kpi"><small>متوسط الفاتورة</small><b>${inv.length?n0(sumTotal(inv)/inv.length):'—'}</b></div></div>${ok.reduce((n,s)=> n + gcSoldOf(s), 0) > 0 ? `<small style="display:block;margin-top:8px;color:var(--mute)">🎁 كروت هدية اتباعت: ${n0(ok.reduce((n,s)=> n + gcSoldOf(s), 0))} ج — مش محسوبة في المبيعات (بتتحسب لما تتصرف)</small>` : ''}</div>` + paymentSummaryHtml(list);
   const top = topItems(ok).slice(0, 12).map((x,i)=>`<div class="row" style="cursor:default"><div class="n"><b>${i+1}. ${esc(x.name)}</b><small>${esc(x.barcode)}</small></div><span class="pill p-acc">${x.pieces} قطعة</span><b class="money">${n0(x.revenue)}</b></div>`).join('');
   const bySeller = {}; ok.forEach(s=>{ const k = sellerOf(s); bySeller[k] = bySeller[k] || { n:0, t:0 }; if(Number(s.total) >= 0) bySeller[k].n++; bySeller[k].t += saleNet(s); });
   const sellers = Object.entries(bySeller).sort((x,y)=> y[1].t - x[1].t).map(([k,v])=>`<div class="row" style="cursor:default"><div class="n"><b>${esc(k)}</b><small>${v.n} فاتورة</small></div><b class="money">${n0(v.t)}</b></div>`).join('');
@@ -763,5 +765,5 @@ function rMore(){
     <div class="hint">Office · v9 · البيانات من نفس القاعدة — أي تعديل هنا بيظهر في sales وOffice فورًا</div>`;
 }
 // 🧰 أدوات مشتركة للموديولات (m-*.js) — نفس الدوال اللي الشاشات الأساسية بتستخدمها
-O2.u = { db, auth, D, DAY, GLOW, esc, n0, hm, hm2min, caiParts, caiKey, caiStamp, caiDayStart, sellerOf, bizDayStart, bizKey, bizRange, bizHour: ()=> BIZ_HOUR, saleNet, renderNow, caiMonthRange, caiDow, dayName, AR_DAYS, SHIFT_AR, PAY_AR, sheet, closeSheet, toast, render, head, branches, activeEmps, empById, salesCfg, timeCfg, shiftDefs, brandOf, isSetup, loadDay, dayCache, daySales, saleMs, sumTotal, payBreak, paymentSummaryHtml, topItems, windowSales, invoiceAny, invoiceSheet, siteOf, SH_SITES, openShift, onBreak, go, screen: ()=> screenName, arg: ()=> screenArg };
+O2.u = { db, auth, D, DAY, GLOW, esc, n0, hm, hm2min, caiParts, caiKey, caiStamp, caiDayStart, sellerOf, bizDayStart, bizKey, bizRange, bizHour: ()=> BIZ_HOUR, saleNet, gcSoldOf, renderNow, caiMonthRange, caiDow, dayName, AR_DAYS, SHIFT_AR, PAY_AR, sheet, closeSheet, toast, render, head, branches, activeEmps, empById, salesCfg, timeCfg, shiftDefs, brandOf, isSetup, loadDay, dayCache, daySales, saleMs, sumTotal, payBreak, paymentSummaryHtml, topItems, windowSales, invoiceAny, invoiceSheet, siteOf, SH_SITES, openShift, onBreak, go, screen: ()=> screenName, arg: ()=> screenArg };
 })();
